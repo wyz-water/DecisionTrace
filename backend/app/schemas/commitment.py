@@ -22,3 +22,23 @@ class CommitmentResponse(BaseModel):
     status: str
 
     model_config = ConfigDict(from_attributes=True)
+    
+
+class CommitmentStatusUpdate(BaseModel):
+    status: str
+    
+
+class AffectedCommitment(BaseModel):
+    id: int
+    owner: str
+    description: str
+    status: str
+    dependency_type: str
+    reason: str
+
+
+class CommitmentImpactResponse(BaseModel):
+    commitment_id: int
+    commitment_status: str
+    has_impact: bool
+    affected_commitments: list[AffectedCommitment]

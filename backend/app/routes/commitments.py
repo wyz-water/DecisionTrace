@@ -5,7 +5,13 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.decision import Decision
 from app.models.commitment import Commitment
-from app.schemas.commitment import CommitmentCreate, CommitmentResponse
+from app.models.dependency import Dependency
+from app.schemas.commitment import (
+    CommitmentCreate,
+    CommitmentResponse,
+    CommitmentStatusUpdate,
+    CommitmentImpactResponse,
+)
 
 
 router = APIRouter(
@@ -73,3 +79,108 @@ def get_commitments(
     db: Session = Depends(get_db)
 ):
     return db.query(Commitment).all()
+
+
+@router.patch(
+    "/{commitment_id}/status",
+    response_model=CommitmentResponse
+)
+def update_commitment_status(
+    commitment_id: int,
+    status_update: CommitmentStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    commitment = db.query(Commitment).filter(
+        Commitment.id == commitment_id
+    ).first()
+
+    if not commitment:
+        raise HTTPException(
+            status_code=404,
+            detail="Commitment not found"
+        )
+
+    allowed_statuses = {
+        "OPEN",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "DELAYED",
+        "BLOCKED"
+    }
+
+    new_status = status_update.status.upper()
+
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid commitment status"
+        )
+
+    commitment.status = new_status
+
+    db.commit()
+    db.refresh(commitment)
+
+    return commitment
+
+@router.get(
+    "/{commitment_id}/impact",
+    response_model=CommitmentImpactResponse
+)
+def get_commitment_impact(
+    commitment_id: int,
+    db: Session = Depends(get_db)
+):
+    commitment = db.query(Commitment).filter(
+        Commitment.id == commitment_id
+    ).first()
+
+    if not commitment:
+        raise HTTPException(
+            status_code=404,
+            detail="Commitment not found"
+        )
+
+    dependencies = db.query(Dependency).filter(
+        Dependency.predecessor_commitment_id == commitment_id
+    ).all()
+
+    affected_commitments = []
+
+    for dependency in dependencies:
+        affected = db.query(Commitment).filter(
+            Commitment.id == dependency.successor_commitment_id
+        ).first()
+
+        if affected:
+            affected_commitments.append({
+                "id": affected.id,
+                "owner": affected.owner,
+                "description": affected.description,
+                "status": affected.status,
+                "dependency_type": dependency.dependency_type,
+                "reason": (
+                    f"Commitment #{commitment.id} "
+                    f"{dependency.dependency_type} "
+                    f"commitment #{affected.id}"
+                )
+            })
+
+    risky_statuses = {
+        "DELAYED",
+        "BLOCKED"
+    }
+
+    has_impact = (
+        commitment.status in risky_statuses
+        and len(affected_commitments) > 0
+    )
+
+    return {
+        "commitment_id": commitment.id,
+        "commitment_status": commitment.status,
+        "has_impact": has_impact,
+        "affected_commitments": affected_commitments
+        if has_impact
+        else []
+    }
