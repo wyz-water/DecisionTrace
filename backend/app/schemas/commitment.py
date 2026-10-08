@@ -26,6 +26,7 @@ class CommitmentResponse(BaseModel):
 
 class CommitmentStatusUpdate(BaseModel):
     status: str
+    reason: str | None = None
     
 
 class AffectedCommitment(BaseModel):

@@ -6,6 +6,8 @@ from app.models.project import Project
 from app.models.decision import Decision
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
+from app.models.commitment_history import CommitmentHistory
+from app.schemas.commitment_history import CommitmentHistoryResponse
 from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentResponse,
@@ -116,6 +118,23 @@ def update_commitment_status(
             detail="Invalid commitment status"
         )
 
+    old_status = commitment.status
+
+    if old_status == new_status:
+        raise HTTPException(
+            status_code=400,
+            detail="New status is the same as current status"
+        )
+
+    history = CommitmentHistory(
+        commitment_id=commitment.id,
+        old_status=old_status,
+        new_status=new_status,
+        reason=status_update.reason
+    )
+
+    db.add(history)
+
     commitment.status = new_status
 
     db.commit()
@@ -184,3 +203,27 @@ def get_commitment_impact(
         if has_impact
         else []
     }
+    
+@router.get(
+    "/{commitment_id}/history",
+    response_model=list[CommitmentHistoryResponse]
+)
+def get_commitment_history(
+    commitment_id: int,
+    db: Session = Depends(get_db)
+):
+    commitment = db.query(Commitment).filter(
+        Commitment.id == commitment_id
+    ).first()
+
+    if not commitment:
+        raise HTTPException(
+            status_code=404,
+            detail="Commitment not found"
+        )
+
+    return db.query(CommitmentHistory).filter(
+        CommitmentHistory.commitment_id == commitment_id
+    ).order_by(
+        CommitmentHistory.changed_at.asc()
+    ).all()

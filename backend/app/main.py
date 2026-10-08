@@ -7,6 +7,7 @@ from app.models.discussion import Discussion
 from app.models.decision import Decision
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
+from app.models.commitment_history import CommitmentHistory
 
 from app.routes.projects import router as projects_router
 from app.routes.discussions import router as discussions_router
