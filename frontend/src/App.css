@@ -366,6 +366,93 @@ body {
   color: #b42318;
 }
 
+.change-button {
+  width: 100%;
+  margin-top: 16px;
+  padding: 11px 14px;
+
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+
+  background: #ffffff;
+  color: #344054;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.change-button:hover {
+  background: #f8f9fb;
+}
+
+.status-editor {
+  margin-top: 18px;
+  padding-top: 18px;
+
+  border-top: 1px solid #eceef2;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-editor select,
+.status-editor input {
+  width: 100%;
+  padding: 11px 12px;
+
+  border: 1px solid #d8dce5;
+  border-radius: 9px;
+
+  background: #ffffff;
+  color: #172033;
+
+  font: inherit;
+  font-size: 13px;
+}
+
+.status-editor select:focus,
+.status-editor input:focus {
+  outline: 2px solid #dbe7ff;
+  border-color: #7897d4;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 10px 14px;
+
+  border-radius: 9px;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.primary-button {
+  border: 1px solid #172033;
+  background: #172033;
+  color: #ffffff;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  border: 1px solid #dfe3ea;
+  background: #ffffff;
+  color: #475467;
+}
+
 @media (max-width: 800px) {
   .dashboard-grid,
   .commitment-grid {

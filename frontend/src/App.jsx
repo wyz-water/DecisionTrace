@@ -17,46 +17,119 @@ function App() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [reason, setReason] = useState("");
+  const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const responses = await Promise.all([
-          fetch(`${API_URL}/decisions`),
-          fetch(`${API_URL}/commitments`),
-          fetch(`${API_URL}/dependencies`),
-          fetch(`${API_URL}/commitments/1/impact`),
-          fetch(`${API_URL}/commitments/1/history`),
-        ]);
+ async function loadDashboard() {
+  try {
+    setError("");
 
-        if (responses.some((response) => !response.ok)) {
-          throw new Error("Failed to load dashboard data");
-        }
+    const [
+      decisionsResponse,
+      commitmentsResponse,
+      dependenciesResponse,
+    ] = await Promise.all([
+      fetch(`${API_URL}/decisions`),
+      fetch(`${API_URL}/commitments`),
+      fetch(`${API_URL}/dependencies`),
+    ]);
 
-        const [
-          decisionsData,
-          commitmentsData,
-          dependenciesData,
-          impactData,
-          historyData,
-        ] = await Promise.all(
-          responses.map((response) => response.json())
-        );
-
-        setDecision(decisionsData[0] || null);
-        setCommitments(commitmentsData);
-        setDependencies(dependenciesData);
-        setImpact(impactData);
-        setHistory(historyData);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+    if (
+      !decisionsResponse.ok ||
+      !commitmentsResponse.ok ||
+      !dependenciesResponse.ok
+    ) {
+      throw new Error("Failed to load dashboard data");
     }
 
-    loadDashboard();
-  }, []);
+    const decisionsData = await decisionsResponse.json();
+    const commitmentsData = await commitmentsResponse.json();
+    const dependenciesData = await dependenciesResponse.json();
+
+    setDecision(decisionsData[0] || null);
+    setCommitments(commitmentsData);
+    setDependencies(dependenciesData);
+
+    const trackedCommitmentId =
+      dependenciesData.length > 0
+        ? dependenciesData[0].predecessor_commitment_id
+        : commitmentsData[0]?.id;
+
+    if (!trackedCommitmentId) {
+      setImpact(null);
+      setHistory([]);
+      return;
+    }
+
+    const [impactResponse, historyResponse] = await Promise.all([
+      fetch(
+        `${API_URL}/commitments/${trackedCommitmentId}/impact`
+      ),
+      fetch(
+        `${API_URL}/commitments/${trackedCommitmentId}/history`
+      ),
+    ]);
+
+    if (!impactResponse.ok || !historyResponse.ok) {
+      throw new Error("Failed to load traceability data");
+    }
+
+    const impactData = await impactResponse.json();
+    const historyData = await historyResponse.json();
+
+    setImpact(impactData);
+    setHistory(historyData);
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function updateCommitmentStatus(commitmentId) {
+  if (!newStatus) {
+    return;
+  }
+
+  try {
+    setUpdating(true);
+
+    const response = await fetch(
+      `${API_URL}/commitments/${commitmentId}/status`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          reason: reason || null,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || "Failed to update status");
+    }
+
+    setEditingId(null);
+    setNewStatus("");
+    setReason("");
+
+    await loadDashboard();
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setUpdating(false);
+  }
+}
+
+useEffect(() => {
+  loadDashboard();
+}, []);
 
   if (loading) {
     return <div className="message">Loading DecisionTrace...</div>;
@@ -173,6 +246,60 @@ function App() {
                   <span>Due date</span>
                   <strong>{commitment.due_date || "Not set"}</strong>
                 </div>
+                {editingId === commitment.id ? (
+                  <div className="status-editor">
+                  <select
+                    value={newStatus}
+                    onChange={(event) => setNewStatus(event.target.value)}
+                  >
+                  <option value="">Select status</option>
+                  <option value="OPEN">Open</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="DELAYED">Delayed</option>
+                  <option value="BLOCKED">Blocked</option>
+                  <option value="COMPLETED">Completed</option>
+                  </select>
+                  
+                  <input
+                    type="text"
+                    placeholder="Reason for this change"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+
+                  <div className="editor-actions">
+                  <button
+                    className="primary-button"
+                    disabled={updating || !newStatus}
+                    onClick={() => updateCommitmentStatus(commitment.id)}
+                  >
+                  {updating ? "Updating..." : "Update Status"}
+                  </button>
+
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setEditingId(null);
+                      setNewStatus("");
+                      setReason("");
+                    }}
+                  >
+                  Cancel
+                  </button>
+                  </div>
+                  </div>
+                  ) : (
+                  <button
+                    className="change-button"
+                    onClick={() => {
+                    setEditingId(commitment.id);
+                    setNewStatus("");
+                    setReason("");
+                  }}
+                  >
+                  Change status
+                  </button>
+                )}
               </article>
             ))}
           </div>
