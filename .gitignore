@@ -5,8 +5,10 @@ backend/.venv/
 __pycache__/
 *.pyc
 
-# Local SQLite database
-backend/decisiontrace.db
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment variables
 .env

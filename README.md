@@ -239,6 +239,20 @@ The frontend will normally run at:
 http://localhost:5173
 ```
 
+## Development Workflow
+
+To maintain code quality and collaboration consistency, the project follows a pull-request-based workflow.
+
+Workflow:
+
+1. Each team member creates a feature branch.
+2. Changes are committed and pushed to the feature branch.
+3. A Pull Request is created for review.
+4. Changes require approval before merging into the main branch.
+5. Approved changes are merged using squash merge.
+
+Direct pushes to the main branch are restricted.
+
 ## Development Status
 
 DecisionTrace is currently under active development.
