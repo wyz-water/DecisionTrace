@@ -173,16 +173,12 @@ def analyze_node_states(commitments_by_id, edges):
     return analysis
 
 
-def transitive_impact(source_id, source_status, commitments_by_id, edges):
+def downstream_closure(source_id, commitments_by_id, edges):
     """Breadth-first traversal from the source commitment.
 
     Returns every commitment reachable along dependency edges, with the
-    shortest path from the source. Empty when the source status is not
-    DELAYED/BLOCKED.
+    shortest path from the source.
     """
-    if source_status not in {"DELAYED", "BLOCKED"}:
-        return []
-
     successors, _ = build_adjacency(edges)
 
     affected = []
@@ -209,3 +205,12 @@ def transitive_impact(source_id, source_status, commitments_by_id, edges):
             queue.append((neighbor, path + [neighbor]))
 
     return affected
+
+
+def transitive_impact(source_id, source_status, commitments_by_id, edges):
+    """Downstream closure of a commitment, triggered only when the
+    source status is DELAYED or BLOCKED."""
+    if source_status not in {"DELAYED", "BLOCKED"}:
+        return []
+
+    return downstream_closure(source_id, commitments_by_id, edges)

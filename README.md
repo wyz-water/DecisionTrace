@@ -102,9 +102,13 @@ Commitments and dependencies form a directed graph. DecisionTrace analyzes it to
 
 Status changes are recorded so that the system preserves a history of how commitments evolve over time.
 
-### AI-Assisted Extraction — Planned
+### AI-Assisted Extraction
 
-DecisionTrace is designed to support AI-assisted extraction from team discussions.
+DecisionTrace supports AI-assisted extraction from team discussions.
+
+Extraction runs on rule-based patterns by default. When the
+`DEEPSEEK_API_KEY` environment variable is set, a DeepSeek LLM backend
+is used instead, falling back to rules on any failure.
 
 The intended workflow is:
 
@@ -276,17 +280,17 @@ Implemented:
 - Multi-hop downstream impact detection (transitive closure along dependency edges)
 - Dependency graph analysis (topological order, cycle detection)
 - Interactive dependency graph view
+- Discussion management UI
+- AI-assisted candidate extraction (rule-based, optional DeepSeek LLM backend)
+- Human Confirm / Edit / Reject review workflow
+- Decision change tracking (edit decisions, change history, impact on linked commitments)
+- Conflict detection (circular dependencies, order violations, due-date inversions, duplicates, stale decision links)
 - Commitment change history / audit trail
 - React dashboard
 - FastAPI REST API
 
 Planned:
 
-- Discussion management UI
-- AI extraction candidates
-- Human Confirm / Edit / Reject workflow
-- Decision change tracking
-- Conflict detection
 - Additional testing and validation
 
 ## Design Principle
