@@ -49,6 +49,12 @@ def create_discussion(
     response_model=list[DiscussionResponse]
 )
 def get_discussions(
+    project_id: int | None = None,
     db: Session = Depends(get_db)
 ):
-    return db.query(Discussion).all()
+    query = db.query(Discussion)
+
+    if project_id is not None:
+        query = query.filter(Discussion.project_id == project_id)
+
+    return query.all()
