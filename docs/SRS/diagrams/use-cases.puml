@@ -1,0 +1,48 @@
+@startuml
+' DecisionTrace — Use Case Diagram (Assignment 1 Part I, Section 5.2)
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+left to right direction
+
+actor "Team Member" as TM
+actor "Team Lead /\nProject Manager" as TL
+actor "New Team Member" as NT
+actor "AI Assistant" as AI <<system>>
+
+rectangle "DecisionTrace" {
+  usecase "UC01\nImport or record\ndiscussion" as UC01
+  usecase "UC02\nExtract candidate\ndecisions & commitments" as UC02
+  usecase "UC03\nReview & confirm\nAI suggestions" as UC03
+  usecase "UC04\nCreate or revise\na decision" as UC04
+  usecase "UC05\nAssign & track\na commitment" as UC05
+  usecase "UC06\nCreate & inspect\ndependencies" as UC06
+  usecase "UC07\nDetect conflict /\nchange impact" as UC07
+  usecase "UC08\nSearch decision history\n& source context" as UC08
+}
+
+TM --> UC01
+TM --> UC03
+TM --> UC05
+TM --> UC06
+TM --> UC08
+TL --> UC04
+TL --> UC05
+TL --> UC07
+NT --> UC08
+
+AI --> UC02
+
+' relationships
+UC02 ..> UC01 : reads the stored\ndiscussion
+UC03 ..> UC02 : reviews output of
+UC07 ..> UC06 : traverses\ndependency graph
+UC07 ..> UC03 : flags affected work\nfor human review
+UC05 ..> UC03 : may originate from\nconfirmed candidates
+
+note right of UC03
+  Human-in-the-loop boundary:
+  AI output becomes authoritative
+  only after Confirm here.
+end note
+
+@enduml

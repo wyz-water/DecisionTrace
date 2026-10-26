@@ -1,0 +1,25 @@
+@startgantt
+' DecisionTrace — Roadmap (Assignment 1 Part I, Section 4)
+title DecisionTrace Roadmap
+printscale weekly
+Project starts 2026-10-05
+
+-- Phase 1 - Requirements --
+[Idea submission] starts 2026-10-08 and lasts 4 days
+[Idea submission] is colored in Green
+[SRS (this document)] starts 2026-10-12 and lasts 11 days
+[SRS (this document)] is colored in LightBlue
+
+-- Phase 2 - Design --
+[Architecture & data model] starts 2026-10-24 and lasts 15 days
+[API & UI design] starts 2026-11-02 and lasts 13 days
+
+-- Phase 3 - Implementation --
+[M1: Discussion import & AI extraction] starts 2026-11-10 and lasts 19 days
+[M2: Review workflow & graph view] starts 2026-11-24 and lasts 19 days
+[M3: Cycle detection & change demo] starts 2026-12-08 and lasts 19 days
+
+-- Phase 4 - Evaluation --
+[Pilot feedback & report] starts 2026-12-28 and lasts 13 days
+
+@endgantt

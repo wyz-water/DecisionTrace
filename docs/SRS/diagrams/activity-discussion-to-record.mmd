@@ -1,0 +1,18 @@
+flowchart TD
+    A(["Team Member pastes discussion<br/>(transcript / chat / note)"]) --> B["System stores Discussion<br/>linked to the project"]
+    B --> C{"AI extraction<br/>opted in?"}
+    C -->|"No"| D(["Manual entry path<br/>(UC04 / UC05)"])
+    C -->|"Yes"| E["AI Assistant extracts<br/>candidate records"]
+    E --> F["Candidates stored as<br/>PENDING, each with source span"]
+    F --> G["Member reviews candidates<br/>(one by one)"]
+    G --> H{"Choice per candidate"}
+    H -->|"Edit"| J["Edit fields"] --> G
+    H -->|"Reject"| K["Marked REJECTED,<br/>kept for audit"]
+    H -->|"Confirm"| I["Authoritative record created<br/>with source + confirming user"]
+    I --> L(["Record enters the<br/>decision graph"])
+
+    style E fill:#fef3c7,stroke:#b45309
+    style F fill:#fef3c7,stroke:#b45309
+    style G fill:#fee2e2,stroke:#b91c1c
+    style H fill:#fee2e2,stroke:#b91c1c
+    style I fill:#d1fae5,stroke:#047857
