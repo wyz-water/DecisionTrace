@@ -1,0 +1,102 @@
+===== PAGE 1 =====
+System Analysis and Design 
+Group Project — Assignment 1 
+Part I: Ideate & Requirements Analysis  |  Weight: 30%  |  2026-2027, 1st Semester 
+For Part I of the project, you should provide a project idea submission (in any format that clearly conveys it), 
+followed by a Software Requirements Specification (SRS) document, related use case and business process models, 
+and supporting agile requirements artifacts such as personas, journey maps, or user stories. 
+This document covers Part I only. Parts II (Design) and III (Design Refinement & Implementation) will be issued 
+separately, after Part I feedback has been incorporated. 
+1. Project Scope 
+Each team (no more than 4 students) will propose, specify, and later design a non-trivial software system. Choose 
+any direction that gives you a real problem to reason about. The goal is good system-design practice, not a 
+specific technology. Here are some candidate subjects for your reference: 
+ 
+• Productivity and collaboration: task management, scheduling, team workspaces, document collaboration 
+• E-commerce and marketplace: online retail, service booking, subscription management 
+• Health and wellness: appointment booking, fitness tracking, telemedicine, chronic-disease management 
+• Education and learning: adaptive quizzes, online tutoring, skills tracking, course management 
+• FinTech and business tools: personal finance, invoicing, expense reporting, budget planning 
+• Smart city / IoT services: transport information, environment monitoring, public-resource management 
+• Content and media platforms: blogging, podcast management, portfolio or creative-asset tools 
+• AI-assisted or agentic systems: an assistant or agent that reasons over an LLM and calls tools/APIs to 
+complete tasks, e.g. a support agent, a research assistant, a scheduling agent 
+ 
+Note: AI or agentic components are welcome but not mandatory. Later parts (Design and Design Refinement & 
+Implementation) will ask you to build the solution using agentic development regardless of what your system is. 
+That's independent of whether your system itself is an agent. 
+ 
+2. AI Tools Policy 
+Use of AI tools is encouraged. Every submitted report must include an AI Tools Reflection covering: 
+Tool chain Tools used and the specific task each served 
+Cost API usage, subscription fees, tokens, or free-tier limits reached; and human working hours 
+Pros / cons Strengths and limitations of each tool for your tasks 
+Verification How you validated AI-generated content 
+
+===== PAGE 2 =====
+Enhancement What you changed, corrected, or extended beyond the AI output 
+Artifacts Prompts, skills, or any other scripts used 
+ 
+3. Structure and Process 
+First, your team submits a short idea write-up (only volunteer teams present their idea in class); then, after 
+feedback, your team produces the full Software Requirements Specification (SRS). 
+3.1 Idea Submission (Ideate) 
+Submit to Canvas (all teams, any format that clearly conveys your idea) 
+Deadline Before the in-class idea session, 2026/10/12,13:30 
+In-class presentation Volunteer teams only, ~8 minutes + Q&A each (sign up in advance; slots are limited) 
+ 
+Any initiative or agile way to present the idea is encouraged: a short written brief, a slide deck, a lean/business-
+model canvas, a sketch or mockup, a short video, whatever gets the idea across most clearly. A full write-up is not 
+required; cover the points below in whatever form suits your idea. 
+Idea submission — what to cover 
+• Identity: title, team name, members (no more than 4 students) 
+• Problem and motivation: background, main goals, scope 
+• Solution: core functionality, key characteristics, intended users and usability goals 
+• Market context: survey of similar products — utilities, limitations, your novelty 
+• Technology: platforms, languages, libraries, frameworks, third-party services 
+• Plan: team organization, methodology (e.g. Scrum), collaboration tools, preliminary schedule 
+• Challenges: anticipated technical and organizational risks 
+• Professional growth: how this project benefits you personally 
+• Optional: reference book or articles; if AI/agentic components are included, briefly note their role 
+In-class presentation (volunteer teams) 
+• ~8 minutes per team including Q&A — all members present 
+• Use slides, diagrams, or a prototype sketch — choose what communicates best 
+• Live feedback from the instructor and class should shape everyone's thinking, not just the presenting team's 
+ 
+Note: Teams that don't present will receive written feedback on their Canvas submission. 
+
+===== PAGE 3 =====
+3.2 Requirements Specification 
+Deadline 2026/10/23, 19:00 
+Submit to Canvas — specification document + modelling files 
+Produce a Software Requirements Specification (SRS) that incorporates instructor/class feedback and your team's 
+own reflection since the idea submission. 
+No. Section 
+1 Table of contents 
+2 Introduction (400–800 words) — refined from proposal 
+3 Strategic analysis — SWOT/TOWS; business goals and initiatives 
+4 Roadmap — agile or MVP roadmap with timeline and milestones 
+5 Use case and business process modelling 
+6 Glossary (min. 10 domain terms) 
+7 Supplementary specification (non-functional requirements) 
+8 UI mockups (min. 4 screens with brief descriptions) 
+9 References (min. 1 domain book and/or 2 articles, each annotated 30–60 words) 
+10 Team member contributions 
+11 AI tools reflection 
+Notes on Section 5 — Use case and business process modelling 
+• Use case diagrams for all major interactions 
+• Concise descriptions (2–4 lines) for all use cases; detailed specifications for at least 5 
+• Activity or BPMN diagrams for primary business processes 
+• If your system includes an agent or AI-assisted component, also show what it can act on: its inputs/tools and 
+any point where it hands off to a human 
+Choose whatever notation (UML, BPMN, or other) serves clarity. Precision and communication matter more 
+than notation compliance. Optional agile artefacts: user personas, journey maps, product backlog, epics, 
+user stories, enabler stories. 
+Notes on Section 7 — Supplementary specification 
+Cover the usual non-functional categories — usability, security, maintainability, performance, reliability. If your 
+system includes an agent or AI component, also address: 
+• Accuracy/reliability — acceptable error rate and how you'd check it 
+• Latency and cost — acceptable response time and rough cost per use 
+• Autonomy — what it may do unsupervised vs. what needs confirmation 
+• Privacy — what data it may access or send to a third-party provider 
+

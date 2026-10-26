@@ -1,0 +1,15 @@
+flowchart TD
+    A(["Member updates status<br/>with optional reason"]) --> B["Validate: status set,<br/>not equal to current"]
+    B --> C["Write audit entry<br/>old → new + reason"]
+    C --> D{"New status is<br/>DELAYED / BLOCKED?"}
+    D -->|"No"| E(["Done — graph unchanged"])
+    D -->|"Yes"| F["Walk BLOCKS edges<br/>(transitive closure)"]
+    F --> G{"Downstream<br/>commitments found?"}
+    G -->|"No"| H(["Report: no impact"])
+    G -->|"Yes"| I["Flag affected commitments<br/>for human review"]
+    I --> J(["Lead reviews and decides:<br/>reassign / reschedule / dismiss"])
+
+    style B fill:#e8f0fe,stroke:#1a56db
+    style C fill:#e8f0fe,stroke:#1a56db
+    style F fill:#d1fae5,stroke:#047857
+    style I fill:#fee2e2,stroke:#b91c1c

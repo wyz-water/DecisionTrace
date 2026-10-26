@@ -1,0 +1,14 @@
+flowchart TD
+    A(["Lead revises a decision<br/>(e.g. new database proposal)"]) --> B["Old decision marked<br/>SUPERSEDED"]
+    B --> C["Collect all commitments<br/>linked to the decision"]
+    C --> D["Flag each linked commitment<br/>for review"]
+    D --> E{"Team decision<br/>per commitment"}
+    E -->|"Keep"| F["Reconfirm the link"]
+    E -->|"Rework"| G["Update commitment<br/>or its dependencies"]
+    E -->|"Drop"| H["Mark obsolete<br/>with reason"]
+    F --> I(["Graph reflects<br/>the new reality"])
+    G --> I
+    H --> I
+
+    style B fill:#e8f0fe,stroke:#1a56db
+    style D fill:#fee2e2,stroke:#b91c1c

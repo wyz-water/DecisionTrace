@@ -1,0 +1,16 @@
+flowchart LR
+    DIS["Discussion<br/>Week 1 team meeting"] -->|"produces"| DEC["Decision<br/>Use PostgreSQL"]
+    DEC -->|"rationale"| RAT["Rationale<br/>payments need<br/>transaction support"]
+    DEC -->|"creates"| C1["Commitment<br/>Carol: schema"]
+    DEC -->|"creates"| C2["Commitment<br/>Bob: API"]
+    C1 -->|"BLOCKS"| C2
+    CHG["Change<br/>switch to MongoDB?"] -.->|"supersedes"| DEC
+    CHG -.->|"triggers review"| C1
+    CHG -.->|"triggers review"| C2
+
+    style DIS fill:#e8f0fe,stroke:#1a56db
+    style DEC fill:#fef3c7,stroke:#b45309
+    style RAT fill:#f3f4f6,stroke:#6b7280
+    style C1 fill:#d1fae5,stroke:#047857
+    style C2 fill:#d1fae5,stroke:#047857
+    style CHG fill:#fee2e2,stroke:#b91c1c
