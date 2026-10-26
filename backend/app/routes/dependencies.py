@@ -89,6 +89,36 @@ def create_dependency(
     response_model=list[DependencyResponse]
 )
 def get_dependencies(
+    project_id: int | None = None,
     db: Session = Depends(get_db)
 ):
-    return db.query(Dependency).all()
+    query = db.query(Dependency)
+
+    if project_id is not None:
+        query = query.filter(Dependency.project_id == project_id)
+
+    return query.all()
+
+
+@router.delete(
+    "/{dependency_id}",
+    response_model=DependencyResponse
+)
+def delete_dependency(
+    dependency_id: int,
+    db: Session = Depends(get_db)
+):
+    dependency = db.query(Dependency).filter(
+        Dependency.id == dependency_id
+    ).first()
+
+    if not dependency:
+        raise HTTPException(
+            status_code=404,
+            detail="Dependency not found"
+        )
+
+    db.delete(dependency)
+    db.commit()
+
+    return dependency

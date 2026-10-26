@@ -69,6 +69,12 @@ def create_decision(
     response_model=list[DecisionResponse]
 )
 def get_decisions(
+    project_id: int | None = None,
     db: Session = Depends(get_db)
 ):
-    return db.query(Decision).all()
+    query = db.query(Decision)
+
+    if project_id is not None:
+        query = query.filter(Decision.project_id == project_id)
+
+    return query.all()

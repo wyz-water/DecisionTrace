@@ -36,6 +36,8 @@ class AffectedCommitment(BaseModel):
     status: str
     dependency_type: str
     reason: str
+    path: list[int]
+    depth: int
 
 
 class CommitmentImpactResponse(BaseModel):

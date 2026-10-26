@@ -14,6 +14,7 @@ from app.schemas.commitment import (
     CommitmentStatusUpdate,
     CommitmentImpactResponse,
 )
+from app.services.graph import transitive_impact
 
 
 router = APIRouter(
@@ -78,9 +79,15 @@ def create_commitment(
     response_model=list[CommitmentResponse]
 )
 def get_commitments(
+    project_id: int | None = None,
     db: Session = Depends(get_db)
 ):
-    return db.query(Commitment).all()
+    query = db.query(Commitment)
+
+    if project_id is not None:
+        query = query.filter(Commitment.project_id == project_id)
+
+    return query.all()
 
 
 @router.patch(
@@ -160,48 +167,50 @@ def get_commitment_impact(
             detail="Commitment not found"
         )
 
-    dependencies = db.query(Dependency).filter(
-        Dependency.predecessor_commitment_id == commitment_id
+    project_commitments = db.query(Commitment).filter(
+        Commitment.project_id == commitment.project_id
     ).all()
 
-    affected_commitments = []
+    project_dependencies = db.query(Dependency).filter(
+        Dependency.project_id == commitment.project_id
+    ).all()
 
-    for dependency in dependencies:
-        affected = db.query(Commitment).filter(
-            Commitment.id == dependency.successor_commitment_id
-        ).first()
-
-        if affected:
-            affected_commitments.append({
-                "id": affected.id,
-                "owner": affected.owner,
-                "description": affected.description,
-                "status": affected.status,
-                "dependency_type": dependency.dependency_type,
-                "reason": (
-                    f"Commitment #{commitment.id} "
-                    f"{dependency.dependency_type} "
-                    f"commitment #{affected.id}"
-                )
-            })
-
-    risky_statuses = {
-        "DELAYED",
-        "BLOCKED"
+    commitments_by_id = {
+        item.id: item
+        for item in project_commitments
     }
 
-    has_impact = (
-        commitment.status in risky_statuses
-        and len(affected_commitments) > 0
+    affected = transitive_impact(
+        commitment.id,
+        commitment.status,
+        commitments_by_id,
+        project_dependencies
     )
+
+    affected_commitments = [
+        {
+            "id": item["commitment"].id,
+            "owner": item["commitment"].owner,
+            "description": item["commitment"].description,
+            "status": item["commitment"].status,
+            "dependency_type": item["dependency_type"],
+            "reason": " → ".join(
+                f"#{node_id}"
+                for node_id in item["path"]
+            ),
+            "path": item["path"],
+            "depth": item["depth"],
+        }
+        for item in affected
+    ]
+
+    has_impact = len(affected_commitments) > 0
 
     return {
         "commitment_id": commitment.id,
         "commitment_status": commitment.status,
         "has_impact": has_impact,
         "affected_commitments": affected_commitments
-        if has_impact
-        else []
     }
     
 @router.get(

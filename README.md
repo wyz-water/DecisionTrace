@@ -87,7 +87,16 @@ Bob: Implement backend API
 
 ### Impact Detection
 
-When an upstream commitment becomes `DELAYED` or `BLOCKED`, DecisionTrace can identify downstream commitments that may be affected.
+When an upstream commitment becomes `DELAYED` or `BLOCKED`, DecisionTrace can identify every downstream commitment that may be affected, transitively along the dependency chain.
+
+### Graph Analysis
+
+Commitments and dependencies form a directed graph. DecisionTrace analyzes it to answer:
+
+- What is the topological execution order (what can start now, what is still waiting)?
+- Which commitments are blocked, and by whom?
+- Are there circular dependencies?
+
 
 ### Audit Trail
 
@@ -264,7 +273,9 @@ Implemented:
 - Commitment tracking
 - Commitment status updates
 - Dependency relationships
-- Downstream impact detection
+- Multi-hop downstream impact detection (transitive closure along dependency edges)
+- Dependency graph analysis (topological order, cycle detection)
+- Interactive dependency graph view
 - Commitment change history / audit trail
 - React dashboard
 - FastAPI REST API
@@ -276,7 +287,6 @@ Planned:
 - Human Confirm / Edit / Reject workflow
 - Decision change tracking
 - Conflict detection
-- Improved project-level traceability
 - Additional testing and validation
 
 ## Design Principle
