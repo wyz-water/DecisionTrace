@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
+import CandidatesPanel from "./components/CandidatesPanel.jsx";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -243,11 +245,17 @@ function GraphView({ graph, selectedId, onSelect }) {
 
 function App() {
   const [project, setProject] = useState(null);
-  const [decision, setDecision] = useState(null);
+  const [decisions, setDecisions] = useState([]);
+  const [decisionId, setDecisionId] = useState(null);
+  const [decisionHistory, setDecisionHistory] = useState([]);
+  const [decisionImpact, setDecisionImpact] = useState(null);
   const [graph, setGraph] = useState(null);
   const [impact, setImpact] = useState(null);
   const [history, setHistory] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [discussions, setDiscussions] = useState([]);
+  const [candidates, setCandidates] = useState([]);
+  const [conflicts, setConflicts] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -255,6 +263,14 @@ function App() {
   const [newStatus, setNewStatus] = useState("");
   const [reason, setReason] = useState("");
   const [updating, setUpdating] = useState(false);
+
+  const [editingDecision, setEditingDecision] = useState(false);
+  const [decisionDraft, setDecisionDraft] = useState({});
+  const [updatingDecision, setUpdatingDecision] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
+  const [decisionTraceError, setDecisionTraceError] = useState("");
+  const [editorError, setEditorError] = useState("");
+  const [refreshTick, setRefreshTick] = useState(0);
 
   async function loadDashboard(keepSelected = null) {
     try {
@@ -275,21 +291,48 @@ function App() {
 
       const activeProject = projects[0];
 
-      const [graphResponse, decisionsResponse] = await Promise.all([
+      const [
+        graphResponse,
+        decisionsResponse,
+        discussionsResponse,
+        candidatesResponse,
+        conflictsResponse,
+      ] = await Promise.all([
         fetch(`${API_URL}/projects/${activeProject.id}/graph`),
         fetch(`${API_URL}/decisions?project_id=${activeProject.id}`),
+        fetch(`${API_URL}/discussions?project_id=${activeProject.id}`),
+        fetch(`${API_URL}/candidates?project_id=${activeProject.id}`),
+        fetch(`${API_URL}/projects/${activeProject.id}/conflicts`),
       ]);
 
-      if (!graphResponse.ok || !decisionsResponse.ok) {
+      if (
+        !graphResponse.ok ||
+        !decisionsResponse.ok ||
+        !discussionsResponse.ok ||
+        !candidatesResponse.ok ||
+        !conflictsResponse.ok
+      ) {
         throw new Error("Failed to load dashboard data");
       }
 
       const graphData = await graphResponse.json();
-      const decisions = await decisionsResponse.json();
+      const decisionsData = await decisionsResponse.json();
+      const discussionsData = await discussionsResponse.json();
+      const candidatesData = await candidatesResponse.json();
+      const conflictsData = await conflictsResponse.json();
 
       setProject(activeProject);
       setGraph(graphData);
-      setDecision(decisions[0] || null);
+      setDecisions(decisionsData);
+      setDecisionId((previous) =>
+        decisionsData.some((item) => item.id === previous)
+          ? previous
+          : decisionsData[0]?.id ?? null
+      );
+      setDiscussions(discussionsData);
+      setCandidates(candidatesData);
+      setConflicts(conflictsData.conflicts);
+      setRefreshTick((tick) => tick + 1);
 
       const trackedId =
         graphData.edges.length > 0
@@ -350,7 +393,116 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, refreshTick]);
+
+  useEffect(() => {
+    if (decisionId == null) {
+      setDecisionHistory([]);
+      setDecisionImpact(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadDecisionTrace() {
+      try {
+        const [historyResponse, impactResponse] = await Promise.all([
+          fetch(`${API_URL}/decisions/${decisionId}/history`),
+          fetch(`${API_URL}/decisions/${decisionId}/impact`),
+        ]);
+
+        if (!historyResponse.ok || !impactResponse.ok) {
+          throw new Error("Failed to load decision trace");
+        }
+
+        if (!cancelled) {
+          setDecisionHistory(await historyResponse.json());
+          setDecisionImpact(await impactResponse.json());
+          setDecisionTraceError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDecisionTraceError(err.message);
+        }
+      }
+    }
+
+    loadDecisionTrace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionId, refreshTick]);
+
+  function startDecisionEdit() {
+    setDecisionDraft({
+      title: decision.title,
+      rationale: decision.rationale ?? "",
+      status: decision.status,
+      reason: "",
+    });
+    setDecisionError("");
+    setEditingDecision(true);
+  }
+
+  async function saveDecision() {
+    if (!decisionDraft.title?.trim()) {
+      setDecisionError("Title cannot be empty");
+      return;
+    }
+
+    // Send only the fields that actually changed. An empty rationale
+    // must still be sent so clearing it works (null means "unchanged").
+    const body = {};
+
+    if (decisionDraft.title !== decision.title) {
+      body.title = decisionDraft.title;
+    }
+
+    const draftRationale = decisionDraft.rationale ?? "";
+    if (draftRationale !== (decision.rationale ?? "")) {
+      body.rationale = draftRationale;
+    }
+
+    if (decisionDraft.status !== decision.status) {
+      body.status = decisionDraft.status;
+    }
+
+    if (decisionDraft.reason?.trim()) {
+      body.reason = decisionDraft.reason;
+    }
+
+    if (Object.keys(body).length === 0) {
+      setDecisionError("No changes to save");
+      return;
+    }
+
+    setUpdatingDecision(true);
+    setDecisionError("");
+
+    try {
+      const response = await fetch(`${API_URL}/decisions/${decisionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || "Failed to update decision");
+      }
+
+      setEditingDecision(false);
+
+      await loadDashboard(selectedId);
+    } catch (err) {
+      setDecisionError(err.message);
+    } finally {
+      setUpdatingDecision(false);
+    }
+  }
 
   async function updateCommitmentStatus(commitmentId) {
     if (!newStatus) {
@@ -359,6 +511,7 @@ function App() {
 
     try {
       setUpdating(true);
+      setEditorError("");
 
       const response = await fetch(
         `${API_URL}/commitments/${commitmentId}/status`,
@@ -385,7 +538,7 @@ function App() {
 
       await loadDashboard(commitmentId);
     } catch (err) {
-      setError(err.message);
+      setEditorError(err.message);
     } finally {
       setUpdating(false);
     }
@@ -404,6 +557,11 @@ function App() {
     byId[node.id] = node;
   }
 
+  const decision =
+    decisions.find((item) => item.id === decisionId) ??
+    decisions[0] ??
+    null;
+
   const analysisById = {};
   for (const item of graph.analysis) {
     analysisById[item.commitment_id] = item;
@@ -413,8 +571,19 @@ function App() {
     .map((id) => byId[id])
     .filter(Boolean);
 
+  // Only actual cycle members are "cyclic". Nodes omitted from the
+  // topological order because they sit downstream of a cycle are
+  // deferred, not cyclic.
+  const cyclicNodeIds = new Set(graph.cycles.flat());
+
   const cyclicNodes = graph.nodes.filter(
-    (node) => !graph.topological_order.includes(node.id)
+    (node) => cyclicNodeIds.has(node.id)
+  );
+
+  const deferredNodes = graph.nodes.filter(
+    (node) =>
+      !graph.topological_order.includes(node.id) &&
+      !cyclicNodeIds.has(node.id)
   );
 
   const selectedNode = selectedId != null ? byId[selectedId] : null;
@@ -429,8 +598,17 @@ function App() {
           </div>
         </div>
 
-        <div className="project-label">
-          {project?.name || "No project"}
+        <div className="topbar-right">
+          {conflicts.length > 0 && (
+            <span className="topbar-conflicts">
+              {conflicts.length}{" "}
+              {conflicts.length === 1 ? "conflict" : "conflicts"}
+            </span>
+          )}
+
+          <div className="project-label">
+            {project?.name || "No project"}
+          </div>
         </div>
       </header>
 
@@ -449,20 +627,221 @@ function App() {
             <div className="card-header">
               <div>
                 <p className="eyebrow">DECISION</p>
-                <h2>{decision?.title || "No decision"}</h2>
+
+                <div className="decision-title-row">
+                  <h2>{decision?.title || "No decision"}</h2>
+
+                  {decisions.length > 1 && (
+                    <select
+                      className="decision-select"
+                      value={decisionId ?? ""}
+                      disabled={editingDecision}
+                      onChange={(event) =>
+                        setDecisionId(Number(event.target.value))
+                      }
+                    >
+                      {decisions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          #{item.id} {item.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
 
-              {decision && <StatusBadge status={decision.status} />}
+              <div className="decision-header-actions">
+                {decision && <StatusBadge status={decision.status} />}
+
+                {decision && !editingDecision && (
+                  <button
+                    className="secondary-button"
+                    onClick={startDecisionEdit}
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="rationale">
-              <span>Rationale</span>
-              <p>{decision?.rationale || "No rationale recorded."}</p>
-            </div>
+            {editingDecision ? (
+              <div className="decision-editor">
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={decisionDraft.title ?? ""}
+                  onChange={(event) =>
+                    setDecisionDraft({
+                      ...decisionDraft,
+                      title: event.target.value,
+                    })
+                  }
+                />
 
-            <div className="trace-source">
-              Source discussion #{decision?.source_discussion_id ?? "—"}
-            </div>
+                <textarea
+                  rows={2}
+                  placeholder="Rationale"
+                  value={decisionDraft.rationale ?? ""}
+                  onChange={(event) =>
+                    setDecisionDraft({
+                      ...decisionDraft,
+                      rationale: event.target.value,
+                    })
+                  }
+                />
+
+                <select
+                  value={decisionDraft.status ?? "CONFIRMED"}
+                  onChange={(event) =>
+                    setDecisionDraft({
+                      ...decisionDraft,
+                      status: event.target.value,
+                    })
+                  }
+                >
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="SUPERSEDED">Superseded</option>
+                  <option value="REVOKED">Revoked</option>
+                </select>
+
+                <input
+                  type="text"
+                  placeholder="Reason for this change"
+                  value={decisionDraft.reason ?? ""}
+                  onChange={(event) =>
+                    setDecisionDraft({
+                      ...decisionDraft,
+                      reason: event.target.value,
+                    })
+                  }
+                />
+
+                <div className="editor-actions">
+                  <button
+                    className="primary-button"
+                    disabled={
+                      updatingDecision || !decisionDraft.title?.trim()
+                    }
+                    onClick={saveDecision}
+                  >
+                    {updatingDecision ? "Saving..." : "Save"}
+                  </button>
+
+                  <button
+                    className="secondary-button"
+                    onClick={() => setEditingDecision(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                {decisionError && (
+                  <p className="pipeline-error">{decisionError}</p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="rationale">
+                  <span>Rationale</span>
+                  <p>{decision?.rationale || "No rationale recorded."}</p>
+                </div>
+
+                <div className="trace-source">
+                  Source discussion #{decision?.source_discussion_id ?? "—"}
+                </div>
+              </>
+            )}
+
+            {decisionTraceError && (
+              <p className="pipeline-error">
+                Could not load decision trace: {decisionTraceError}
+              </p>
+            )}
+
+            {decision && (
+              <>
+                <div className="decision-subsection">
+                  <div className="decision-subheading">
+                    <span>DECISION IMPACT</span>
+
+                    {decisionImpact?.has_changes && (
+                      <span className="change-warning">
+                        changed {decisionImpact.change_count}× — linked
+                        commitments may need review
+                      </span>
+                    )}
+                  </div>
+
+                  {decisionImpact &&
+                  decisionImpact.affected_commitments.length > 0 ? (
+                    decisionImpact.affected_commitments.map((item) => (
+                      <div
+                        className="linked-commitment"
+                        key={item.id}
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <strong>{item.owner}</strong>
+                        <span>
+                          #{item.id} · {item.status.replace("_", " ")}
+                        </span>
+
+                        {item.downstream.length > 0 ? (
+                          <span className="downstream-note">
+                            affects {names(item.downstream, byId)}
+                          </span>
+                        ) : (
+                          <span className="downstream-note dim">
+                            no downstream
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">
+                      No commitments linked to this decision yet.
+                    </p>
+                  )}
+                </div>
+
+                <div className="decision-subsection">
+                  <div className="decision-subheading">
+                    <span>CHANGE HISTORY</span>
+                  </div>
+
+                  {decisionHistory.length > 0 ? (
+                    <div className="timeline">
+                      {decisionHistory.map((item) => (
+                        <div className="timeline-item" key={item.id}>
+                          <div className="timeline-dot" />
+
+                          <div>
+                            <strong>
+                              {item.old_title} → {item.new_title}
+                            </strong>
+
+                            {item.old_status !== item.new_status && (
+                              <span className="history-status">
+                                {item.old_status.replace("_", " ")}
+                                {" → "}
+                                {item.new_status.replace("_", " ")}
+                              </span>
+                            )}
+
+                            <p>{item.reason || "No reason provided."}</p>
+
+                            <span>
+                              {new Date(item.changed_at).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No changes recorded yet.</p>
+                  )}
+                </div>
+              </>
+            )}
           </section>
 
           <section
@@ -590,6 +969,88 @@ function App() {
                 </div>
               );
             })}
+
+            {deferredNodes.map((node) => {
+              const analysis = analysisById[node.id];
+
+              return (
+                <div
+                  className="plan-row deferred"
+                  key={node.id}
+                  onClick={() => setSelectedId(node.id)}
+                >
+                  <span className="plan-index">—</span>
+
+                  <div className="plan-owner">
+                    <strong>{node.owner}</strong>
+                    <span>Commitment #{node.id}</span>
+                  </div>
+
+                  <StatusBadge status={node.status} />
+
+                  <span className="plan-note">
+                    {stateNote(analysis, byId)} · blocked by a cycle
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">CONFLICT CHECK</p>
+              <h2>Project consistency</h2>
+            </div>
+            <span>{conflicts.length} issues</span>
+          </div>
+
+          <div className="card conflict-card">
+            {conflicts.length === 0 ? (
+              <div className="conflicts-clean">
+                <span className="clean-dot" />
+                No conflicts detected — the project trace is consistent.
+              </div>
+            ) : (
+              conflicts.map((conflict, index) => (
+                <div className="conflict-row" key={index}>
+                  <span
+                    className={`severity-badge severity-${conflict.severity.toLowerCase()}`}
+                  >
+                    {conflict.severity}
+                  </span>
+
+                  <span className="conflict-type">
+                    {conflict.type.replace("_", " ")}
+                  </span>
+
+                  <p>{conflict.message}</p>
+
+                  <div className="conflict-refs">
+                    {conflict.commitment_ids.map((id) => (
+                      <button
+                        className="ref-chip"
+                        key={`commitment-${id}`}
+                        onClick={() => setSelectedId(id)}
+                      >
+                        {byId[id]?.owner ?? "?"} #{id}
+                      </button>
+                    ))}
+
+                    {conflict.decision_ids.map((id) => (
+                      <button
+                        className="ref-chip decision-chip"
+                        key={`decision-${id}`}
+                        onClick={() => setDecisionId(id)}
+                      >
+                        Decision #{id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -672,6 +1133,10 @@ function App() {
                       onChange={(event) => setReason(event.target.value)}
                     />
 
+                    {editorError && (
+                      <p className="pipeline-error">{editorError}</p>
+                    )}
+
                     <div className="editor-actions">
                       <button
                         className="primary-button"
@@ -713,6 +1178,24 @@ function App() {
               </article>
             ))}
           </div>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">AI-ASSISTED PIPELINE</p>
+              <h2>Discussions & candidates</h2>
+            </div>
+            <span>AI proposes · humans decide</span>
+          </div>
+
+          <DiscussionsPanel
+            discussions={discussions}
+            projectId={project?.id}
+            reload={loadDashboard}
+          />
+
+          <CandidatesPanel candidates={candidates} reload={loadDashboard} />
         </section>
 
         <div className="dashboard-grid lower-grid">
