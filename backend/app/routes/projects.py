@@ -14,6 +14,7 @@ from app.services.graph import (
     detect_cycles,
     topological_order,
 )
+from app.services.consistency import date_inversion
 
 
 router = APIRouter(
@@ -184,31 +185,28 @@ def get_project_conflicts(
 
     # 3. Successor due before its predecessor.
     for dependency in dependencies:
-        predecessor = by_id.get(dependency.predecessor_commitment_id)
-        successor = by_id.get(dependency.successor_commitment_id)
+        pair = date_inversion(
+            by_id.get(dependency.predecessor_commitment_id),
+            by_id.get(dependency.successor_commitment_id)
+        )
 
-        if (
-            not predecessor
-            or not successor
-            or not predecessor.due_date
-            or not successor.due_date
-            or successor.status == "COMPLETED"
-        ):
+        if not pair:
             continue
 
-        if successor.due_date < predecessor.due_date:
-            conflicts.append({
-                "type": "DATE_INVERSION",
-                "severity": "WARNING",
-                "message": (
-                    f"{successor.owner} (#{successor.id}) is due "
-                    f"{successor.due_date}, before predecessor "
-                    f"{predecessor.owner} (#{predecessor.id}) "
-                    f"due {predecessor.due_date}"
-                ),
-                "commitment_ids": [successor.id, predecessor.id],
-                "decision_ids": [],
-            })
+        predecessor, successor = pair
+
+        conflicts.append({
+            "type": "DATE_INVERSION",
+            "severity": "WARNING",
+            "message": (
+                f"{successor.owner} (#{successor.id}) is due "
+                f"{successor.due_date}, before predecessor "
+                f"{predecessor.owner} (#{predecessor.id}) "
+                f"due {predecessor.due_date}"
+            ),
+            "commitment_ids": [successor.id, predecessor.id],
+            "decision_ids": [],
+        })
 
     # 4. Duplicate commitments: same owner and same description.
     grouped = {}

@@ -19,6 +19,7 @@ export default function CycleDialog({
   error,
   onClose,
   onMarkBlocked,
+  onRemoveLink,
   busy,
 }) {
   const dialogRef = useRef(null);
@@ -75,6 +76,23 @@ export default function CycleDialog({
   }, [onClose]);
 
   const { attempted, nodes, hops, recommendation } = report;
+
+  // Existing links that could be removed to break the loop. The dialog
+  // only recommends this when nothing can be parked, so the advice has to
+  // be executable here — pointing at a button that lives on another
+  // screen is the same as offering no action at all.
+  const owners = {};
+  for (const node of nodes) {
+    owners[node.id] = node.owner;
+  }
+
+  const removableLinks = hops
+    .filter((hop) => !hop.is_new && hop.dependency_id != null)
+    .map((hop) => ({
+      ...hop,
+      fromOwner: owners[hop.from] ?? `#${hop.from}`,
+      toOwner: owners[hop.to] ?? `#${hop.to}`,
+    }));
 
   return (
     <div
@@ -143,6 +161,36 @@ export default function CycleDialog({
           <p className="eyebrow">Recommended</p>
 
           <p>{recommendation.message}</p>
+
+          {removableLinks.length > 0 && (
+            <>
+              {recommendation.commitment_id && (
+                <p className="cycle-removal-label">
+                  Or break the loop by removing a link:
+                </p>
+              )}
+
+              <ul className="cycle-removals">
+                {removableLinks.map((link) => (
+                  <li key={link.dependency_id}>
+                    <span>
+                      {link.fromOwner} blocks {link.toOwner}
+                    </span>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => onRemoveLink(link.dependency_id)}
+                      disabled={busy}
+                      aria-label={`Remove the link from ${link.fromOwner} to ${link.toOwner}`}
+                    >
+                      Remove link
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           {error && (
             <p className="modal-error" role="alert">

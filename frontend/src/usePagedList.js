@@ -61,6 +61,9 @@ export default function usePagedList(baseUrl, limit, refreshKey = 0) {
   const [page, setPage] = useState(() => emptyPage(limit));
   const [loading, setLoading] = useState(Boolean(baseUrl));
   const [error, setError] = useState("");
+  // The slice that failed to load. Without it a failed page would look
+  // "not settled" forever, leaving the pager disabled and the list dimmed.
+  const [failed, setFailed] = useState(null);
 
   useEffect(() => {
     if (!baseUrl) {
@@ -98,9 +101,11 @@ export default function usePagedList(baseUrl, limit, refreshKey = 0) {
         }
 
         setPage({ ...data, url: baseUrl });
+        setFailed(null);
         setError("");
       } catch (err) {
         if (!cancelled) {
+          setFailed({ url: baseUrl, offset });
           setError(err.message);
         }
       } finally {
@@ -121,15 +126,28 @@ export default function usePagedList(baseUrl, limit, refreshKey = 0) {
     setCursor({ url: baseUrl, offset: Math.max(0, next) });
   }
 
+  // A slice is identified by url AND offset. Keying on the url alone let a
+  // pending page render the previous page's rows while the pager had
+  // already moved on: the label read "5-8 of 9" over rows 1-4, and a
+  // second click paged from the new offset and skipped a page outright.
+  // The old rows stay on screen until their replacement lands (no empty
+  // flash), but `offset` is reported from the rows that are actually
+  // rendered, so label and content can never disagree.
   const visible = page.url === baseUrl ? page : emptyPage(limit);
+  const settled =
+    (page.url === baseUrl && page.offset === offset) ||
+    Boolean(failed && failed.url === baseUrl && failed.offset === offset);
 
   return {
     items: visible.items,
     total: visible.total,
     limit,
-    offset,
+    offset: visible.offset,
     hasMore: visible.has_more,
-    loading: baseUrl ? loading : false,
+    // `loading` covers the fetch plus the render between a pager click and
+    // the effect that starts it, which is the window a fast second click
+    // used to slip through.
+    loading: baseUrl ? loading || !settled : false,
     error,
     setOffset,
   };

@@ -5,8 +5,13 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
-from app.schemas.dependency import DependencyCreate, DependencyResponse
+from app.schemas.dependency import (
+    DependencyCreate,
+    DependencyCreated,
+    DependencyResponse,
+)
 from app.services.graph import find_cycle_with_edge
+from app.services.consistency import date_inversion
 
 
 router = APIRouter(
@@ -137,9 +142,51 @@ def cycle_rejection_payload(
     }
 
 
+def date_inversion_payload(predecessor, successor):
+    """Describe a scheduling contradiction the caller just created.
+
+    The edge is still stored: the ordering is legal, only the dates are
+    not. Saying so here saves the user a trip to the consistency screen
+    to discover it.
+    """
+    return {
+        "code": "DATE_INVERSION",
+        "message": (
+            f"{successor.owner} (#{successor.id}) is due "
+            f"{successor.due_date}, but its predecessor "
+            f"{predecessor.owner} (#{predecessor.id}) is due "
+            f"{predecessor.due_date}."
+        ),
+        "suggestion": (
+            f"Move {successor.owner}'s due date to on or after "
+            f"{predecessor.due_date}, or link them the other way round."
+        ),
+        "predecessor": {
+            "id": predecessor.id,
+            "owner": predecessor.owner,
+            "due_date": (
+                predecessor.due_date.isoformat()
+                if predecessor.due_date
+                else None
+            ),
+            "status": predecessor.status,
+        },
+        "successor": {
+            "id": successor.id,
+            "owner": successor.owner,
+            "due_date": (
+                successor.due_date.isoformat()
+                if successor.due_date
+                else None
+            ),
+            "status": successor.status,
+        },
+    }
+
+
 @router.post(
     "",
-    response_model=DependencyResponse
+    response_model=DependencyCreated
 )
 def create_dependency(
     dependency: DependencyCreate,
@@ -252,7 +299,16 @@ def create_dependency(
     db.commit()
     db.refresh(new_dependency)
 
-    return new_dependency
+    inversion = date_inversion(predecessor, successor)
+
+    return DependencyCreated(
+        **DependencyResponse.model_validate(new_dependency).model_dump(),
+        warning=(
+            date_inversion_payload(*inversion)
+            if inversion
+            else None
+        )
+    )
 
 
 @router.get(

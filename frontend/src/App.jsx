@@ -55,16 +55,19 @@ const LAYER_GAP = 240;
 const ROW_GAP = 100;
 const PAD = 30;
 
+/**
+ * Place the graph in columns, one column per topological depth.
+ *
+ * Returns null when a node has no depth, which happens exactly when the
+ * node sits on a cycle: a loop has no topological order, so there is no
+ * left-to-right arrangement that could be drawn honestly. The caller
+ * renders the "cannot be ordered" notice instead of a partial graph.
+ */
 function computeLayout(graph) {
   const { nodes, edges, topological_order: topo } = graph;
 
   if (nodes.length === 0) {
     return null;
-  }
-
-  const byId = {};
-  for (const node of nodes) {
-    byId[node.id] = node;
   }
 
   const predecessors = {};
@@ -83,24 +86,23 @@ function computeLayout(graph) {
     layer[id] = predLayers.length ? Math.max(...predLayers) + 1 : 0;
   }
 
-  const maxLayer = Math.max(0, ...Object.values(layer));
-
-  const cyclicIds = new Set(
-    nodes.filter((node) => !(node.id in layer)).map((node) => node.id)
-  );
+  // A node without a depth sits on a cycle; there is no order to draw.
+  if (nodes.some((node) => !(node.id in layer))) {
+    return null;
+  }
 
   const layers = {};
   for (const node of nodes) {
-    const column = cyclicIds.has(node.id) ? maxLayer + 1 : layer[node.id];
-    (layers[column] ??= []).push(node);
+    (layers[layer[node.id]] ??= []).push(node);
   }
 
   const positions = {};
-  const columnCount = Object.keys(layers).length;
   let maxRows = 0;
+  let maxColumn = 0;
 
   for (const column of Object.keys(layers)) {
     maxRows = Math.max(maxRows, layers[column].length);
+    maxColumn = Math.max(maxColumn, Number(column));
 
     layers[column].forEach((node, index) => {
       positions[node.id] = {
@@ -112,21 +114,64 @@ function computeLayout(graph) {
 
   return {
     positions,
-    cyclicIds,
-    cycleColumn: maxLayer + 1,
-    svgWidth: (columnCount - 1) * LAYER_GAP + NODE_W + PAD * 2,
+    // Sized from the widest column that actually holds a node, not from
+    // the number of columns: sparse layer numbers used to under-size the
+    // viewBox and crop the graph.
+    svgWidth: maxColumn * LAYER_GAP + NODE_W + PAD * 2,
     svgHeight: (maxRows - 1) * ROW_GAP + NODE_H + PAD * 2,
   };
 }
 
+function CycleNotice({ graph }) {
+  const owners = {};
+  for (const node of graph.nodes) {
+    owners[node.id] = node.owner;
+  }
+
+  return (
+    <div className="graph-blocked" role="alert">
+      <span className="graph-blocked-badge">CYCLE</span>
+
+      <div className="graph-blocked-body">
+        <p className="graph-blocked-title">
+          The graph contains a cycle and cannot be ordered
+        </p>
+
+        <p>
+          These commitments wait on each other, so no start-to-finish order
+          exists and the graph is not drawn.
+        </p>
+
+        <ul className="graph-blocked-loops">
+          {graph.cycles.map((cycle) => (
+            <li key={cycle.join("-")}>
+              {cycle.map((id) => owners[id] ?? `#${id}`).join(" → ")}
+            </li>
+          ))}
+        </ul>
+
+        <p className="graph-blocked-hint">
+          Remove one of these links in the dependency list below to break the
+          loop.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function GraphView({ graph, selectedId, onSelect }) {
+  // A cycle has no topological order, so there is nothing honest to draw.
+  if (graph.has_cycles) {
+    return <CycleNotice graph={graph} />;
+  }
+
   const layout = computeLayout(graph);
 
   if (!layout) {
     return <p className="muted">No commitments to draw yet.</p>;
   }
 
-  const { positions, cyclicIds, cycleColumn, svgWidth, svgHeight } = layout;
+  const { positions, svgWidth, svgHeight } = layout;
 
   return (
     <div className="graph-wrap">
@@ -160,45 +205,17 @@ function GraphView({ graph, selectedId, onSelect }) {
             return null;
           }
 
-          const sameColumn = Math.abs(from.x - to.x) < LAYER_GAP / 2;
-
-          const startX = from.x + NODE_W / 2;
-          const endX = to.x + NODE_W / 2;
-          const startY = from.y;
-          const endY = to.y;
-
-          const d = sameColumn
-            ? `M ${startX} ${startY} C ${startX + 70} ${startY}, ${endX + 70} ${endY}, ${endX} ${endY}`
-            : `M ${startX} ${startY} L ${to.x - NODE_W / 2} ${endY}`;
-
+          // Without cycles every edge runs one column to the right, so a
+          // straight line is the honest shape.
           return (
             <path
               className="graph-edge"
               key={edge.id}
-              d={d}
+              d={`M ${from.x + NODE_W / 2} ${from.y} L ${to.x - NODE_W / 2} ${to.y}`}
               markerEnd="url(#arrow)"
             />
           );
         })}
-
-        {cyclicIds.size > 0 && (
-          <g className="cycle-zone">
-            <rect
-              x={cycleColumn * LAYER_GAP + PAD - 14}
-              y={12}
-              width={NODE_W + 28}
-              height={svgHeight - 24}
-              rx={16}
-            />
-            <text
-              x={cycleColumn * LAYER_GAP + PAD + NODE_W / 2}
-              y={30}
-              textAnchor="middle"
-            >
-              CYCLE
-            </text>
-          </g>
-        )}
 
         {graph.nodes.map((node) => {
           const pos = positions[node.id];
@@ -297,6 +314,8 @@ function App() {
   });
   const [dependencySaving, setDependencySaving] = useState(false);
   const [dependencyError, setDependencyError] = useState("");
+  // Advisory, not a rejection: the edge is stored and the dates are wrong.
+  const [dependencyNotice, setDependencyNotice] = useState(null);
   const [cycleReport, setCycleReport] = useState(null);
   const [cycleError, setCycleError] = useState("");
 
@@ -675,6 +694,7 @@ function App() {
     try {
       setDependencySaving(true);
       setDependencyError("");
+      setDependencyNotice(null);
 
       const response = await fetch(`${API_URL}/dependencies`, {
         method: "POST",
@@ -708,10 +728,51 @@ function App() {
         );
       }
 
+      const created = await response.json();
+
       setDependencyDraft({ predecessor: "", successor: "" });
+      setDependencyNotice(
+        created.warning
+          ? { ...created.warning, dependency_id: created.id }
+          : null
+      );
       await reloadData(selectedId);
     } catch (err) {
       setDependencyError(err.message);
+    } finally {
+      setDependencySaving(false);
+    }
+  }
+
+  async function removeDependency(dependencyId) {
+    try {
+      setDependencySaving(true);
+      setDependencyError("");
+      setCycleError("");
+
+      const response = await fetch(
+        `${API_URL}/dependencies/${dependencyId}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Failed to remove the dependency"
+        );
+      }
+
+      setCycleReport(null);
+      setDependencyNotice(null);
+      await reloadData(selectedId);
+    } catch (err) {
+      if (cycleReport) {
+        setCycleError(err.message);
+      } else {
+        setDependencyError(err.message);
+      }
     } finally {
       setDependencySaving(false);
     }
@@ -1529,6 +1590,40 @@ function App() {
                 {dependencyError}
               </p>
             )}
+
+            {dependencyNotice && (
+              <div className="form-notice" role="status">
+                <span className="form-notice-badge">DATE MISMATCH</span>
+
+                <div className="form-notice-body">
+                  <p>{dependencyNotice.message}</p>
+                  <p className="form-notice-hint">
+                    {dependencyNotice.suggestion} The link was saved — it is
+                    listed on the consistency screen until the dates agree.
+                  </p>
+                </div>
+
+                <div className="form-notice-actions">
+                  <button
+                    type="button"
+                    className="form-notice-undo"
+                    onClick={() => removeDependency(dependencyNotice.dependency_id)}
+                    disabled={dependencySaving}
+                  >
+                    {dependencySaving ? "Undoing..." : "Undo"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="form-notice-close"
+                    onClick={() => setDependencyNotice(null)}
+                    aria-label="Dismiss the date warning"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1714,6 +1809,18 @@ function App() {
                       Commitment #{dependency.successor_commitment_id}
                     </span>
                   </div>
+
+                  <button
+                    type="button"
+                    className="dependency-remove"
+                    onClick={() => removeDependency(dependency.id)}
+                    disabled={dependencySaving}
+                    aria-label={`Remove dependency: ${
+                      predecessor?.owner || "unknown"
+                    } blocks ${successor?.owner || "unknown"}`}
+                  >
+                    Remove
+                  </button>
                 </div>
               );
             })}
@@ -1816,6 +1923,7 @@ function App() {
           busy={dependencySaving}
           onClose={() => setCycleReport(null)}
           onMarkBlocked={markCycleTaskBlocked}
+          onRemoveLink={removeDependency}
         />
       )}
     </div>
