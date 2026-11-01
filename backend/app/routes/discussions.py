@@ -5,6 +5,8 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.discussion import Discussion
 from app.schemas.discussion import DiscussionCreate, DiscussionResponse
+from app.schemas.page import Page
+from app.services.pagination import PageParams, page_response, paginate
 
 
 router = APIRouter(
@@ -46,10 +48,11 @@ def create_discussion(
 
 @router.get(
     "",
-    response_model=list[DiscussionResponse]
+    response_model=Page[DiscussionResponse]
 )
 def get_discussions(
     project_id: int | None = None,
+    page: PageParams = Depends(),
     db: Session = Depends(get_db)
 ):
     query = db.query(Discussion)
@@ -57,4 +60,10 @@ def get_discussions(
     if project_id is not None:
         query = query.filter(Discussion.project_id == project_id)
 
-    return query.all()
+    # Newest first: a discussion is added so it can be extracted from,
+    # and the one just pasted is the one the user is looking for.
+    query = query.order_by(Discussion.id.desc())
+
+    rows, total = paginate(query, page)
+
+    return page_response(rows, total, page)

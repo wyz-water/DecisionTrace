@@ -8,6 +8,7 @@ from app.models.commitment import Commitment
 from app.models.dependency import Dependency
 from app.models.commitment_history import CommitmentHistory
 from app.schemas.commitment_history import CommitmentHistoryResponse
+from app.schemas.page import Page
 from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentResponse,
@@ -15,6 +16,7 @@ from app.schemas.commitment import (
     CommitmentImpactResponse,
 )
 from app.services.graph import transitive_impact
+from app.services.pagination import PageParams, page_response, paginate
 
 
 router = APIRouter(
@@ -215,10 +217,11 @@ def get_commitment_impact(
     
 @router.get(
     "/{commitment_id}/history",
-    response_model=list[CommitmentHistoryResponse]
+    response_model=Page[CommitmentHistoryResponse]
 )
 def get_commitment_history(
     commitment_id: int,
+    page: PageParams = Depends(),
     db: Session = Depends(get_db)
 ):
     commitment = db.query(Commitment).filter(
@@ -231,8 +234,15 @@ def get_commitment_history(
             detail="Commitment not found"
         )
 
-    return db.query(CommitmentHistory).filter(
+    # Newest first: an audit trail is read backwards from "what happened
+    # last", and that is also the change a user just made.
+    query = db.query(CommitmentHistory).filter(
         CommitmentHistory.commitment_id == commitment_id
     ).order_by(
-        CommitmentHistory.changed_at.asc()
-    ).all()
+        CommitmentHistory.changed_at.desc(),
+        CommitmentHistory.id.desc()
+    )
+
+    rows, total = paginate(query, page)
+
+    return page_response(rows, total, page)

@@ -69,6 +69,38 @@ def detect_cycles(edges, node_ids):
     return cycles
 
 
+def find_cycle_with_edge(edges, predecessor_id, successor_id):
+    """Cycle that the edge predecessor -> successor would close, if any.
+
+    A new edge closes a loop exactly when the successor can already
+    reach the predecessor. Breadth-first search returns the shortest
+    such loop, written as [predecessor, successor, ..., predecessor].
+    Returns None when the edge is safe to store.
+    """
+    if predecessor_id == successor_id:
+        return [predecessor_id, predecessor_id]
+
+    successors, _ = build_adjacency(edges)
+
+    queue = deque([(successor_id, [successor_id])])
+    visited = {successor_id}
+
+    while queue:
+        node_id, path = queue.popleft()
+
+        for neighbor, _dependency_type in successors.get(node_id, []):
+            if neighbor == predecessor_id:
+                return [predecessor_id] + path + [predecessor_id]
+
+            if neighbor in visited:
+                continue
+
+            visited.add(neighbor)
+            queue.append((neighbor, path + [neighbor]))
+
+    return None
+
+
 def topological_order(edges, node_ids):
     """Kahn's algorithm.
 
