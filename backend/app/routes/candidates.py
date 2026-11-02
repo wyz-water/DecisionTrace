@@ -19,8 +19,11 @@ from app.schemas.candidate import (
     CandidateConfirmResponse,
     ExtractResponse,
 )
+from app.schemas.dependency import DependencyCreate
 from app.schemas.page import Page
+from app.routes.dependencies import cycle_rejection_payload
 from app.services.extractor import extract_candidates, serialize_candidate
+from app.services.graph import find_cycle_with_edge
 from app.services.pagination import PageParams, page_response, paginate
 from app.statuses import COMMITMENT_STATUSES, DECISION_STATUSES
 
@@ -31,21 +34,56 @@ router = APIRouter(
 )
 
 
+_IDENTITY_FIELDS = {
+    "DECISION": ("title",),
+    "COMMITMENT": ("owner", "description"),
+    "DEPENDENCY": ("predecessor_owner", "successor_owner"),
+}
+
+
 def _candidate_keys(candidate_type, payload, source_text):
     """Identity of one extracted record, used to make extraction repeatable.
 
     Two keys are returned because either one alone is enough to prove the
     record was already extracted:
 
-    * the source sentence, which the review UI never edits, so it still
-      matches after a human rewrites the payload before confirming;
+    * the source sentence plus the record's identity fields. The sentence
+      alone is not enough — one sentence can describe several facts
+      ("Ann blocks Bob and Carol" yields two dependency candidates) — and
+      the whole payload is too much, because the review UI can rewrite
+      non-identity fields (status, dates, rationale) without turning the
+      record into a different fact;
     * the canonical payload, which catches the same fact restated in a
       slightly different sentence.
     """
     keys = []
 
+    expected = _IDENTITY_FIELDS.get(candidate_type, ())
+
+    identity = tuple(
+        payload.get(field)
+        for field in expected
+        if payload.get(field)
+    )
+
+    # A candidate whose identity fields are missing, or of a type this
+    # server does not know, cannot be told apart from its sentence: the
+    # full payload is the only honest discriminator.
+    discriminator = (
+        identity
+        if expected and len(identity) == len(expected)
+        else json.dumps(payload, sort_keys=True)
+    )
+
     if source_text:
-        keys.append((candidate_type, "text", " ".join(source_text.split())))
+        keys.append(
+            (
+                candidate_type,
+                "text",
+                " ".join(source_text.split()),
+                discriminator,
+            )
+        )
 
     keys.append(
         (candidate_type, "payload", json.dumps(payload, sort_keys=True))
@@ -440,11 +478,67 @@ def confirm_candidate(
                 detail="A commitment cannot depend on itself"
             )
 
+        dependency_type = _field(payload, "dependency_type") or "BLOCKS"
+
+        # The intake queue must enforce the same project rule as the
+        # dependency form (SRS UC06): confirming a candidate is not
+        # allowed to store an edge POST /dependencies would refuse.
+        existing_edges = db.query(Dependency).filter(
+            Dependency.project_id == candidate.project_id
+        ).all()
+
+        for edge in existing_edges:
+            if (
+                edge.predecessor_commitment_id == predecessor.id
+                and edge.successor_commitment_id == successor.id
+                and edge.dependency_type == dependency_type
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "DUPLICATE_DEPENDENCY",
+                        "message": (
+                            f"{predecessor.owner} already blocks "
+                            f"{successor.owner} ({dependency_type})."
+                        ),
+                        "dependency_id": edge.id,
+                    }
+                )
+
+        cycle = find_cycle_with_edge(
+            existing_edges,
+            predecessor.id,
+            successor.id
+        )
+
+        if cycle:
+            commitments_by_id = {
+                commitment.id: commitment
+                for commitment in db.query(Commitment).filter(
+                    Commitment.project_id == candidate.project_id
+                ).all()
+            }
+
+            raise HTTPException(
+                status_code=409,
+                detail=cycle_rejection_payload(
+                    cycle,
+                    existing_edges,
+                    commitments_by_id,
+                    DependencyCreate(
+                        project_id=candidate.project_id,
+                        predecessor_commitment_id=predecessor.id,
+                        successor_commitment_id=successor.id,
+                        dependency_type=dependency_type,
+                    )
+                )
+            )
+
         record = Dependency(
             project_id=candidate.project_id,
             predecessor_commitment_id=predecessor.id,
             successor_commitment_id=successor.id,
-            dependency_type=_field(payload, "dependency_type") or "BLOCKS"
+            dependency_type=dependency_type
         )
 
     else:
