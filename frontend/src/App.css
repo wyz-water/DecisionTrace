@@ -18,9 +18,16 @@ body {
 
 .topbar {
   height: 76px;
-  padding: 0 7%;
   background: #ffffff;
   border-bottom: 1px solid #e6e8ef;
+}
+
+/* Shares one width with the content column so the brand sits exactly
+   above the sidebar and the project chip above the content. */
+.topbar-inner {
+  width: min(1400px, 94%);
+  height: 100%;
+  margin: 0 auto;
 
   display: flex;
   align-items: center;
@@ -47,10 +54,350 @@ body {
   font-weight: 600;
 }
 
+/* ---- App shell + sidebar --------------------------------------------
+   Header pinned, nav pinned, content scrolls. The rail is fixed rather
+   than laid out in a grid so the section markup stays a flat list of
+   blocks inside <main> — one section per view, no wrapper per view.
+
+   Both the rail and the content share the same centred 1400px measure:
+   the rail's left edge is the container's left edge. */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
 .dashboard {
-  width: min(1180px, 90%);
+  width: min(1400px, 94%);
   margin: 0 auto;
-  padding: 52px 0 80px;
+  padding: 38px 0 80px 276px; /* 232px rail + 44px gap */
+}
+
+.sidebar {
+  position: fixed;
+  top: 76px;
+  left: max(3%, calc((100% - 1400px) / 2));
+
+  width: 232px;
+  height: calc(100vh - 76px);
+  overflow-y: auto;
+
+  padding: 34px 0 48px;
+}
+
+.sidebar-group + .sidebar-group {
+  margin-top: 26px;
+}
+
+.sidebar-label {
+  margin: 0 0 8px;
+  padding-left: 12px;
+
+  color: #8b92a1;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.sidebar-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-link {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 8px 10px 8px 12px;
+  border-radius: 9px;
+
+  color: #475467;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-link:hover {
+  background: #eef1f6;
+  color: #172033;
+}
+
+.sidebar-link:focus-visible {
+  outline: 2px solid #315ca8;
+  outline-offset: 2px;
+}
+
+/* Active = surface + rail + weight. Three signals, none of them colour
+   alone (§5.7). */
+.sidebar-link.is-active {
+  background: #ffffff;
+  color: #172033;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+.sidebar-link.is-active::before {
+  content: "";
+
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+
+  border-radius: 0 3px 3px 0;
+  background: #315ca8;
+}
+
+.sidebar-count {
+  min-width: 20px;
+  padding: 1px 6px;
+
+  border-radius: 999px;
+  background: #eef1f6;
+
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.sidebar-count.is-alert {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+@media (max-width: 900px) {
+  .dashboard {
+    width: 92%;
+    padding: 26px 0 64px;
+  }
+
+  .sidebar {
+    position: relative;
+    /* The desktop rule pins the rail with top:76px and left:3%; relative
+       positioning would honour both as offsets, dropping the strip onto
+       the page header and pushing the document 12px wider than the
+       viewport. */
+    top: auto;
+    left: auto;
+
+    width: auto;
+    height: auto;
+    overflow: visible;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 10px 4%;
+    border-bottom: 1px solid #e6e8ef;
+    background: #f6f7fb;
+  }
+
+  .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sidebar-group + .sidebar-group {
+    margin-top: 0;
+    padding-left: 8px;
+    border-left: 1px solid #e6e8ef;
+  }
+
+  /* Hidden visually, still announced: the group keeps its name. */
+  .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sidebar-list {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .sidebar-link {
+    padding: 7px 11px;
+
+    background: #ffffff;
+    border: 1px solid #e4e7ec;
+    border-radius: 999px;
+
+    white-space: nowrap;
+  }
+
+  .sidebar-link.is-active {
+    border-color: #172033;
+    box-shadow: none;
+  }
+
+  .sidebar-link.is-active::before {
+    display: none;
+  }
+}
+
+/* ---- View header ----------------------------------------------------
+   One h1 per section, sized below the landing hero: the hero is the only
+   oversized type in the product. */
+.view-header {
+  max-width: 720px;
+  margin-bottom: 26px;
+}
+
+.view-header h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(26px, 3vw, 34px);
+  letter-spacing: -1px;
+}
+
+.view-header p:last-child {
+  margin: 0;
+  color: #667085;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.text-link {
+  color: #315ca8;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.text-link:focus-visible {
+  outline: 2px solid #315ca8;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ---- Overview ------------------------------------------------------- */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.kpi {
+  padding: 18px 20px;
+}
+
+.kpi-label {
+  margin: 0;
+
+  color: #697386;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
+.kpi-value {
+  margin: 6px 0 0;
+
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-hint {
+  margin: 6px 0 0;
+  color: #858c9b;
+  font-size: 12px;
+}
+
+.kpi .text-link {
+  display: inline-block;
+  margin-top: 12px;
+}
+
+/* Two-up on a phone: four stacked cards push the attention list two
+   screens down. */
+@media (max-width: 560px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi {
+    padding: 16px;
+  }
+}
+
+.attention-card {
+  padding: 22px 24px;
+}
+
+.attention-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attention-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+
+  padding: 12px 0;
+  border-top: 1px solid #eceef2;
+}
+
+.attention-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.attention-tag {
+  color: #697386;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
+.attention-row p {
+  flex: 1 1 240px;
+  margin: 0;
+
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .hero {
@@ -238,6 +585,14 @@ body {
   letter-spacing: 1.2px;
 }
 
+.subheading-note {
+  color: #a3a9b6;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+
 .change-warning {
   padding: 4px 10px;
 
@@ -288,8 +643,11 @@ body {
   font-weight: 400;
 }
 
+/* The status change sits under the title: as an inline span it ran
+   straight into the bold text ("PostgreSQL → PostgreSQLCONFIRMED"). */
 .history-status {
-  margin-top: 4px;
+  display: block;
+  margin-top: 2px;
   color: #9a6700;
   font-size: 12px;
   font-weight: 700;
@@ -310,6 +668,16 @@ body {
   color: #ffffff;
   font-size: 12px;
   font-weight: 800;
+  text-decoration: none;
+}
+
+.topbar-conflicts:hover {
+  background: #9a1d14;
+}
+
+.topbar-conflicts:focus-visible {
+  outline: 2px solid #315ca8;
+  outline-offset: 2px;
 }
 
 .conflict-card {
@@ -576,17 +944,40 @@ body {
   color: #858c9b;
 }
 
-.lower-grid {
-  margin-top: 38px;
-}
-
 .dependency {
   margin-top: 28px;
 
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto 1fr auto;
   align-items: center;
   gap: 14px;
+}
+
+.dependency-remove {
+  padding: 8px 12px;
+
+  border: 1px solid #dfe3ea;
+  border-radius: 9px;
+
+  background: #ffffff;
+  color: #475467;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.dependency-remove:hover:not(:disabled) {
+  border-color: #fecdca;
+  background: #fef6f5;
+  color: #b42318;
+}
+
+.dependency-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .dependency-node {
@@ -836,8 +1227,21 @@ body {
   font-weight: 700;
 }
 
+/* Extraction outcome ("3 created", "nothing new"). Informational, not a
+   success banner: it reports a count, so it uses body ink, not the green
+   accent, and no surface of its own. */
+.pipeline-notice {
+  margin: 0 0 12px;
+
+  color: #475467;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* 36px top: after a pager, this heading must clearly start a new group
+   (the pager above it is only 28px from the rows it belongs to). */
 .candidate-group {
-  margin: 22px 0 12px;
+  margin: 36px 0 12px;
   color: #697386;
   font-size: 13px;
   font-weight: 800;
@@ -1001,6 +1405,139 @@ body {
   }
 }
 
+/* The rail costs 276px, so the two-column decision layout stops paying
+   for itself well before the 800px breakpoint. */
+@media (max-width: 1080px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Pagination -----------------------------------------------------
+   Tertiary action group: no fill, no accent hue, one step below body
+   text, so it never competes with the section's own primary action.
+   Values are the palette already in use above (no new tokens).
+
+   The pager is the *footer of the list above it*, so the gap above is
+   deliberately smaller than the gap below (see .candidate-group). An
+   evenly spaced pager sitting between two groups reads as a header for
+   the second one. */
+
+.pagination {
+  margin-top: 16px;
+  padding-top: 12px;
+
+  border-top: 1px solid #eceef2;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.pagination-meta {
+  margin: 0;
+
+  /* #697386, not the lighter muted #858c9b: this is the only text that
+     says where the user is in the list, and #858c9b lands at ~3.4:1 on
+     white, under AA for 11.5px. Both values are already in the palette. */
+  color: #697386;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: transparent;
+  color: #475467;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pagination-button:hover:not(:disabled):not(.is-current) {
+  background: #f2f4f7;
+}
+
+.pagination-button:focus-visible {
+  outline: 2px solid #315ca8;
+  outline-offset: 2px;
+}
+
+.pagination-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-step {
+  padding: 0 11px;
+
+  border-color: #dfe3ea;
+  background: #ffffff;
+}
+
+.pagination-button.is-current {
+  border-color: #dfe3ea;
+  background: #eef1f6;
+
+  color: #172033;
+  font-weight: 800;
+
+  cursor: default;
+}
+
+.pagination-ellipsis {
+  min-width: 20px;
+
+  color: #a3a9b6;
+  font-size: 12px;
+  text-align: center;
+}
+
+.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+@media (max-width: 800px) {
+  .pagination {
+    margin-top: 16px;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pagination-button,
+  .is-loading {
+    transition: none;
+  }
+}
+
 .impact-path {
   display: block;
   margin-top: 7px;
@@ -1106,10 +1643,15 @@ body {
   padding: 8px 4px;
 }
 
+/* Natural size: the layout is computed in px, so stretching the SVG to
+   the column width scales the node text with it. It only shrinks when
+   the column is narrower than the graph, and it is centred so the card
+   does not look left-stranded. */
 .graph-svg {
   display: block;
-  min-width: 480px;
-  width: 100%;
+  margin: 0 auto;
+  width: auto;
+  max-width: 100%;
   height: auto;
 }
 
@@ -1127,19 +1669,76 @@ body {
   stroke-width: 1.6;
 }
 
-.cycle-zone rect {
-  fill: #fff1f0;
-  fill-opacity: 0.45;
-  stroke: #b42318;
-  stroke-width: 1.4;
-  stroke-dasharray: 7 5;
+/* Shown instead of the graph when the data contains a loop. A cycle has no
+   topological order, so there is no honest way to lay the plan out — the
+   card explains the loop and points at the links that can break it. */
+.graph-blocked {
+  padding: 16px 18px;
+
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 14px;
+
+  background: #fff7f6;
+  border: 1px solid #f3c6c2;
+  border-radius: 12px;
 }
 
-.cycle-zone text {
-  fill: #b42318;
+.graph-blocked-badge {
+  margin-top: 2px;
+  padding: 4px 10px;
+
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 999px;
+
+  color: #b42318;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.06em;
+}
+
+.graph-blocked-body p {
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.graph-blocked-body .graph-blocked-title {
+  margin-bottom: 4px;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.graph-blocked-loops {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.graph-blocked-loops li {
+  padding: 7px 12px;
+
+  background: #ffffff;
+  border: 1px solid #fecdca;
+  border-radius: 9px;
+
+  color: #172033;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.graph-blocked-body .graph-blocked-hint {
+  margin-top: 10px;
+  color: #697386;
+  font-size: 12.5px;
 }
 
 .commitment-card {
@@ -1163,8 +1762,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .topbar {
-    padding: 0 5%;
+  .topbar-inner {
+    width: 92%;
   }
 
   .project-label {
@@ -1179,6 +1778,10 @@ body {
     transform: rotate(90deg);
   }
 
+  .dependency-remove {
+    justify-self: start;
+  }
+
   .plan-row {
     grid-template-columns: auto 1fr auto;
   }
@@ -1186,5 +1789,457 @@ body {
   .plan-note {
     grid-column: 2 / -1;
     text-align: left;
+  }
+}
+
+/* ------------------------------------------------------------------
+   New dependency form
+   ------------------------------------------------------------------ */
+
+.card-hint {
+  margin: -10px 0 18px;
+  max-width: 62ch;
+
+  color: #697386;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.link-card {
+  margin-bottom: 24px;
+}
+
+.link-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.link-field {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 6px;
+
+  min-width: 0;
+}
+
+.link-field > span {
+  color: #697386;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.link-field select {
+  height: 38px;
+  max-width: 100%;
+  padding: 0 10px;
+
+  border: 1px solid #d8dce5;
+  border-radius: 8px;
+
+  background: #ffffff;
+  color: #172033;
+
+  font: inherit;
+  font-size: 13px;
+
+  text-overflow: ellipsis;
+}
+
+.link-field select:focus-visible {
+  outline: none;
+  border-color: #315ca8;
+  box-shadow: 0 0 0 3px #dbe7ff;
+}
+
+.link-connector {
+  padding-bottom: 11px;
+
+  color: #697386;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.link-form .primary-button {
+  height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.form-error {
+  margin: 14px 0 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
+/* Advisory shown after an accepted-but-contradictory link: the same
+   amber as the consistency screen's WARNING badge, so the two read as
+   one story rather than two different problems. */
+.form-notice {
+  margin-top: 14px;
+  padding: 12px 12px 12px 14px;
+
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 12px;
+
+  background: #fffaf0;
+  border: 1px solid #f0d9a8;
+  border-radius: 12px;
+}
+
+.form-notice-badge {
+  margin-top: 1px;
+  padding: 3px 8px;
+
+  background: #fff6e6;
+  border: 1px solid #f0d9a8;
+  border-radius: 999px;
+
+  color: #9a6700;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.form-notice-body p {
+  margin: 0;
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.form-notice-body .form-notice-hint {
+  margin-top: 4px;
+  color: #697386;
+  font-size: 12.5px;
+}
+
+.form-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-notice-undo {
+  padding: 5px 11px;
+
+  border: 1px solid #f0d9a8;
+  border-radius: 8px;
+
+  background: #ffffff;
+  color: #9a6700;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.form-notice-undo:hover:not(:disabled) {
+  background: #fff6e6;
+}
+
+.form-notice-undo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-notice-close {
+  padding: 0 4px;
+
+  border: 0;
+  background: none;
+
+  color: #9a6700;
+  font-size: 18px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.form-notice-close:hover {
+  color: #7a4f00;
+}
+
+/* ------------------------------------------------------------------
+   Cycle dialog
+   ------------------------------------------------------------------ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background: rgba(23, 32, 51, 0.45);
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: min(88vh, 780px);
+  overflow-y: auto;
+
+  padding: 28px;
+
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.24);
+}
+
+.modal:focus {
+  outline: none;
+}
+
+.modal .modal-eyebrow {
+  color: #b42318;
+}
+
+.modal h2 {
+  margin: 6px 0 10px;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.modal-summary {
+  margin: 0 0 22px;
+  max-width: 62ch;
+
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.modal-summary strong {
+  color: #172033;
+}
+
+.cycle-chain {
+  margin: 0 0 22px;
+  padding: 0;
+  list-style: none;
+}
+
+.cycle-node {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  padding: 12px 14px;
+
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  background: #f9fafc;
+}
+
+.cycle-avatar {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+
+  width: 28px;
+  height: 28px;
+
+  border-radius: 999px;
+  background: #172033;
+  color: #ffffff;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cycle-node-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cycle-node-body strong {
+  display: block;
+  color: #172033;
+  font-size: 13px;
+}
+
+.cycle-node-body p {
+  margin: 2px 0 0;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cycle-hop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 5px 0 5px 27px;
+}
+
+.cycle-hop-rail {
+  width: 2px;
+  height: 20px;
+
+  border-radius: 999px;
+  background: #dfe3ea;
+}
+
+.cycle-hop-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  color: #697386;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cycle-hop-label em {
+  padding: 1px 7px;
+
+  border-radius: 999px;
+  background: #eef1f6;
+  color: #475467;
+
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.cycle-hop.is-new .cycle-hop-rail {
+  background: #b42318;
+}
+
+.cycle-hop.is-new .cycle-hop-label {
+  color: #b42318;
+}
+
+.cycle-hop.is-new .cycle-hop-label em {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.modal-recommendation {
+  padding: 16px 18px;
+
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  background: #f6f7fb;
+}
+
+.modal-recommendation .eyebrow {
+  margin: 0 0 6px;
+}
+
+.modal-recommendation p {
+  margin: 0;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-top: 16px;
+}
+
+.modal-recommendation .cycle-removal-label {
+  margin: 16px 0 8px;
+  color: #475467;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cycle-removals {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cycle-removals li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding: 8px 10px 8px 14px;
+
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.cycle-removals span {
+  color: #172033;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cycle-removals .secondary-button {
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.modal-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .link-form {
+    flex-direction: column;
+    /* Wrapping a column makes each "line" as wide as its widest item,
+       which pushed the selects past the card. */
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  /* Stacked, the 260px basis would be read as a height and stretch each
+     field into a tall empty box. */
+  .link-field {
+    flex: 0 0 auto;
+  }
+
+  .link-connector {
+    padding-bottom: 0;
+  }
+
+  .modal {
+    padding: 22px;
+  }
+
+  .form-notice {
+    grid-template-columns: 1fr auto;
+  }
+
+  .form-notice-badge {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .form-notice-actions {
+    align-self: start;
   }
 }

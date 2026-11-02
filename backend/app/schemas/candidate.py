@@ -33,4 +33,7 @@ class CandidateConfirmResponse(BaseModel):
 class ExtractResponse(BaseModel):
     discussion_id: int
     created: int
+    # Candidates the discussion already had (any status). Surfaced so the
+    # UI can say "nothing new" instead of silently returning an empty list.
+    skipped: int = 0
     candidates: list[CandidateResponse]

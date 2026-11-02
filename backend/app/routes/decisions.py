@@ -15,7 +15,9 @@ from app.schemas.decision import (
     DecisionHistoryResponse,
     DecisionImpactResponse,
 )
+from app.schemas.page import Page
 from app.services.graph import downstream_closure
+from app.services.pagination import PageParams, page_response, paginate
 from app.statuses import DECISION_STATUSES
 
 
@@ -179,10 +181,11 @@ def update_decision(
 
 @router.get(
     "/{decision_id}/history",
-    response_model=list[DecisionHistoryResponse]
+    response_model=Page[DecisionHistoryResponse]
 )
 def get_decision_history(
     decision_id: int,
+    page: PageParams = Depends(),
     db: Session = Depends(get_db)
 ):
     decision = db.query(Decision).filter(
@@ -195,11 +198,17 @@ def get_decision_history(
             detail="Decision not found"
         )
 
-    return db.query(DecisionHistory).filter(
+    # Newest first, matching the commitment audit trail.
+    query = db.query(DecisionHistory).filter(
         DecisionHistory.decision_id == decision_id
     ).order_by(
-        DecisionHistory.changed_at.asc()
-    ).all()
+        DecisionHistory.changed_at.desc(),
+        DecisionHistory.id.desc()
+    )
+
+    rows, total = paginate(query, page)
+
+    return page_response(rows, total, page)
 
 
 @router.get(

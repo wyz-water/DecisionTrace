@@ -5,7 +5,13 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
-from app.schemas.dependency import DependencyCreate, DependencyResponse
+from app.schemas.dependency import (
+    DependencyCreate,
+    DependencyCreated,
+    DependencyResponse,
+)
+from app.services.graph import find_cycle_with_edge
+from app.services.consistency import date_inversion
 
 
 router = APIRouter(
@@ -14,9 +20,173 @@ router = APIRouter(
 )
 
 
+def cycle_rejection_payload(
+    cycle_ids: list[int],
+    edges,
+    commitments_by_id,
+    dependency: DependencyCreate
+):
+    """Describe the loop a refused edge would have closed.
+
+    The client renders this directly, so it carries names rather than
+    ids: who waits on whom, which hop is the new link, and the single
+    action worth recommending.
+    """
+    node_ids = cycle_ids[:-1]
+
+    nodes = []
+    for commitment_id in node_ids:
+        commitment = commitments_by_id[commitment_id]
+        nodes.append({
+            "id": commitment.id,
+            "owner": commitment.owner,
+            "description": commitment.description,
+            "due_date": (
+                commitment.due_date.isoformat()
+                if commitment.due_date
+                else None
+            ),
+            "status": commitment.status,
+        })
+
+    by_pair = {
+        (edge.predecessor_commitment_id, edge.successor_commitment_id): edge
+        for edge in edges
+    }
+
+    hops = []
+    for index in range(len(cycle_ids) - 1):
+        source = cycle_ids[index]
+        target = cycle_ids[index + 1]
+        edge = by_pair.get((source, target))
+
+        hops.append({
+            "from": source,
+            "to": target,
+            "dependency_type": (
+                edge.dependency_type
+                if edge
+                else dependency.dependency_type
+            ),
+            "dependency_id": edge.id if edge else None,
+            "is_new": edge is None,
+        })
+
+    predecessor = commitments_by_id[dependency.predecessor_commitment_id]
+    successor = commitments_by_id[dependency.successor_commitment_id]
+
+    chain = [
+        commitments_by_id[commitment_id].owner
+        for commitment_id in cycle_ids
+    ]
+
+    # The task worth flagging is the one that is still work in flight.
+    # Recommending "mark as blocked" for a COMPLETED task would be
+    # nonsense, and for an already-BLOCKED one the update would 400.
+    ordered_ids = [successor.id]
+    for commitment_id in node_ids:
+        if commitment_id not in ordered_ids:
+            ordered_ids.append(commitment_id)
+
+    candidates = [
+        commitment_id
+        for commitment_id in ordered_ids
+        if commitments_by_id[commitment_id].status not in {"COMPLETED", "BLOCKED"}
+    ]
+
+    if candidates:
+        target = commitments_by_id[candidates[0]]
+        recommendation = {
+            "commitment_id": target.id,
+            "owner": target.owner,
+            "description": target.description,
+            "action": "MARK_BLOCKED",
+            "status": "BLOCKED",
+            "message": (
+                f"{target.owner}'s \"{target.description}\" sits inside this "
+                "loop, so it cannot start or finish until the ordering is "
+                "decided. Mark it BLOCKED and record why."
+            ),
+        }
+    else:
+        recommendation = {
+            "commitment_id": None,
+            "action": "REVIEW_LINKS",
+            "message": (
+                "Every task in this loop is already completed or blocked, "
+                "so nothing can be parked. Review the links and remove the "
+                "one that is out of date."
+            ),
+        }
+
+    return {
+        "code": "CYCLE_DETECTED",
+        "message": (
+            f"{predecessor.owner} blocking {successor.owner} would close a "
+            "loop: " + " -> ".join(chain) + "."
+        ),
+        "chain": chain,
+        "cycle": cycle_ids,
+        "nodes": nodes,
+        "hops": hops,
+        "attempted": {
+            "predecessor_commitment_id": predecessor.id,
+            "predecessor_owner": predecessor.owner,
+            "predecessor_description": predecessor.description,
+            "successor_commitment_id": successor.id,
+            "successor_owner": successor.owner,
+            "successor_description": successor.description,
+            "dependency_type": dependency.dependency_type,
+        },
+        "recommendation": recommendation,
+    }
+
+
+def date_inversion_payload(predecessor, successor):
+    """Describe a scheduling contradiction the caller just created.
+
+    The edge is still stored: the ordering is legal, only the dates are
+    not. Saying so here saves the user a trip to the consistency screen
+    to discover it.
+    """
+    return {
+        "code": "DATE_INVERSION",
+        "message": (
+            f"{successor.owner} (#{successor.id}) is due "
+            f"{successor.due_date}, but its predecessor "
+            f"{predecessor.owner} (#{predecessor.id}) is due "
+            f"{predecessor.due_date}."
+        ),
+        "suggestion": (
+            f"Move {successor.owner}'s due date to on or after "
+            f"{predecessor.due_date}, or link them the other way round."
+        ),
+        "predecessor": {
+            "id": predecessor.id,
+            "owner": predecessor.owner,
+            "due_date": (
+                predecessor.due_date.isoformat()
+                if predecessor.due_date
+                else None
+            ),
+            "status": predecessor.status,
+        },
+        "successor": {
+            "id": successor.id,
+            "owner": successor.owner,
+            "due_date": (
+                successor.due_date.isoformat()
+                if successor.due_date
+                else None
+            ),
+            "status": successor.status,
+        },
+    }
+
+
 @router.post(
     "",
-    response_model=DependencyResponse
+    response_model=DependencyCreated
 )
 def create_dependency(
     dependency: DependencyCreate,
@@ -70,6 +240,54 @@ def create_dependency(
             detail="A commitment cannot depend on itself"
         )
 
+    existing_edges = db.query(Dependency).filter(
+        Dependency.project_id == dependency.project_id
+    ).all()
+
+    for edge in existing_edges:
+        if (
+            edge.predecessor_commitment_id == predecessor.id
+            and edge.successor_commitment_id == successor.id
+            and edge.dependency_type == dependency.dependency_type
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DUPLICATE_DEPENDENCY",
+                    "message": (
+                        f"{predecessor.owner} already blocks "
+                        f"{successor.owner} ({dependency.dependency_type})."
+                    ),
+                    "dependency_id": edge.id,
+                }
+            )
+
+    # Refuse the edge before it is stored (SRS UC06, 7.5): a dependency
+    # that would make the plan circular must never reach the database.
+    cycle = find_cycle_with_edge(
+        existing_edges,
+        predecessor.id,
+        successor.id
+    )
+
+    if cycle:
+        commitments_by_id = {
+            commitment.id: commitment
+            for commitment in db.query(Commitment).filter(
+                Commitment.project_id == dependency.project_id
+            ).all()
+        }
+
+        raise HTTPException(
+            status_code=409,
+            detail=cycle_rejection_payload(
+                cycle,
+                existing_edges,
+                commitments_by_id,
+                dependency
+            )
+        )
+
     new_dependency = Dependency(
         project_id=dependency.project_id,
         predecessor_commitment_id=dependency.predecessor_commitment_id,
@@ -81,7 +299,16 @@ def create_dependency(
     db.commit()
     db.refresh(new_dependency)
 
-    return new_dependency
+    inversion = date_inversion(predecessor, successor)
+
+    return DependencyCreated(
+        **DependencyResponse.model_validate(new_dependency).model_dump(),
+        warning=(
+            date_inversion_payload(*inversion)
+            if inversion
+            else None
+        )
+    )
 
 
 @router.get(

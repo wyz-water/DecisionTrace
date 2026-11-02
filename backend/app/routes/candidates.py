@@ -19,7 +19,9 @@ from app.schemas.candidate import (
     CandidateConfirmResponse,
     ExtractResponse,
 )
+from app.schemas.page import Page
 from app.services.extractor import extract_candidates, serialize_candidate
+from app.services.pagination import PageParams, page_response, paginate
 from app.statuses import COMMITMENT_STATUSES, DECISION_STATUSES
 
 
@@ -27,6 +29,29 @@ router = APIRouter(
     prefix="/candidates",
     tags=["Candidates"]
 )
+
+
+def _candidate_keys(candidate_type, payload, source_text):
+    """Identity of one extracted record, used to make extraction repeatable.
+
+    Two keys are returned because either one alone is enough to prove the
+    record was already extracted:
+
+    * the source sentence, which the review UI never edits, so it still
+      matches after a human rewrites the payload before confirming;
+    * the canonical payload, which catches the same fact restated in a
+      slightly different sentence.
+    """
+    keys = []
+
+    if source_text:
+        keys.append((candidate_type, "text", " ".join(source_text.split())))
+
+    keys.append(
+        (candidate_type, "payload", json.dumps(payload, sort_keys=True))
+    )
+
+    return keys
 
 
 @router.post(
@@ -49,29 +74,43 @@ def extract_from_discussion(
 
     candidates = extract_candidates(discussion.content)
 
+    # Re-extraction has to be idempotent. Comparing only against PENDING
+    # rows meant that extracting again after a review recreated every
+    # confirmed and rejected candidate as a fresh duplicate; a rejected
+    # candidate must not come back either.
     existing = db.query(Candidate).filter(
-        Candidate.discussion_id == discussion.id,
-        Candidate.status == "PENDING"
+        Candidate.discussion_id == discussion.id
     ).all()
 
-    existing_keys = {
-        (
-            item.candidate_type,
-            json.dumps(json.loads(item.payload), sort_keys=True)
+    seen = set()
+
+    for row in existing:
+        seen.update(
+            _candidate_keys(
+                row.candidate_type,
+                json.loads(row.payload),
+                row.source_text
+            )
         )
-        for item in existing
-    }
 
     created = []
+    skipped = 0
 
     for item in candidates:
-        key = (
+        keys = _candidate_keys(
             item["candidate_type"],
-            json.dumps(item["payload"], sort_keys=True)
+            item["payload"],
+            item.get("source_text")
         )
 
-        if key in existing_keys:
+        # Also covers duplicates inside one extraction run: the same
+        # sentence pasted twice in a discussion yields the same key.
+        if any(key in seen for key in keys):
+            skipped += 1
             continue
+
+        seen.update(keys)
+
         candidate = Candidate(
             project_id=discussion.project_id,
             discussion_id=discussion.id,
@@ -92,18 +131,20 @@ def extract_from_discussion(
     return {
         "discussion_id": discussion.id,
         "created": len(created),
+        "skipped": skipped,
         "candidates": [serialize_candidate(c) for c in created],
     }
 
 
 @router.get(
     "",
-    response_model=list[CandidateResponse]
+    response_model=Page[CandidateResponse]
 )
 def get_candidates(
     project_id: int | None = None,
     discussion_id: int | None = None,
     status: str | None = None,
+    page: PageParams = Depends(),
     db: Session = Depends(get_db)
 ):
     query = db.query(Candidate)
@@ -115,12 +156,32 @@ def get_candidates(
         query = query.filter(Candidate.discussion_id == discussion_id)
 
     if status is not None:
-        query = query.filter(Candidate.status == status.upper())
+        # Comma separated so the review screen can ask for one queue in a
+        # single request: `?status=CONFIRMED,REJECTED` is the "reviewed"
+        # tab, `?status=PENDING` the "to review" tab.
+        statuses = [
+            value.strip().upper()
+            for value in status.split(",")
+            if value.strip()
+        ]
 
-    return [
-        serialize_candidate(candidate)
-        for candidate in query.order_by(Candidate.created_at.desc()).all()
-    ]
+        if statuses:
+            query = query.filter(Candidate.status.in_(statuses))
+
+    # Newest first, with id as a tiebreaker so equal timestamps cannot
+    # produce an unstable order across pages.
+    query = query.order_by(
+        Candidate.created_at.desc(),
+        Candidate.id.desc()
+    )
+
+    rows, total = paginate(query, page)
+
+    return page_response(
+        [serialize_candidate(candidate) for candidate in rows],
+        total,
+        page
+    )
 
 
 @router.patch(

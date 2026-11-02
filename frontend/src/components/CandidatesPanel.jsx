@@ -1,7 +1,19 @@
 import { useState } from "react";
 
+import Pagination from "./Pagination";
+
 const API_URL = "http://127.0.0.1:8000";
 
+/**
+ * Constraint brief (refactoring-ui, Workflow B):
+ *   primary   = "Confirm" (the one filled button on a pending card; it is
+ *               the only action that creates an authoritative record)
+ *   secondary = "Edit" and the source excerpt that justifies the record
+ *   tertiary  = "Reject", the review-note field, and both pagers
+ * The two queues ("Pending review", "Reviewed") are separate paginated
+ * lists: confirming an item moves it from one to the other, and paging
+ * one queue must not move the other.
+ */
 function candidateFields(candidate) {
   if (candidate.candidate_type === "DECISION") {
     return [
@@ -25,21 +37,13 @@ function candidateFields(candidate) {
   ];
 }
 
-export default function CandidatesPanel({ candidates, reload }) {
+export default function CandidatesPanel({ pending, reviewed, reload }) {
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [busyId, setBusyId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectComment, setRejectComment] = useState("");
   const [error, setError] = useState("");
-
-  const pending = candidates.filter(
-    (candidate) => candidate.status === "PENDING"
-  );
-
-  const reviewed = candidates.filter(
-    (candidate) => candidate.status !== "PENDING"
-  );
 
   function startEdit(candidate) {
     setEditingId(candidate.id);
@@ -249,6 +253,8 @@ export default function CandidatesPanel({ candidates, reload }) {
     );
   }
 
+  const hasAny = pending.total > 0 || reviewed.total > 0;
+
   return (
     <section className="card pipeline-card">
       <p className="eyebrow">AI CANDIDATES</p>
@@ -256,25 +262,62 @@ export default function CandidatesPanel({ candidates, reload }) {
 
       {error && <p className="pipeline-error">{error}</p>}
 
-      {pending.length > 0 && (
+      {pending.total > 0 && (
         <>
-          <h3 className="candidate-group">Pending review ({pending.length})</h3>
-          <div className="candidate-grid">{pending.map(renderCard)}</div>
+          <h3 className="candidate-group">
+            Pending review ({pending.total})
+          </h3>
+
+          <div
+            className={pending.loading ? "candidate-grid is-loading" : "candidate-grid"}
+            aria-busy={pending.loading}
+          >
+            {pending.items.map(renderCard)}
+          </div>
+
+          <Pagination
+            total={pending.total}
+            limit={pending.limit}
+            offset={pending.offset}
+            onChange={pending.setOffset}
+            label="Pending candidates"
+            busy={pending.loading}
+          />
         </>
       )}
 
-      {reviewed.length > 0 && (
+      {reviewed.total > 0 && (
         <>
-          <h3 className="candidate-group">Reviewed ({reviewed.length})</h3>
-          <div className="candidate-grid">{reviewed.map(renderCard)}</div>
+          <h3 className="candidate-group">
+            Reviewed ({reviewed.total})
+          </h3>
+
+          <div
+            className={reviewed.loading ? "candidate-grid is-loading" : "candidate-grid"}
+            aria-busy={reviewed.loading}
+          >
+            {reviewed.items.map(renderCard)}
+          </div>
+
+          <Pagination
+            total={reviewed.total}
+            limit={reviewed.limit}
+            offset={reviewed.offset}
+            onChange={reviewed.setOffset}
+            label="Reviewed candidates"
+            busy={reviewed.loading}
+          />
         </>
       )}
 
-      {candidates.length === 0 && (
+      {!hasAny && (
         <p className="muted">
           No candidates yet. Save a discussion above and run extraction.
         </p>
       )}
+
+      {pending.error && <p className="pipeline-error">{pending.error}</p>}
+      {reviewed.error && <p className="pipeline-error">{reviewed.error}</p>}
     </section>
   );
 }

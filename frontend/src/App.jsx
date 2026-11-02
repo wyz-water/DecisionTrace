@@ -2,8 +2,21 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
+import CycleDialog from "./components/CycleDialog.jsx";
+import Pagination from "./components/Pagination.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import StatusBadge from "./components/StatusBadge.jsx";
+import usePagedList from "./usePagedList.js";
+import { readView } from "./views.js";
 
 const API_URL = "http://127.0.0.1:8000";
+
+// Page sizes are chosen per surface, not globally: the candidate grid is
+// two columns, so 4 fills exactly two rows; the audit timeline is taller,
+// so 4 entries is already a full card.
+const DISCUSSIONS_PAGE_SIZE = 3;
+const CANDIDATES_PAGE_SIZE = 4;
+const AUDIT_PAGE_SIZE = 4;
 
 const STATUS_COLORS = {
   COMPLETED: { fill: "#eaf8ef", stroke: "#267447", text: "#267447" },
@@ -12,11 +25,6 @@ const STATUS_COLORS = {
   DELAYED: { fill: "#fff1f0", stroke: "#b42318", text: "#b42318" },
   BLOCKED: { fill: "#fff1f0", stroke: "#b42318", text: "#b42318" },
 };
-
-function StatusBadge({ status }) {
-  const className = `status-badge status-${status.toLowerCase()}`;
-  return <span className={className}>{status.replace("_", " ")}</span>;
-}
 
 function names(ids, byId) {
   return ids.map((id) => byId[id]?.owner ?? `#${id}`).join(", ");
@@ -47,16 +55,19 @@ const LAYER_GAP = 240;
 const ROW_GAP = 100;
 const PAD = 30;
 
+/**
+ * Place the graph in columns, one column per topological depth.
+ *
+ * Returns null when a node has no depth, which happens exactly when the
+ * node sits on a cycle: a loop has no topological order, so there is no
+ * left-to-right arrangement that could be drawn honestly. The caller
+ * renders the "cannot be ordered" notice instead of a partial graph.
+ */
 function computeLayout(graph) {
   const { nodes, edges, topological_order: topo } = graph;
 
   if (nodes.length === 0) {
     return null;
-  }
-
-  const byId = {};
-  for (const node of nodes) {
-    byId[node.id] = node;
   }
 
   const predecessors = {};
@@ -75,24 +86,23 @@ function computeLayout(graph) {
     layer[id] = predLayers.length ? Math.max(...predLayers) + 1 : 0;
   }
 
-  const maxLayer = Math.max(0, ...Object.values(layer));
-
-  const cyclicIds = new Set(
-    nodes.filter((node) => !(node.id in layer)).map((node) => node.id)
-  );
+  // A node without a depth sits on a cycle; there is no order to draw.
+  if (nodes.some((node) => !(node.id in layer))) {
+    return null;
+  }
 
   const layers = {};
   for (const node of nodes) {
-    const column = cyclicIds.has(node.id) ? maxLayer + 1 : layer[node.id];
-    (layers[column] ??= []).push(node);
+    (layers[layer[node.id]] ??= []).push(node);
   }
 
   const positions = {};
-  const columnCount = Object.keys(layers).length;
   let maxRows = 0;
+  let maxColumn = 0;
 
   for (const column of Object.keys(layers)) {
     maxRows = Math.max(maxRows, layers[column].length);
+    maxColumn = Math.max(maxColumn, Number(column));
 
     layers[column].forEach((node, index) => {
       positions[node.id] = {
@@ -104,27 +114,72 @@ function computeLayout(graph) {
 
   return {
     positions,
-    cyclicIds,
-    cycleColumn: maxLayer + 1,
-    svgWidth: (columnCount - 1) * LAYER_GAP + NODE_W + PAD * 2,
+    // Sized from the widest column that actually holds a node, not from
+    // the number of columns: sparse layer numbers used to under-size the
+    // viewBox and crop the graph.
+    svgWidth: maxColumn * LAYER_GAP + NODE_W + PAD * 2,
     svgHeight: (maxRows - 1) * ROW_GAP + NODE_H + PAD * 2,
   };
 }
 
+function CycleNotice({ graph }) {
+  const owners = {};
+  for (const node of graph.nodes) {
+    owners[node.id] = node.owner;
+  }
+
+  return (
+    <div className="graph-blocked" role="alert">
+      <span className="graph-blocked-badge">CYCLE</span>
+
+      <div className="graph-blocked-body">
+        <p className="graph-blocked-title">
+          The graph contains a cycle and cannot be ordered
+        </p>
+
+        <p>
+          These commitments wait on each other, so no start-to-finish order
+          exists and the graph is not drawn.
+        </p>
+
+        <ul className="graph-blocked-loops">
+          {graph.cycles.map((cycle) => (
+            <li key={cycle.join("-")}>
+              {cycle.map((id) => owners[id] ?? `#${id}`).join(" → ")}
+            </li>
+          ))}
+        </ul>
+
+        <p className="graph-blocked-hint">
+          Remove one of these links in the dependency list below to break the
+          loop.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function GraphView({ graph, selectedId, onSelect }) {
+  // A cycle has no topological order, so there is nothing honest to draw.
+  if (graph.has_cycles) {
+    return <CycleNotice graph={graph} />;
+  }
+
   const layout = computeLayout(graph);
 
   if (!layout) {
     return <p className="muted">No commitments to draw yet.</p>;
   }
 
-  const { positions, cyclicIds, cycleColumn, svgWidth, svgHeight } = layout;
+  const { positions, svgWidth, svgHeight } = layout;
 
   return (
     <div className="graph-wrap">
       <svg
         className="graph-svg"
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        width={svgWidth}
+        height={svgHeight}
         role="img"
         aria-label="Dependency graph"
       >
@@ -150,45 +205,17 @@ function GraphView({ graph, selectedId, onSelect }) {
             return null;
           }
 
-          const sameColumn = Math.abs(from.x - to.x) < LAYER_GAP / 2;
-
-          const startX = from.x + NODE_W / 2;
-          const endX = to.x + NODE_W / 2;
-          const startY = from.y;
-          const endY = to.y;
-
-          const d = sameColumn
-            ? `M ${startX} ${startY} C ${startX + 70} ${startY}, ${endX + 70} ${endY}, ${endX} ${endY}`
-            : `M ${startX} ${startY} L ${to.x - NODE_W / 2} ${endY}`;
-
+          // Without cycles every edge runs one column to the right, so a
+          // straight line is the honest shape.
           return (
             <path
               className="graph-edge"
               key={edge.id}
-              d={d}
+              d={`M ${from.x + NODE_W / 2} ${from.y} L ${to.x - NODE_W / 2} ${to.y}`}
               markerEnd="url(#arrow)"
             />
           );
         })}
-
-        {cyclicIds.size > 0 && (
-          <g className="cycle-zone">
-            <rect
-              x={cycleColumn * LAYER_GAP + PAD - 14}
-              y={12}
-              width={NODE_W + 28}
-              height={svgHeight - 24}
-              rx={16}
-            />
-            <text
-              x={cycleColumn * LAYER_GAP + PAD + NODE_W / 2}
-              y={30}
-              textAnchor="middle"
-            >
-              CYCLE
-            </text>
-          </g>
-        )}
 
         {graph.nodes.map((node) => {
           const pos = positions[node.id];
@@ -241,20 +268,28 @@ function GraphView({ graph, selectedId, onSelect }) {
   );
 }
 
+// --- Section header ----------------------------------------------------------
+
+function ViewHeader({ eyebrow, title, children }) {
+  return (
+    <header className="view-header">
+      <p className="eyebrow">{eyebrow}</p>
+      <h1>{title}</h1>
+      <p>{children}</p>
+    </header>
+  );
+}
+
 // --- App ---------------------------------------------------------------------
 
 function App() {
   const [project, setProject] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
-  const [decisionHistory, setDecisionHistory] = useState([]);
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [graph, setGraph] = useState(null);
   const [impact, setImpact] = useState(null);
-  const [history, setHistory] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [discussions, setDiscussions] = useState([]);
-  const [candidates, setCandidates] = useState([]);
   const [conflicts, setConflicts] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -270,12 +305,84 @@ function App() {
   const [decisionError, setDecisionError] = useState("");
   const [decisionTraceError, setDecisionTraceError] = useState("");
   const [editorError, setEditorError] = useState("");
+
+  // New-dependency form. The server refuses an edge that would close a
+  // cycle and answers 409 with the loop; that payload opens the dialog.
+  const [dependencyDraft, setDependencyDraft] = useState({
+    predecessor: "",
+    successor: "",
+  });
+  const [dependencySaving, setDependencySaving] = useState(false);
+  const [dependencyError, setDependencyError] = useState("");
+  // Advisory, not a rejection: the edge is stored and the dates are wrong.
+  const [dependencyNotice, setDependencyNotice] = useState(null);
+  const [cycleReport, setCycleReport] = useState(null);
+  const [cycleError, setCycleError] = useState("");
+
+  // Bumped after every mutation so the paginated lists and the impact
+  // cards re-fetch without losing the page the user is standing on.
   const [refreshTick, setRefreshTick] = useState(0);
+
+  // Which section is on screen. Driven by the URL hash so a reload, a
+  // bookmark and the back button all land on the same section.
+  const [view, setView] = useState(() => readView(window.location.hash));
+
+  const projectId = project?.id ?? null;
+
+  const discussions = usePagedList(
+    projectId ? `${API_URL}/discussions?project_id=${projectId}` : null,
+    DISCUSSIONS_PAGE_SIZE,
+    refreshTick
+  );
+
+  // Two independent queues: confirming a candidate moves it from the
+  // first to the second, so paging one must not page the other.
+  const pendingCandidates = usePagedList(
+    projectId
+      ? `${API_URL}/candidates?project_id=${projectId}&status=PENDING`
+      : null,
+    CANDIDATES_PAGE_SIZE,
+    refreshTick
+  );
+
+  const reviewedCandidates = usePagedList(
+    projectId
+      ? `${API_URL}/candidates?project_id=${projectId}&status=CONFIRMED,REJECTED`
+      : null,
+    CANDIDATES_PAGE_SIZE,
+    refreshTick
+  );
+
+  const commitmentHistory = usePagedList(
+    selectedId != null
+      ? `${API_URL}/commitments/${selectedId}/history`
+      : null,
+    AUDIT_PAGE_SIZE,
+    refreshTick
+  );
+
+  const decisionHistory = usePagedList(
+    decisionId != null
+      ? `${API_URL}/decisions/${decisionId}/history`
+      : null,
+    AUDIT_PAGE_SIZE,
+    refreshTick
+  );
+
+  // The impact cards keep the last response they fetched and only render
+  // it while it still belongs to the current selection. Comparing against
+  // the payload's own id means a stale card can never be shown, without
+  // an effect having to clear state just to hide it.
+  const currentImpact =
+    impact && impact.commitment_id === selectedId ? impact : null;
+
+  const currentDecisionImpact =
+    decisionImpact && decisionImpact.decision_id === decisionId
+      ? decisionImpact
+      : null;
 
   async function loadDashboard(keepSelected = null) {
     try {
-      setError("");
-
       const projectsResponse = await fetch(`${API_URL}/projects`);
 
       if (!projectsResponse.ok) {
@@ -284,6 +391,11 @@ function App() {
 
       const projects = await projectsResponse.json();
 
+      // Cleared only after an await: setting state synchronously inside
+      // the effect body triggers a cascading render
+      // (react-hooks/set-state-in-effect).
+      setError("");
+
       if (projects.length === 0) {
         setError("No projects yet. Create one through the API first.");
         return;
@@ -291,25 +403,16 @@ function App() {
 
       const activeProject = projects[0];
 
-      const [
-        graphResponse,
-        decisionsResponse,
-        discussionsResponse,
-        candidatesResponse,
-        conflictsResponse,
-      ] = await Promise.all([
-        fetch(`${API_URL}/projects/${activeProject.id}/graph`),
-        fetch(`${API_URL}/decisions?project_id=${activeProject.id}`),
-        fetch(`${API_URL}/discussions?project_id=${activeProject.id}`),
-        fetch(`${API_URL}/candidates?project_id=${activeProject.id}`),
-        fetch(`${API_URL}/projects/${activeProject.id}/conflicts`),
-      ]);
+      const [graphResponse, decisionsResponse, conflictsResponse] =
+        await Promise.all([
+          fetch(`${API_URL}/projects/${activeProject.id}/graph`),
+          fetch(`${API_URL}/decisions?project_id=${activeProject.id}`),
+          fetch(`${API_URL}/projects/${activeProject.id}/conflicts`),
+        ]);
 
       if (
         !graphResponse.ok ||
         !decisionsResponse.ok ||
-        !discussionsResponse.ok ||
-        !candidatesResponse.ok ||
         !conflictsResponse.ok
       ) {
         throw new Error("Failed to load dashboard data");
@@ -317,8 +420,6 @@ function App() {
 
       const graphData = await graphResponse.json();
       const decisionsData = await decisionsResponse.json();
-      const discussionsData = await discussionsResponse.json();
-      const candidatesData = await candidatesResponse.json();
       const conflictsData = await conflictsResponse.json();
 
       setProject(activeProject);
@@ -329,10 +430,7 @@ function App() {
           ? previous
           : decisionsData[0]?.id ?? null
       );
-      setDiscussions(discussionsData);
-      setCandidates(candidatesData);
       setConflicts(conflictsData.conflicts);
-      setRefreshTick((tick) => tick + 1);
 
       const trackedId =
         graphData.edges.length > 0
@@ -353,33 +451,72 @@ function App() {
     }
   }
 
+  // Reload everything after a write. `loadDashboard` alone would leave
+  // the paginated lists and the impact cards showing pre-write data.
+  async function reloadData(keepSelected = null) {
+    await loadDashboard(keepSelected);
+    setRefreshTick((tick) => tick + 1);
+  }
+
   useEffect(() => {
-    loadDashboard();
+    // Defined locally and awaited: react-hooks' set-state-in-effect rule
+    // flags a bare call to a state-updating loader from the effect body,
+    // even though loadDashboard() only touches state after its first
+    // await. Keeping the call inside a local async function makes the
+    // deferral explicit to both the rule and the reader.
+    async function load() {
+      await loadDashboard();
+    }
+
+    load();
   }, []);
 
   useEffect(() => {
-    if (selectedId == null) {
-      setImpact(null);
-      setHistory([]);
+    function handleHashChange() {
+      setView(readView(window.location.hash));
+
+      // A section swap is a page change: land at the top, not halfway
+      // down a section the user has not seen yet.
+      window.scrollTo(0, 0);
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  // Cross-section links (a conflict chip that should open the audit
+  // trail, for example) go through the hash so the sidebar state, the
+  // URL and the back button stay in agreement.
+  function navigate(nextView) {
+    if (nextView === view) {
       return;
+    }
+
+    window.location.hash = nextView;
+  }
+
+  useEffect(() => {
+    if (selectedId == null) {
+      return undefined;
     }
 
     let cancelled = false;
 
     async function loadTrace() {
       try {
-        const [impactResponse, historyResponse] = await Promise.all([
-          fetch(`${API_URL}/commitments/${selectedId}/impact`),
-          fetch(`${API_URL}/commitments/${selectedId}/history`),
-        ]);
+        const impactResponse = await fetch(
+          `${API_URL}/commitments/${selectedId}/impact`
+        );
 
-        if (!impactResponse.ok || !historyResponse.ok) {
+        if (!impactResponse.ok) {
           throw new Error("Failed to load traceability data");
         }
 
         if (!cancelled) {
           setImpact(await impactResponse.json());
-          setHistory(await historyResponse.json());
         }
       } catch (err) {
         if (!cancelled) {
@@ -397,26 +534,22 @@ function App() {
 
   useEffect(() => {
     if (decisionId == null) {
-      setDecisionHistory([]);
-      setDecisionImpact(null);
-      return;
+      return undefined;
     }
 
     let cancelled = false;
 
     async function loadDecisionTrace() {
       try {
-        const [historyResponse, impactResponse] = await Promise.all([
-          fetch(`${API_URL}/decisions/${decisionId}/history`),
-          fetch(`${API_URL}/decisions/${decisionId}/impact`),
-        ]);
+        const impactResponse = await fetch(
+          `${API_URL}/decisions/${decisionId}/impact`
+        );
 
-        if (!historyResponse.ok || !impactResponse.ok) {
+        if (!impactResponse.ok) {
           throw new Error("Failed to load decision trace");
         }
 
         if (!cancelled) {
-          setDecisionHistory(await historyResponse.json());
           setDecisionImpact(await impactResponse.json());
           setDecisionTraceError("");
         }
@@ -496,7 +629,7 @@ function App() {
 
       setEditingDecision(false);
 
-      await loadDashboard(selectedId);
+      await reloadData(selectedId);
     } catch (err) {
       setDecisionError(err.message);
     } finally {
@@ -536,11 +669,157 @@ function App() {
       setNewStatus("");
       setReason("");
 
-      await loadDashboard(commitmentId);
+      await reloadData(commitmentId);
     } catch (err) {
       setEditorError(err.message);
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function addDependency(event) {
+    event.preventDefault();
+
+    if (!project) {
+      return;
+    }
+
+    if (!dependencyDraft.predecessor || !dependencyDraft.successor) {
+      setDependencyError(
+        "Pick the commitment that finishes first and the one that starts after it."
+      );
+      return;
+    }
+
+    try {
+      setDependencySaving(true);
+      setDependencyError("");
+      setDependencyNotice(null);
+
+      const response = await fetch(`${API_URL}/dependencies`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          project_id: project.id,
+          predecessor_commitment_id: Number(dependencyDraft.predecessor),
+          successor_commitment_id: Number(dependencyDraft.successor),
+          dependency_type: "BLOCKS",
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        const detail = data.detail;
+
+        // 409 + CYCLE_DETECTED carries the loop; anything else is a
+        // plain message shown under the form.
+        if (detail && detail.code === "CYCLE_DETECTED") {
+          setCycleError("");
+          setCycleReport(detail);
+          return;
+        }
+
+        throw new Error(
+          typeof detail === "string"
+            ? detail
+            : detail?.message || "Failed to add the dependency"
+        );
+      }
+
+      const created = await response.json();
+
+      setDependencyDraft({ predecessor: "", successor: "" });
+      setDependencyNotice(
+        created.warning
+          ? { ...created.warning, dependency_id: created.id }
+          : null
+      );
+      await reloadData(selectedId);
+    } catch (err) {
+      setDependencyError(err.message);
+    } finally {
+      setDependencySaving(false);
+    }
+  }
+
+  async function removeDependency(dependencyId) {
+    try {
+      setDependencySaving(true);
+      setDependencyError("");
+      setCycleError("");
+
+      const response = await fetch(
+        `${API_URL}/dependencies/${dependencyId}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Failed to remove the dependency"
+        );
+      }
+
+      setCycleReport(null);
+      setDependencyNotice(null);
+      await reloadData(selectedId);
+    } catch (err) {
+      if (cycleReport) {
+        setCycleError(err.message);
+      } else {
+        setDependencyError(err.message);
+      }
+    } finally {
+      setDependencySaving(false);
+    }
+  }
+
+  async function markCycleTaskBlocked() {
+    if (!cycleReport) {
+      return;
+    }
+
+    const target = cycleReport.recommendation;
+
+    try {
+      setDependencySaving(true);
+      setCycleError("");
+
+      const response = await fetch(
+        `${API_URL}/commitments/${target.commitment_id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: "BLOCKED",
+            reason: `Circular dependency: ${cycleReport.chain.join(" -> ")}.`,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Failed to mark the commitment as blocked"
+        );
+      }
+
+      setCycleReport(null);
+      setDependencyDraft({ predecessor: "", successor: "" });
+      setSelectedId(target.commitment_id);
+      await reloadData(target.commitment_id);
+    } catch (err) {
+      setCycleError(err.message);
+    } finally {
+      setDependencySaving(false);
     }
   }
 
@@ -588,617 +867,920 @@ function App() {
 
   const selectedNode = selectedId != null ? byId[selectedId] : null;
 
+  const pendingTotal = pendingCandidates.total;
+  const openCommitments = graph.nodes.filter(
+    (node) => node.status !== "COMPLETED"
+  ).length;
+
+  // Everything the user could act on, ordered by what unblocks the most:
+  // a cycle breaks the plan, a conflict undermines the record, and
+  // unreviewed candidates are simply work in the queue.
+  const attention = [];
+
+  if (graph.has_cycles) {
+    attention.push({
+      key: "cycles",
+      tag: "Plan",
+      message:
+        "A circular dependency is holding part of the plan out of order.",
+      action: "Open plan",
+      view: "plan",
+    });
+  }
+
+  if (conflicts.length > 0) {
+    attention.push({
+      key: "conflicts",
+      tag: "Consistency",
+      message: `${conflicts.length} ${
+        conflicts.length === 1 ? "record conflicts" : "records conflict"
+      } — ${conflicts[0].message}`,
+      action: "Review",
+      view: "consistency",
+    });
+  }
+
+  if (pendingTotal > 0) {
+    attention.push({
+      key: "pending",
+      tag: "Intake",
+      message: `${pendingTotal} extracted ${
+        pendingTotal === 1 ? "candidate is" : "candidates are"
+      } waiting for a human decision.`,
+      action: "Review",
+      view: "intake",
+    });
+  }
+
   return (
     <div className="app">
       <header className="topbar">
-        <div>
-          <div className="brand">DecisionTrace</div>
-          <div className="brand-subtitle">
-            Decision intelligence & traceability
+        <div className="topbar-inner">
+          <div>
+            <div className="brand">DecisionTrace</div>
+            <div className="brand-subtitle">
+              Decision intelligence & traceability
+            </div>
           </div>
-        </div>
 
-        <div className="topbar-right">
-          {conflicts.length > 0 && (
-            <span className="topbar-conflicts">
-              {conflicts.length}{" "}
-              {conflicts.length === 1 ? "conflict" : "conflicts"}
-            </span>
-          )}
+          <div className="topbar-right">
+            {conflicts.length > 0 && (
+              <a className="topbar-conflicts" href="#consistency">
+                {conflicts.length}{" "}
+                {conflicts.length === 1 ? "conflict" : "conflicts"}
+              </a>
+            )}
 
-          <div className="project-label">
-            {project?.name || "No project"}
+            <div className="project-label">
+              {project?.name || "No project"}
+            </div>
           </div>
         </div>
       </header>
 
+      <Sidebar
+        active={view}
+        counts={{ intake: pendingTotal, consistency: conflicts.length }}
+      />
+
       <main className="dashboard">
-        <section className="hero">
-          <p className="eyebrow">PROJECT OVERVIEW</p>
-          <h1>Trace decisions to downstream impact.</h1>
-          <p>
-            Preserve the reasoning behind decisions, connect commitments,
-            and understand what changes affect next.
-          </p>
-        </section>
+        {view === "overview" && (
+          <>
+            <section className="hero">
+              <p className="eyebrow">PROJECT OVERVIEW</p>
+              <h1>Trace decisions to downstream impact.</h1>
+              <p>
+                Preserve the reasoning behind decisions, connect
+                commitments, and understand what changes affect next.
+              </p>
+            </section>
 
-        <div className="dashboard-grid">
-          <section className="card decision-card">
-            <div className="card-header">
-              <div>
-                <p className="eyebrow">DECISION</p>
+            <div className="kpi-grid">
+              <article className="card kpi">
+                <p className="kpi-label">Decisions</p>
+                <p className="kpi-value">{decisions.length}</p>
+                <p className="kpi-hint">reasoning recorded</p>
+                <a className="text-link" href="#decisions">
+                  Open decisions
+                </a>
+              </article>
 
-                <div className="decision-title-row">
-                  <h2>{decision?.title || "No decision"}</h2>
+              <article className="card kpi">
+                <p className="kpi-label">Commitments</p>
+                <p className="kpi-value">{graph.nodes.length}</p>
+                <p className="kpi-hint">{openCommitments} still open</p>
+                <a className="text-link" href="#plan">
+                  Open plan
+                </a>
+              </article>
 
-                  {decisions.length > 1 && (
-                    <select
-                      className="decision-select"
-                      value={decisionId ?? ""}
-                      disabled={editingDecision}
-                      onChange={(event) =>
-                        setDecisionId(Number(event.target.value))
-                      }
+              <article className="card kpi">
+                <p className="kpi-label">Consistency</p>
+                <p className="kpi-value">{conflicts.length}</p>
+                <p className="kpi-hint">
+                  {conflicts.length === 0
+                    ? "no conflicts"
+                    : "records to reconcile"}
+                </p>
+                <a className="text-link" href="#consistency">
+                  Open check
+                </a>
+              </article>
+
+              <article className="card kpi">
+                <p className="kpi-label">Pending review</p>
+                <p className="kpi-value">{pendingTotal}</p>
+                <p className="kpi-hint">AI candidates</p>
+                <a className="text-link" href="#intake">
+                  Open intake
+                </a>
+              </article>
+            </div>
+
+            <section className="card attention-card">
+              <p className="eyebrow">NEEDS ATTENTION</p>
+
+              {attention.length === 0 ? (
+                <p className="muted">
+                  Nothing needs attention — the trace is consistent and
+                  every candidate has been reviewed.
+                </p>
+              ) : (
+                <ul className="attention-list">
+                  {attention.map((item) => (
+                    <li className="attention-row" key={item.key}>
+                      <span className="attention-tag">{item.tag}</span>
+
+                      <p>{item.message}</p>
+
+                      <a className="text-link" href={`#${item.view}`}>
+                        {item.action}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+
+        {view === "decisions" && (
+          <ViewHeader eyebrow="DECIDE" title="Decisions">
+            The reasoning commitments must stay true to, and what a
+            change to it puts at risk.
+          </ViewHeader>
+        )}
+
+        {view === "decisions" && (
+          <div className="dashboard-grid">
+            <section className="card decision-card">
+              <div className="card-header">
+                <div>
+                  <p className="eyebrow">DECISION</p>
+
+                  <div className="decision-title-row">
+                    <h2>{decision?.title || "No decision"}</h2>
+
+                    {decisions.length > 1 && (
+                      <select
+                        className="decision-select"
+                        value={decisionId ?? ""}
+                        disabled={editingDecision}
+                        onChange={(event) =>
+                          setDecisionId(Number(event.target.value))
+                        }
+                      >
+                        {decisions.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            #{item.id} {item.title}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div className="decision-header-actions">
+                  {decision && <StatusBadge status={decision.status} />}
+
+                  {decision && !editingDecision && (
+                    <button
+                      className="secondary-button"
+                      onClick={startDecisionEdit}
                     >
-                      {decisions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          #{item.id} {item.title}
-                        </option>
-                      ))}
-                    </select>
+                      Edit
+                    </button>
                   )}
                 </div>
               </div>
 
-              <div className="decision-header-actions">
-                {decision && <StatusBadge status={decision.status} />}
-
-                {decision && !editingDecision && (
-                  <button
-                    className="secondary-button"
-                    onClick={startDecisionEdit}
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {editingDecision ? (
-              <div className="decision-editor">
-                <input
-                  type="text"
-                  placeholder="Title"
-                  value={decisionDraft.title ?? ""}
-                  onChange={(event) =>
-                    setDecisionDraft({
-                      ...decisionDraft,
-                      title: event.target.value,
-                    })
-                  }
-                />
-
-                <textarea
-                  rows={2}
-                  placeholder="Rationale"
-                  value={decisionDraft.rationale ?? ""}
-                  onChange={(event) =>
-                    setDecisionDraft({
-                      ...decisionDraft,
-                      rationale: event.target.value,
-                    })
-                  }
-                />
-
-                <select
-                  value={decisionDraft.status ?? "CONFIRMED"}
-                  onChange={(event) =>
-                    setDecisionDraft({
-                      ...decisionDraft,
-                      status: event.target.value,
-                    })
-                  }
-                >
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="SUPERSEDED">Superseded</option>
-                  <option value="REVOKED">Revoked</option>
-                </select>
-
-                <input
-                  type="text"
-                  placeholder="Reason for this change"
-                  value={decisionDraft.reason ?? ""}
-                  onChange={(event) =>
-                    setDecisionDraft({
-                      ...decisionDraft,
-                      reason: event.target.value,
-                    })
-                  }
-                />
-
-                <div className="editor-actions">
-                  <button
-                    className="primary-button"
-                    disabled={
-                      updatingDecision || !decisionDraft.title?.trim()
+              {editingDecision ? (
+                <div className="decision-editor">
+                  <input
+                    type="text"
+                    placeholder="Title"
+                    value={decisionDraft.title ?? ""}
+                    onChange={(event) =>
+                      setDecisionDraft({
+                        ...decisionDraft,
+                        title: event.target.value,
+                      })
                     }
-                    onClick={saveDecision}
+                  />
+
+                  <textarea
+                    rows={2}
+                    placeholder="Rationale"
+                    value={decisionDraft.rationale ?? ""}
+                    onChange={(event) =>
+                      setDecisionDraft({
+                        ...decisionDraft,
+                        rationale: event.target.value,
+                      })
+                    }
+                  />
+
+                  <select
+                    value={decisionDraft.status ?? "CONFIRMED"}
+                    onChange={(event) =>
+                      setDecisionDraft({
+                        ...decisionDraft,
+                        status: event.target.value,
+                      })
+                    }
                   >
-                    {updatingDecision ? "Saving..." : "Save"}
-                  </button>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="SUPERSEDED">Superseded</option>
+                    <option value="REVOKED">Revoked</option>
+                  </select>
 
-                  <button
-                    className="secondary-button"
-                    onClick={() => setEditingDecision(false)}
-                  >
-                    Cancel
-                  </button>
+                  <input
+                    type="text"
+                    placeholder="Reason for this change"
+                    value={decisionDraft.reason ?? ""}
+                    onChange={(event) =>
+                      setDecisionDraft({
+                        ...decisionDraft,
+                        reason: event.target.value,
+                      })
+                    }
+                  />
+
+                  <div className="editor-actions">
+                    <button
+                      className="primary-button"
+                      disabled={
+                        updatingDecision || !decisionDraft.title?.trim()
+                      }
+                      onClick={saveDecision}
+                    >
+                      {updatingDecision ? "Saving..." : "Save"}
+                    </button>
+
+                    <button
+                      className="secondary-button"
+                      onClick={() => setEditingDecision(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {decisionError && (
+                    <p className="pipeline-error">{decisionError}</p>
+                  )}
                 </div>
+              ) : (
+                <>
+                  <div className="rationale">
+                    <span>Rationale</span>
+                    <p>{decision?.rationale || "No rationale recorded."}</p>
+                  </div>
 
-                {decisionError && (
-                  <p className="pipeline-error">{decisionError}</p>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="rationale">
-                  <span>Rationale</span>
-                  <p>{decision?.rationale || "No rationale recorded."}</p>
-                </div>
+                  <div className="trace-source">
+                    Source discussion #{decision?.source_discussion_id ?? "—"}
+                  </div>
+                </>
+              )}
 
-                <div className="trace-source">
-                  Source discussion #{decision?.source_discussion_id ?? "—"}
-                </div>
-              </>
-            )}
+              {decisionTraceError && (
+                <p className="pipeline-error">
+                  Could not load decision trace: {decisionTraceError}
+                </p>
+              )}
 
-            {decisionTraceError && (
-              <p className="pipeline-error">
-                Could not load decision trace: {decisionTraceError}
-              </p>
-            )}
+              {decision && (
+                <>
+                  <div className="decision-subsection">
+                    <div className="decision-subheading">
+                      <span>DECISION IMPACT</span>
 
-            {decision && (
-              <>
-                <div className="decision-subsection">
-                  <div className="decision-subheading">
-                    <span>DECISION IMPACT</span>
+                      {currentDecisionImpact?.has_changes && (
+                        <span className="change-warning">
+                          changed {currentDecisionImpact.change_count}× — linked
+                          commitments may need review
+                        </span>
+                      )}
+                    </div>
 
-                    {decisionImpact?.has_changes && (
-                      <span className="change-warning">
-                        changed {decisionImpact.change_count}× — linked
-                        commitments may need review
-                      </span>
+                    {currentDecisionImpact &&
+                    currentDecisionImpact.affected_commitments.length > 0 ? (
+                      currentDecisionImpact.affected_commitments.map((item) => (
+                        <div
+                          className="linked-commitment"
+                          key={item.id}
+                          onClick={() => setSelectedId(item.id)}
+                        >
+                          <strong>{item.owner}</strong>
+                          <span>
+                            #{item.id} · {item.status.replace("_", " ")}
+                          </span>
+
+                          {item.downstream.length > 0 ? (
+                            <span className="downstream-note">
+                              affects {names(item.downstream, byId)}
+                            </span>
+                          ) : (
+                            <span className="downstream-note dim">
+                              no downstream
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted">
+                        No commitments linked to this decision yet.
+                      </p>
                     )}
                   </div>
 
-                  {decisionImpact &&
-                  decisionImpact.affected_commitments.length > 0 ? (
-                    decisionImpact.affected_commitments.map((item) => (
-                      <div
-                        className="linked-commitment"
-                        key={item.id}
-                        onClick={() => setSelectedId(item.id)}
-                      >
-                        <strong>{item.owner}</strong>
-                        <span>
-                          #{item.id} · {item.status.replace("_", " ")}
-                        </span>
+                  <div className="decision-subsection">
+                    <div className="decision-subheading">
+                      <span>CHANGE HISTORY</span>
 
-                        {item.downstream.length > 0 ? (
-                          <span className="downstream-note">
-                            affects {names(item.downstream, byId)}
-                          </span>
-                        ) : (
-                          <span className="downstream-note dim">
-                            no downstream
-                          </span>
+                      {decisionHistory.total > 0 && (
+                        <span className="subheading-note">newest first</span>
+                      )}
+                    </div>
+
+                    {decisionHistory.total > 0 ? (
+                      <>
+                        <div
+                          className={
+                            decisionHistory.loading
+                              ? "timeline is-loading"
+                              : "timeline"
+                          }
+                          aria-busy={decisionHistory.loading}
+                        >
+                          {decisionHistory.items.map((item) => (
+                            <div className="timeline-item" key={item.id}>
+                              <div className="timeline-dot" />
+
+                              <div>
+                                <strong>
+                                  {item.old_title} → {item.new_title}
+                                </strong>
+
+                                {item.old_status !== item.new_status && (
+                                  <span className="history-status">
+                                    {item.old_status.replace("_", " ")}
+                                    {" → "}
+                                    {item.new_status.replace("_", " ")}
+                                  </span>
+                                )}
+
+                                <p>{item.reason || "No reason provided."}</p>
+
+                                <span>
+                                  {new Date(item.changed_at).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Pagination
+                          total={decisionHistory.total}
+                          limit={decisionHistory.limit}
+                          offset={decisionHistory.offset}
+                          onChange={decisionHistory.setOffset}
+                          label="Decision change history"
+                          busy={decisionHistory.loading}
+                        />
+
+                        {decisionHistory.error && (
+                          <p className="pipeline-error">
+                            {decisionHistory.error}
+                          </p>
                         )}
+                      </>
+                    ) : (
+                      <p className="muted">No changes recorded yet.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section
+              className={`card impact-card ${
+                currentImpact?.has_impact ? "impact-active" : ""
+              }`}
+            >
+              <p className="eyebrow">IMPACT ANALYSIS</p>
+
+              {currentImpact ? (
+                <>
+                  <h2>
+                    {currentImpact.has_impact
+                      ? "Downstream impact detected"
+                      : "No active impact"}
+                  </h2>
+
+                  <p className="muted source-note">
+                    Source: {selectedNode?.owner || "?"} · Commitment #
+                    {currentImpact.commitment_id} ·{" "}
+                    {currentImpact.commitment_status.replace("_", " ")}
+                  </p>
+
+                  {currentImpact.has_impact ? (
+                    currentImpact.affected_commitments.map((item) => (
+                      <div className="impact-item" key={item.id}>
+                        <strong>{item.owner}</strong>
+                        <p>{item.description}</p>
+                        <span className="impact-path">
+                          {item.path
+                            .map((id) => byId[id]?.owner ?? `#${id}`)
+                            .join(" → ")}
+                        </span>
                       </div>
                     ))
                   ) : (
                     <p className="muted">
-                      No commitments linked to this decision yet.
+                      This commitment is not delayed or blocked, so nothing
+                      downstream is currently at risk.
                     </p>
                   )}
-                </div>
+                </>
+              ) : (
+                <>
+                  <h2>No commitment selected</h2>
+                  <p className="muted">
+                    Pick a commitment in the plan to see what a delay there
+                    puts at risk.
+                  </p>
 
-                <div className="decision-subsection">
-                  <div className="decision-subheading">
-                    <span>CHANGE HISTORY</span>
+                  <a className="text-link" href="#plan">
+                    Open plan
+                  </a>
+                </>
+              )}
+            </section>
+          </div>
+        )}
+
+        {view === "plan" && (
+          <ViewHeader eyebrow="EXECUTE" title="Plan & commitments">
+            The order work has to happen in, and the commitments that
+            carry it.
+          </ViewHeader>
+        )}
+
+        {view === "plan" && (
+          <section className="section-block">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">EXECUTION PLAN</p>
+                <h2>Topological order</h2>
+              </div>
+            </div>
+
+            {graph.has_cycles && (
+              <div className="cycle-banner">
+                <strong>Circular dependency detected</strong>
+                <span>
+                  {graph.cycles
+                    .map((cycle) =>
+                      cycle.map((id) => byId[id]?.owner ?? `#${id}`).join(" → ")
+                    )
+                    .join("; ")}
+                </span>
+              </div>
+            )}
+
+            <div className="plan-list">
+              {orderedNodes.map((node, index) => {
+                const analysis = analysisById[node.id];
+                const note = stateNote(analysis, byId);
+                const risk = ["BLOCKED", "CYCLIC"].includes(analysis?.state);
+
+                return (
+                  <div
+                    className="plan-row"
+                    key={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                  >
+                    <span className="plan-index">{index + 1}</span>
+
+                    <div className="plan-owner">
+                      <strong>{node.owner}</strong>
+                      <span>Commitment #{node.id}</span>
+                    </div>
+
+                    <StatusBadge status={node.status} />
+
+                    <span className={`plan-note ${risk ? "risk" : ""}`}>
+                      {note}
+                    </span>
                   </div>
+                );
+              })}
 
-                  {decisionHistory.length > 0 ? (
-                    <div className="timeline">
-                      {decisionHistory.map((item) => (
-                        <div className="timeline-item" key={item.id}>
-                          <div className="timeline-dot" />
+              {cyclicNodes.map((node) => {
+                const analysis = analysisById[node.id];
 
-                          <div>
-                            <strong>
-                              {item.old_title} → {item.new_title}
-                            </strong>
+                return (
+                  <div
+                    className="plan-row cyclic"
+                    key={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                  >
+                    <span className="plan-index">↻</span>
 
-                            {item.old_status !== item.new_status && (
-                              <span className="history-status">
-                                {item.old_status.replace("_", " ")}
-                                {" → "}
-                                {item.new_status.replace("_", " ")}
-                              </span>
-                            )}
+                    <div className="plan-owner">
+                      <strong>{node.owner}</strong>
+                      <span>Commitment #{node.id}</span>
+                    </div>
 
-                            <p>{item.reason || "No reason provided."}</p>
+                    <StatusBadge status={node.status} />
 
-                            <span>
-                              {new Date(item.changed_at).toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
+                    <span className="plan-note risk">
+                      {stateNote(analysis, byId)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {deferredNodes.map((node) => {
+                const analysis = analysisById[node.id];
+
+                return (
+                  <div
+                    className="plan-row deferred"
+                    key={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                  >
+                    <span className="plan-index">—</span>
+
+                    <div className="plan-owner">
+                      <strong>{node.owner}</strong>
+                      <span>Commitment #{node.id}</span>
+                    </div>
+
+                    <StatusBadge status={node.status} />
+
+                    <span className="plan-note">
+                      {stateNote(analysis, byId)} · blocked by a cycle
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {view === "consistency" && (
+          <ViewHeader eyebrow="TRACE" title="Consistency">
+            Duplicate and stale records the trace cannot reconcile —
+            each one points at the commitments and decisions involved.
+          </ViewHeader>
+        )}
+
+        {view === "consistency" && (
+          <section className="section-block">
+            <div className="card conflict-card">
+              {conflicts.length === 0 ? (
+                <div className="conflicts-clean">
+                  <span className="clean-dot" />
+                  No conflicts detected — the project trace is consistent.
+                </div>
+              ) : (
+                conflicts.map((conflict, index) => (
+                  <div className="conflict-row" key={index}>
+                    <span
+                      className={`severity-badge severity-${conflict.severity.toLowerCase()}`}
+                    >
+                      {conflict.severity}
+                    </span>
+
+                    <span className="conflict-type">
+                      {conflict.type.replace("_", " ")}
+                    </span>
+
+                    <p>{conflict.message}</p>
+
+                    <div className="conflict-refs">
+                      {conflict.commitment_ids.map((id) => (
+                        <button
+                          className="ref-chip"
+                          key={`commitment-${id}`}
+                          title="Open this commitment in the audit trail"
+                          onClick={() => {
+                            setSelectedId(id);
+                            navigate("audit");
+                          }}
+                        >
+                          {byId[id]?.owner ?? "?"} #{id}
+                        </button>
+                      ))}
+
+                      {conflict.decision_ids.map((id) => (
+                        <button
+                          className="ref-chip decision-chip"
+                          key={`decision-${id}`}
+                          title="Open this decision"
+                          onClick={() => {
+                            setDecisionId(id);
+                            navigate("decisions");
+                          }}
+                        >
+                          Decision #{id}
+                        </button>
                       ))}
                     </div>
-                  ) : (
-                    <p className="muted">No changes recorded yet.</p>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-
-          <section
-            className={`card impact-card ${
-              impact?.has_impact ? "impact-active" : ""
-            }`}
-          >
-            <p className="eyebrow">IMPACT ANALYSIS</p>
-
-            {impact ? (
-              <>
-                <h2>
-                  {impact.has_impact
-                    ? "Downstream impact detected"
-                    : "No active impact"}
-                </h2>
-
-                <p className="muted source-note">
-                  Source: {selectedNode?.owner || "?"} · Commitment #
-                  {impact.commitment_id} ·{" "}
-                  {impact.commitment_status.replace("_", " ")}
-                </p>
-
-                {impact.has_impact ? (
-                  impact.affected_commitments.map((item) => (
-                    <div className="impact-item" key={item.id}>
-                      <strong>{item.owner}</strong>
-                      <p>{item.description}</p>
-                      <span className="impact-path">
-                        {item.path
-                          .map((id) => byId[id]?.owner ?? `#${id}`)
-                          .join(" → ")}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="muted">
-                    This commitment is not delayed or blocked, so nothing
-                    downstream is currently at risk.
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <h2>Select a commitment</h2>
-                <p className="muted">
-                  Click a commitment below to analyze its downstream impact
-                  and change history.
-                </p>
-              </>
-            )}
-          </section>
-        </div>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">EXECUTION PLAN</p>
-              <h2>Topological order</h2>
+                  </div>
+                ))
+              )}
             </div>
-          </div>
+          </section>
+        )}
 
-          {graph.has_cycles && (
-            <div className="cycle-banner">
-              <strong>Circular dependency detected</strong>
-              <span>
-                {graph.cycles
-                  .map((cycle) =>
-                    cycle.map((id) => byId[id]?.owner ?? `#${id}`).join(" → ")
-                  )
-                  .join("; ")}
+        {view === "dependencies" && (
+          <ViewHeader eyebrow="EXECUTE" title="Dependencies">
+            What blocks what, and how far a delay travels downstream.
+          </ViewHeader>
+        )}
+
+        {view === "dependencies" && (
+          <section className="card link-card">
+            <p className="eyebrow">NEW DEPENDENCY</p>
+            <h2>Link two commitments</h2>
+            <p className="card-hint">
+              The first commitment has to finish before the second one can
+              start. A link that would close a loop is refused before it is
+              stored.
+            </p>
+
+            <form className="link-form" onSubmit={addDependency}>
+              <label className="link-field">
+                <span>Finishes first</span>
+                <select
+                  value={dependencyDraft.predecessor}
+                  onChange={(event) =>
+                    setDependencyDraft((draft) => ({
+                      ...draft,
+                      predecessor: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Choose a commitment</option>
+                  {graph.nodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.owner} — {node.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <span className="link-connector" aria-hidden="true">
+                blocks
               </span>
-            </div>
-          )}
 
-          <div className="plan-list">
-            {orderedNodes.map((node, index) => {
-              const analysis = analysisById[node.id];
-              const note = stateNote(analysis, byId);
-              const risk = ["BLOCKED", "CYCLIC"].includes(analysis?.state);
-
-              return (
-                <div
-                  className="plan-row"
-                  key={node.id}
-                  onClick={() => setSelectedId(node.id)}
+              <label className="link-field">
+                <span>Starts after</span>
+                <select
+                  value={dependencyDraft.successor}
+                  onChange={(event) =>
+                    setDependencyDraft((draft) => ({
+                      ...draft,
+                      successor: event.target.value,
+                    }))
+                  }
                 >
-                  <span className="plan-index">{index + 1}</span>
+                  <option value="">Choose a commitment</option>
+                  {graph.nodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.owner} — {node.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-                  <div className="plan-owner">
-                    <strong>{node.owner}</strong>
-                    <span>Commitment #{node.id}</span>
-                  </div>
-
-                  <StatusBadge status={node.status} />
-
-                  <span className={`plan-note ${risk ? "risk" : ""}`}>
-                    {note}
-                  </span>
-                </div>
-              );
-            })}
-
-            {cyclicNodes.map((node) => {
-              const analysis = analysisById[node.id];
-
-              return (
-                <div
-                  className="plan-row cyclic"
-                  key={node.id}
-                  onClick={() => setSelectedId(node.id)}
-                >
-                  <span className="plan-index">↻</span>
-
-                  <div className="plan-owner">
-                    <strong>{node.owner}</strong>
-                    <span>Commitment #{node.id}</span>
-                  </div>
-
-                  <StatusBadge status={node.status} />
-
-                  <span className="plan-note risk">
-                    {stateNote(analysis, byId)}
-                  </span>
-                </div>
-              );
-            })}
-
-            {deferredNodes.map((node) => {
-              const analysis = analysisById[node.id];
-
-              return (
-                <div
-                  className="plan-row deferred"
-                  key={node.id}
-                  onClick={() => setSelectedId(node.id)}
-                >
-                  <span className="plan-index">—</span>
-
-                  <div className="plan-owner">
-                    <strong>{node.owner}</strong>
-                    <span>Commitment #{node.id}</span>
-                  </div>
-
-                  <StatusBadge status={node.status} />
-
-                  <span className="plan-note">
-                    {stateNote(analysis, byId)} · blocked by a cycle
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">CONFLICT CHECK</p>
-              <h2>Project consistency</h2>
-            </div>
-            <span>{conflicts.length} issues</span>
-          </div>
-
-          <div className="card conflict-card">
-            {conflicts.length === 0 ? (
-              <div className="conflicts-clean">
-                <span className="clean-dot" />
-                No conflicts detected — the project trace is consistent.
-              </div>
-            ) : (
-              conflicts.map((conflict, index) => (
-                <div className="conflict-row" key={index}>
-                  <span
-                    className={`severity-badge severity-${conflict.severity.toLowerCase()}`}
-                  >
-                    {conflict.severity}
-                  </span>
-
-                  <span className="conflict-type">
-                    {conflict.type.replace("_", " ")}
-                  </span>
-
-                  <p>{conflict.message}</p>
-
-                  <div className="conflict-refs">
-                    {conflict.commitment_ids.map((id) => (
-                      <button
-                        className="ref-chip"
-                        key={`commitment-${id}`}
-                        onClick={() => setSelectedId(id)}
-                      >
-                        {byId[id]?.owner ?? "?"} #{id}
-                      </button>
-                    ))}
-
-                    {conflict.decision_ids.map((id) => (
-                      <button
-                        className="ref-chip decision-chip"
-                        key={`decision-${id}`}
-                        onClick={() => setDecisionId(id)}
-                      >
-                        Decision #{id}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">DEPENDENCY GRAPH</p>
-              <h2>Work graph</h2>
-            </div>
-            <span>click a node to analyze it</span>
-          </div>
-
-          <div className="card">
-            <GraphView
-              graph={graph}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">EXECUTION</p>
-              <h2>Commitments</h2>
-            </div>
-            <span>{graph.nodes.length} commitments</span>
-          </div>
-
-          <div className="commitment-grid">
-            {graph.nodes.map((commitment) => (
-              <article
-                className={`card commitment-card ${
-                  commitment.id === selectedId ? "selected" : ""
-                }`}
-                key={commitment.id}
-                onClick={() => setSelectedId(commitment.id)}
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={dependencySaving}
               >
-                <div className="commitment-top">
-                  <div className="avatar">
-                    {commitment.owner.charAt(0)}
-                  </div>
+                {dependencySaving ? "Adding..." : "Add dependency"}
+              </button>
+            </form>
 
-                  <div>
-                    <h3>{commitment.owner}</h3>
-                    <span>Commitment #{commitment.id}</span>
-                  </div>
+            {dependencyError && (
+              <p className="form-error" role="alert">
+                {dependencyError}
+              </p>
+            )}
 
-                  <StatusBadge status={commitment.status} />
+            {dependencyNotice && (
+              <div className="form-notice" role="status">
+                <span className="form-notice-badge">DATE MISMATCH</span>
+
+                <div className="form-notice-body">
+                  <p>{dependencyNotice.message}</p>
+                  <p className="form-notice-hint">
+                    {dependencyNotice.suggestion} The link was saved — it is
+                    listed on the consistency screen until the dates agree.
+                  </p>
                 </div>
 
-                <p className="commitment-description">
-                  {commitment.description}
-                </p>
-
-                <div className="due-date">
-                  <span>Due date</span>
-                  <strong>{commitment.due_date || "Not set"}</strong>
-                </div>
-
-                {editingId === commitment.id ? (
-                  <div className="status-editor">
-                    <select
-                      value={newStatus}
-                      onChange={(event) => setNewStatus(event.target.value)}
-                    >
-                      <option value="">Select status</option>
-                      <option value="OPEN">Open</option>
-                      <option value="IN_PROGRESS">In Progress</option>
-                      <option value="DELAYED">Delayed</option>
-                      <option value="BLOCKED">Blocked</option>
-                      <option value="COMPLETED">Completed</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      placeholder="Reason for this change"
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                    />
-
-                    {editorError && (
-                      <p className="pipeline-error">{editorError}</p>
-                    )}
-
-                    <div className="editor-actions">
-                      <button
-                        className="primary-button"
-                        disabled={updating || !newStatus}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          updateCommitmentStatus(commitment.id);
-                        }}
-                      >
-                        {updating ? "Updating..." : "Update Status"}
-                      </button>
-
-                      <button
-                        className="secondary-button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setEditingId(null);
-                          setNewStatus("");
-                          setReason("");
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+                <div className="form-notice-actions">
                   <button
-                    className="change-button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setEditingId(commitment.id);
-                      setNewStatus("");
-                      setReason("");
-                    }}
+                    type="button"
+                    className="form-notice-undo"
+                    onClick={() => removeDependency(dependencyNotice.dependency_id)}
+                    disabled={dependencySaving}
                   >
-                    Change status
+                    {dependencySaving ? "Undoing..." : "Undo"}
                   </button>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
 
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">AI-ASSISTED PIPELINE</p>
-              <h2>Discussions & candidates</h2>
+                  <button
+                    type="button"
+                    className="form-notice-close"
+                    onClick={() => setDependencyNotice(null)}
+                    aria-label="Dismiss the date warning"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {view === "dependencies" && (
+          <section className="section-block">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">DEPENDENCY GRAPH</p>
+                <h2>Work graph</h2>
+              </div>
+              <span>click a node to analyze it</span>
             </div>
-            <span>AI proposes · humans decide</span>
-          </div>
 
-          <DiscussionsPanel
-            discussions={discussions}
-            projectId={project?.id}
-            reload={loadDashboard}
-          />
+            <div className="card">
+              <GraphView
+                graph={graph}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            </div>
+          </section>
+        )}
 
-          <CandidatesPanel candidates={candidates} reload={loadDashboard} />
-        </section>
+        {view === "plan" && (
+          <section className="section-block">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">EXECUTION</p>
+                <h2>Commitments</h2>
+              </div>
+              <span>{graph.nodes.length} commitments</span>
+            </div>
 
-        <div className="dashboard-grid lower-grid">
+            <div className="commitment-grid">
+              {graph.nodes.map((commitment) => (
+                <article
+                  className={`card commitment-card ${
+                    commitment.id === selectedId ? "selected" : ""
+                  }`}
+                  key={commitment.id}
+                  onClick={() => setSelectedId(commitment.id)}
+                >
+                  <div className="commitment-top">
+                    <div className="avatar">
+                      {commitment.owner.charAt(0)}
+                    </div>
+
+                    <div>
+                      <h3>{commitment.owner}</h3>
+                      <span>Commitment #{commitment.id}</span>
+                    </div>
+
+                    <StatusBadge status={commitment.status} />
+                  </div>
+
+                  <p className="commitment-description">
+                    {commitment.description}
+                  </p>
+
+                  <div className="due-date">
+                    <span>Due date</span>
+                    <strong>{commitment.due_date || "Not set"}</strong>
+                  </div>
+
+                  {editingId === commitment.id ? (
+                    <div className="status-editor">
+                      <select
+                        value={newStatus}
+                        onChange={(event) => setNewStatus(event.target.value)}
+                      >
+                        <option value="">Select status</option>
+                        <option value="OPEN">Open</option>
+                        <option value="IN_PROGRESS">In Progress</option>
+                        <option value="DELAYED">Delayed</option>
+                        <option value="BLOCKED">Blocked</option>
+                        <option value="COMPLETED">Completed</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        placeholder="Reason for this change"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                      />
+
+                      {editorError && (
+                        <p className="pipeline-error">{editorError}</p>
+                      )}
+
+                      <div className="editor-actions">
+                        <button
+                          className="primary-button"
+                          disabled={updating || !newStatus}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            updateCommitmentStatus(commitment.id);
+                          }}
+                        >
+                          {updating ? "Updating..." : "Update Status"}
+                        </button>
+
+                        <button
+                          className="secondary-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingId(null);
+                            setNewStatus("");
+                            setReason("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="change-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setEditingId(commitment.id);
+                        setNewStatus("");
+                        setReason("");
+                      }}
+                    >
+                      Change status
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {view === "intake" && (
+          <ViewHeader eyebrow="DECIDE" title="Intake & review">
+            AI proposes candidates from meeting notes; you decide what
+            becomes an authoritative record.
+          </ViewHeader>
+        )}
+
+        {view === "intake" && (
+          <section className="section-block">
+            <DiscussionsPanel
+              page={discussions}
+              projectId={project?.id}
+              reload={reloadData}
+            />
+
+            <CandidatesPanel
+              pending={pendingCandidates}
+              reviewed={reviewedCandidates}
+              reload={reloadData}
+            />
+          </section>
+        )}
+
+        {view === "dependencies" && (
           <section className="card">
             <p className="eyebrow">DEPENDENCY TRACE</p>
             <h2>Work dependencies</h2>
@@ -1227,49 +1809,123 @@ function App() {
                       Commitment #{dependency.successor_commitment_id}
                     </span>
                   </div>
+
+                  <button
+                    type="button"
+                    className="dependency-remove"
+                    onClick={() => removeDependency(dependency.id)}
+                    disabled={dependencySaving}
+                    aria-label={`Remove dependency: ${
+                      predecessor?.owner || "unknown"
+                    } blocks ${successor?.owner || "unknown"}`}
+                  >
+                    Remove
+                  </button>
                 </div>
               );
             })}
           </section>
+        )}
 
+        {view === "audit" && (
+          <ViewHeader eyebrow="TRACE" title="Audit trail">
+            Every status change on the selected commitment, newest
+            first, with the reason that was given.
+          </ViewHeader>
+        )}
+
+        {view === "audit" && (
           <section className="card">
-            <p className="eyebrow">AUDIT TRAIL</p>
-            <h2>Change history</h2>
+            <div className="card-header">
+              <div>
+                <h2>Change history</h2>
+              </div>
 
-            {selectedNode && (
-              <p className="muted source-note">
-                {selectedNode.owner} · Commitment #{selectedNode.id}
-              </p>
+              {graph.nodes.length > 0 && (
+                <select
+                  className="decision-select"
+                  value={selectedId ?? ""}
+                  aria-label="Commitment to audit"
+                  onChange={(event) =>
+                    setSelectedId(Number(event.target.value))
+                  }
+                >
+                  {graph.nodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      #{node.id} {node.owner} ·{" "}
+                      {node.status.replace("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {selectedNode && commitmentHistory.total > 1 && (
+              <p className="muted source-note">Newest first</p>
             )}
 
-            {history.length > 0 ? (
-              <div className="timeline">
-                {history.map((item) => (
-                  <div className="timeline-item" key={item.id}>
-                    <div className="timeline-dot" />
+            {commitmentHistory.total > 0 ? (
+              <>
+                <div
+                  className={
+                    commitmentHistory.loading
+                      ? "timeline is-loading"
+                      : "timeline"
+                  }
+                  aria-busy={commitmentHistory.loading}
+                >
+                  {commitmentHistory.items.map((item) => (
+                    <div className="timeline-item" key={item.id}>
+                      <div className="timeline-dot" />
 
-                    <div>
-                      <strong>
-                        {item.old_status.replace("_", " ")}
-                        {" → "}
-                        {item.new_status.replace("_", " ")}
-                      </strong>
+                      <div>
+                        <strong>
+                          {item.old_status.replace("_", " ")}
+                          {" → "}
+                          {item.new_status.replace("_", " ")}
+                        </strong>
 
-                      <p>{item.reason || "No reason provided."}</p>
+                        <p>{item.reason || "No reason provided."}</p>
 
-                      <span>
-                        {new Date(item.changed_at).toLocaleString()}
-                      </span>
+                        <span>
+                          {new Date(item.changed_at).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                <Pagination
+                  total={commitmentHistory.total}
+                  limit={commitmentHistory.limit}
+                  offset={commitmentHistory.offset}
+                  onChange={commitmentHistory.setOffset}
+                  label="Commitment change history"
+                  busy={commitmentHistory.loading}
+                />
+
+                {commitmentHistory.error && (
+                  <p className="pipeline-error">{commitmentHistory.error}</p>
+                )}
+              </>
             ) : (
               <p className="muted">No changes recorded yet.</p>
             )}
           </section>
-        </div>
+        )}
+
       </main>
+
+      {cycleReport && (
+        <CycleDialog
+          report={cycleReport}
+          error={cycleError}
+          busy={dependencySaving}
+          onClose={() => setCycleReport(null)}
+          onMarkBlocked={markCycleTaskBlocked}
+          onRemoveLink={removeDependency}
+        />
+      )}
     </div>
   );
 }
