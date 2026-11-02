@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.project import Project
+from app.models.candidate import Candidate
+from app.models.decision import Decision
 from app.models.discussion import Discussion
 from app.schemas.discussion import DiscussionCreate, DiscussionResponse
 from app.schemas.page import Page
@@ -67,3 +69,36 @@ def get_discussions(
     rows, total = paginate(query, page)
 
     return page_response(rows, total, page)
+@router.delete(
+    "/{discussion_id}",
+    response_model=DiscussionResponse
+)
+def delete_discussion(
+    discussion_id: int,
+    db: Session = Depends(get_db)
+):
+    discussion = db.query(Discussion).filter(
+        Discussion.id == discussion_id
+    ).first()
+
+    if not discussion:
+        raise HTTPException(
+            status_code=404,
+            detail="Discussion not found"
+        )
+
+    # Candidates live and die with their source text. Records already
+    # confirmed from them stay authoritative; only the pointer back to
+    # this discussion is cleared so nothing references a missing row.
+    db.query(Candidate).filter(
+        Candidate.discussion_id == discussion.id
+    ).delete(synchronize_session=False)
+
+    db.query(Decision).filter(
+        Decision.source_discussion_id == discussion.id
+    ).update({"source_discussion_id": None}, synchronize_session=False)
+
+    db.delete(discussion)
+    db.commit()
+
+    return discussion

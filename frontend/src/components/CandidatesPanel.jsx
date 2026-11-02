@@ -44,6 +44,8 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectComment, setRejectComment] = useState("");
   const [error, setError] = useState("");
+  const [prereqFor, setPrereqFor] = useState(null);
+  const [prereqData, setPrereqData] = useState(null);
 
   function startEdit(candidate) {
     setEditingId(candidate.id);
@@ -77,13 +79,73 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
     }
   }
 
-  async function confirm(candidateId) {
-    setBusyId(candidateId);
+  function scrollToCard(candidateId) {
+    document
+      .getElementById(`candidate-${candidateId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function loadPrerequisites(dependency) {
+    setPrereqFor(dependency.id);
+    setPrereqData({ loading: true, rows: [], error: "" });
+
+    try {
+      const response = await fetch(
+        `${API_URL}/candidates?project_id=${dependency.project_id}` +
+          `&status=PENDING,CONFIRMED&limit=100&offset=0`
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not load the prerequisite commitments.");
+      }
+
+      const data = await response.json();
+      const items = data.items ?? [];
+
+      const needed = [
+        { role: "predecessor", owner: dependency.payload.predecessor_owner },
+        { role: "successor", owner: dependency.payload.successor_owner },
+      ];
+
+      const rows = needed.map(({ role, owner }) => {
+        const key = String(owner ?? "").trim().toLowerCase();
+
+        const matches = items.filter(
+          (item) =>
+            item.candidate_type === "COMMITMENT" &&
+            String(item.payload?.owner ?? "").trim().toLowerCase() === key
+        );
+
+        return {
+          role,
+          owner,
+          pending: matches.filter((item) => item.status === "PENDING"),
+          confirmed: matches.some((item) => item.status === "CONFIRMED"),
+        };
+      });
+
+      setPrereqData({ loading: false, rows, error: "" });
+    } catch (err) {
+      setPrereqData({ loading: false, rows: [], error: err.message });
+    }
+  }
+
+  function togglePrerequisites(dependency) {
+    if (prereqFor === dependency.id) {
+      setPrereqFor(null);
+      return;
+    }
+
+    loadPrerequisites(dependency);
+  }
+
+  async function confirm(candidate) {
+    setBusyId(candidate.id);
     setError("");
 
     try {
       const response = await fetch(
-        `${API_URL}/candidates/${candidateId}/confirm`,
+        `${API_URL}/candidates/${candidate.id}/confirm`,
         { method: "POST" }
       );
 
@@ -104,6 +166,17 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       await reload();
     } catch (err) {
       setError(err.message);
+
+      // A dependency cannot be confirmed before the commitments it links
+      // exist. When that happens, open the prerequisite list right where
+      // the user is standing instead of leaving them with a bare error.
+      if (
+        candidate.candidate_type === "DEPENDENCY" &&
+        /not found/i.test(err.message)
+      ) {
+        await loadPrerequisites(candidate);
+        scrollToCard(candidate.id);
+      }
     } finally {
       setBusyId(null);
     }
@@ -149,7 +222,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
     const fields = candidateFields(candidate);
 
     return (
-      <div className="candidate-card" key={candidate.id}>
+      <div className="candidate-card" id={`candidate-${candidate.id}`} key={candidate.id}>
         <div className="candidate-top">
           <span className={`type-badge type-${candidate.candidate_type.toLowerCase()}`}>
             {candidate.candidate_type}
@@ -225,7 +298,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             <button
               className="primary-button confirm-button"
               disabled={busyId === candidate.id || editing}
-              onClick={() => confirm(candidate.id)}
+              onClick={() => confirm(candidate)}
             >
               {busyId === candidate.id ? "Working..." : "Confirm"}
             </button>
@@ -258,6 +331,101 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             )}
           </div>
         )}
+
+        {candidate.status === "PENDING" &&
+          candidate.candidate_type === "DEPENDENCY" && (
+            <div className="prereq-box">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => togglePrerequisites(candidate)}
+              >
+                {prereqFor === candidate.id
+                  ? "Hide prerequisite commitments"
+                  : "Review prerequisite commitments"}
+              </button>
+
+              {prereqFor === candidate.id && prereqData && (
+                <div className="prereq-panel">
+                  <p className="prereq-hint">
+                    A dependency links two commitments. Confirm both
+                    commitments below first, then confirm this dependency.
+                  </p>
+
+                  {prereqData.loading && <p className="muted">Loading...</p>}
+                  {prereqData.error && (
+                    <p className="pipeline-error">{prereqData.error}</p>
+                  )}
+
+                  {prereqData.rows.map((row) => (
+                    <div className="prereq-row" key={row.role}>
+                      <div className="prereq-owner">
+                        <strong>{row.owner}</strong>
+                        <span className="prereq-role">{row.role}</span>
+                      </div>
+
+                      <div className="prereq-items">
+                        {row.pending.length > 0 ? (
+                          row.pending.map((item) => (
+                            <div className="prereq-item" key={item.id}>
+                              <div>
+                                <span className="prereq-state state-pending">
+                                  PENDING
+                                </span>
+                                <strong>{item.payload.description}</strong>
+                                {item.payload.due_date && (
+                                  <span className="prereq-due">
+                                    due {item.payload.due_date}
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                className="primary-button"
+                                disabled={busyId === item.id}
+                                onClick={async () => {
+                                  await confirm(item);
+                                  if (prereqFor === candidate.id) {
+                                    loadPrerequisites(candidate);
+                                  }
+                                }}
+                              >
+                                {busyId === item.id ? "Working..." : "Confirm"}
+                              </button>
+                            </div>
+                          ))
+                        ) : row.confirmed ? (
+                          <div className="prereq-item">
+                            <div>
+                              <span className="prereq-state state-ok">
+                                CONFIRMED
+                              </span>
+                              <span>
+                                {row.owner}'s commitment already exists.
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="prereq-item">
+                            <div>
+                              <span className="prereq-state state-missing">
+                                NOT FOUND
+                              </span>
+                              <span>
+                                No commitment for {row.owner} yet — check the
+                                name, or create the commitment first.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
       </div>
     );
   }

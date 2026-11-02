@@ -246,3 +246,36 @@ def get_commitment_history(
     rows, total = paginate(query, page)
 
     return page_response(rows, total, page)
+@router.delete(
+    "/{commitment_id}",
+    response_model=CommitmentResponse
+)
+def delete_commitment(
+    commitment_id: int,
+    db: Session = Depends(get_db)
+):
+    commitment = db.query(Commitment).filter(
+        Commitment.id == commitment_id
+    ).first()
+
+    if not commitment:
+        raise HTTPException(
+            status_code=404,
+            detail="Commitment not found"
+        )
+
+    # Remove everything that only makes sense with the commitment:
+    # its audit entries and any dependency edges that touch it.
+    db.query(CommitmentHistory).filter(
+        CommitmentHistory.commitment_id == commitment.id
+    ).delete(synchronize_session=False)
+
+    db.query(Dependency).filter(
+        (Dependency.predecessor_commitment_id == commitment.id)
+        | (Dependency.successor_commitment_id == commitment.id)
+    ).delete(synchronize_session=False)
+
+    db.delete(commitment)
+    db.commit()
+
+    return commitment
