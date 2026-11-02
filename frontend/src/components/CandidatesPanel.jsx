@@ -89,7 +89,16 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Failed to confirm candidate");
+
+        // The confirm endpoint answers 409 with a structured detail
+        // (cycle rejection carries code/message/hops), unlike the plain
+        // strings the edit endpoints return.
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : data.detail?.message;
+
+        throw new Error(detail || "Failed to confirm candidate");
       }
 
       await reload();
