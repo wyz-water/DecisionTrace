@@ -18,6 +18,7 @@ from app.routes.decisions import router as decisions_router
 from app.routes.commitments import router as commitments_router
 from app.routes.dependencies import router as dependencies_router
 from app.routes.candidates import router as candidates_router
+from app.routes.search import router as search_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -46,6 +47,7 @@ app.include_router(decisions_router)
 app.include_router(commitments_router)
 app.include_router(dependencies_router)
 app.include_router(candidates_router)
+app.include_router(search_router)
 
 
 @app.get("/")

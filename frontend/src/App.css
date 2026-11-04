@@ -2608,3 +2608,100 @@ body {
   display: flex;
   gap: 8px;
 }
+
+/* --- Search view (UC08) ------------------------------------------------ */
+
+.type-discussion {
+  background: #f0edff;
+  color: #5b3fb8;
+}
+
+.type-history {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.search-card {
+  padding: 28px 32px;
+}
+
+.search-form {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 10px;
+}
+
+.search-form input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.search-form input:focus {
+  outline: 2px solid #dbe7ff;
+  outline-offset: 0;
+}
+
+.search-results {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search-result {
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.search-result-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.search-when {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.search-result-title {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #172033;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-result-title:hover {
+  color: #315ca8;
+  text-decoration: underline;
+}
+
+.search-snippet {
+  margin: 6px 0 4px;
+  color: #475467;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.search-snippet mark {
+  background: #fff3c2;
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+.search-matched {
+  font-size: 12px;
+  margin: 0;
+}

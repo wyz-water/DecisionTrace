@@ -5,6 +5,7 @@ import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import Pagination from "./components/Pagination.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
+import SearchPanel from "./components/SearchPanel.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
 import usePagedList from "./usePagedList.js";
@@ -1906,6 +1907,25 @@ function App() {
                 </div>
               );
             })}
+          </section>
+        )}
+
+        {view === "search" && (
+          <ViewHeader eyebrow="TRACE" title="Search">
+            Find any decision, commitment, discussion or change by
+            keyword — including the reasoning and source context behind
+            it.
+          </ViewHeader>
+        )}
+
+        {view === "search" && (
+          <section className="section-block">
+            <SearchPanel
+              projectId={project?.id}
+              onOpenDecision={(id) => setDecisionId(id)}
+              onOpenCommitment={(id) => setSelectedId(id)}
+              onNavigate={navigate}
+            />
           </section>
         )}
 
