@@ -130,6 +130,28 @@ AI-generated information is treated as a **candidate**, not an authoritative pro
 
 A human user must review the result before it becomes part of the official project trace.
 
+### Discussion Import
+
+Meeting notes can be pasted directly or uploaded as `.txt` / `.md` files
+(UTF-8 and GBK encodings are both handled). A discussion is the source
+context every extracted record points back to.
+
+### Project Management
+
+The top-bar project switcher creates, switches, and deletes projects.
+The active project is remembered between visits, and every view reloads
+against the selected project. Deleting a project removes all of its
+records; discussions and commitments can also be deleted individually
+(audit rows and dependency edges are cleaned up with them).
+
+### Full-Text Search
+
+Search runs across discussions, decisions, commitments, and both change
+histories — including the reasoning and status-change reasons behind
+records. Multi-word queries require every term to match one record;
+results are ranked by how many fields they hit and link back to the view
+where each record lives.
+
 ## Current Demo Scenario
 
 The current prototype demonstrates the following scenario:
@@ -142,6 +164,13 @@ The current prototype demonstrates the following scenario:
 6. Carol's commitment becomes delayed.
 7. DecisionTrace detects Bob's commitment as potentially affected.
 8. The status change is preserved in the audit trail.
+
+## Design Documentation
+
+- [Architecture](docs/design/architecture.md) — layers, architectural decisions
+- [Data model](docs/design/data-model.md) — ER diagram and table notes
+- [API specification](docs/design/api-spec.md) — endpoint catalog and conventions
+- [UI design](docs/design/ui-design.md) — views, navigation, interaction conventions
 
 ## Tech Stack
 
