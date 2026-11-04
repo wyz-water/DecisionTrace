@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,8 +15,17 @@ from app.models.project import Project
 from app.models.candidate import Candidate
 from app.models.decision import Decision
 from app.models.discussion import Discussion
-from app.schemas.discussion import DiscussionCreate, DiscussionResponse
+from app.schemas.discussion import (
+    DiscussionCreate,
+    DiscussionImportResponse,
+    DiscussionResponse,
+)
 from app.schemas.page import Page
+from app.services.importing import (
+    decode_text_bytes,
+    extract_docx_text,
+    extract_pdf_text,
+)
 from app.services.pagination import PageParams, page_response, paginate
 
 
@@ -15,6 +33,87 @@ router = APIRouter(
     prefix="/discussions",
     tags=["Discussions"]
 )
+
+
+TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".text"}
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+
+
+@router.post(
+    "/import",
+    response_model=DiscussionImportResponse
+)
+async def import_discussion(
+    project_id: int = Form(...),
+    file: UploadFile = File(...),
+    title: str | None = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Create a discussion from an uploaded file.
+
+    Supported: .txt / .md (UTF-8 or GBK), .docx, .pdf. The decoded text
+    becomes the discussion content; the filename (minus extension)
+    becomes the title unless one is provided.
+    """
+    project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    filename = file.filename or "discussion"
+    extension = Path(filename).suffix.lower()
+
+    if extension not in TEXT_EXTENSIONS | {".docx", ".pdf"}:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Unsupported file type. Import .txt, .md, .docx or .pdf."
+            )
+        )
+
+    data = await file.read()
+
+    if len(data) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="File is larger than 5 MB; split the notes and retry."
+        )
+
+    if extension in TEXT_EXTENSIONS:
+        content, encoding = decode_text_bytes(data)
+    elif extension == ".docx":
+        content, encoding = extract_docx_text(data), "DOCX"
+    else:
+        content, encoding = extract_pdf_text(data), "PDF"
+
+    if not content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="That file contains no text."
+        )
+
+    new_discussion = Discussion(
+        project_id=project_id,
+        title=(title or Path(filename).stem or "Imported discussion"),
+        content=content
+    )
+
+    db.add(new_discussion)
+    db.commit()
+    db.refresh(new_discussion)
+
+    return DiscussionImportResponse(
+        id=new_discussion.id,
+        project_id=new_discussion.project_id,
+        title=new_discussion.title,
+        content=new_discussion.content,
+        encoding=encoding,
+    )
 
 
 @router.post(
