@@ -57,7 +57,7 @@ body {
 /* ---- App shell + sidebar --------------------------------------------
    Header pinned, nav pinned, content scrolls. The rail is fixed rather
    than laid out in a grid so the section markup stays a flat list of
-   blocks inside <main> — one section per view, no wrapper per view.
+   blocks inside <main> —one section per view, no wrapper per view.
 
    Both the rail and the content share the same centred 1400px measure:
    the rail's left edge is the container's left edge. */
@@ -644,7 +644,7 @@ body {
 }
 
 /* The status change sits under the title: as an inline span it ran
-   straight into the bold text ("PostgreSQL → PostgreSQLCONFIRMED"). */
+   straight into the bold text ("PostgreSQL →PostgreSQLCONFIRMED"). */
 .history-status {
   display: block;
   margin-top: 2px;
@@ -1670,7 +1670,7 @@ body {
 }
 
 /* Shown instead of the graph when the data contains a loop. A cycle has no
-   topological order, so there is no honest way to lay the plan out — the
+   topological order, so there is no honest way to lay the plan out —the
    card explains the loop and points at the links that can break it. */
 .graph-blocked {
   padding: 16px 18px;
@@ -2242,4 +2242,369 @@ body {
   .form-notice-actions {
     align-self: start;
   }
+}
+/* Prerequisite review (dependency cards): pulls the commitments a
+   dependency links into the card so the review order never trips people. */
+.prereq-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.prereq-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  padding: 12px;
+
+  background: #f8fafc;
+  border: 1px dashed #c9d2e3;
+  border-radius: 10px;
+}
+
+.prereq-hint {
+  margin: 0;
+  color: #5b6b85;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.prereq-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prereq-owner {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.prereq-role {
+  color: #858c9b;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.prereq-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prereq-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 8px 10px;
+
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+
+  font-size: 12.5px;
+}
+
+.prereq-item > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prereq-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.prereq-state.state-pending {
+  background: #fff6e6;
+  color: #9a6700;
+}
+
+.prereq-state.state-ok {
+  background: #eaf8ef;
+  color: #267447;
+}
+
+.prereq-state.state-missing {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.prereq-due {
+  color: #8b92a1;
+  font-size: 11.5px;
+}
+
+
+/* Project switcher (top bar): GitHub-Desktop style searchable menu.
+   The two-class selector keeps the trigger visible on small screens
+   (the plain .project-label hides there; a switcher must stay usable). */
+.project-switcher {
+  position: relative;
+}
+
+.project-label.project-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.project-label.project-switcher-trigger:hover {
+  border-color: #7897d4;
+}
+
+.project-switcher-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher-caret {
+  color: #7a8294;
+  font-size: 11px;
+}
+
+.project-switcher-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+}
+
+.project-switcher-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+
+  width: min(360px, 92vw);
+  padding: 10px;
+
+  background: #ffffff;
+  border: 1px solid #e1e4eb;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(23, 32, 51, 0.14);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-switcher-search {
+  width: 100%;
+  padding: 9px 11px;
+
+  border: 1px solid #d8dce5;
+  border-radius: 8px;
+
+  font: inherit;
+  font-size: 13px;
+}
+
+.project-switcher-list {
+  max-height: 280px;
+  overflow-y: auto;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  border-radius: 8px;
+}
+
+.project-switcher-item.is-active {
+  background: #eef4ff;
+}
+
+.project-switcher-item-main {
+  flex: 1;
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 8px 10px;
+
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-switcher-item-main:hover {
+  background: #f0f4fb;
+}
+
+.project-switcher-item-delete {
+  flex-shrink: 0;
+
+  padding: 6px 8px;
+
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+
+  color: #a3aab8;
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.project-switcher-item-delete:hover {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.project-switcher-item.is-confirming {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+
+  padding: 10px;
+
+  background: #fff8f7;
+  border: 1px solid #f1c1bc;
+  border-radius: 8px;
+}
+
+.project-switcher-confirm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  font-size: 12.5px;
+}
+
+.project-switcher-confirm-text span {
+  color: #7a8294;
+  font-size: 11.5px;
+}
+
+.project-switcher-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-switcher-delete-confirm {
+  padding: 7px 12px;
+
+  background: #b42318;
+  border: none;
+  border-radius: 8px;
+
+  color: #ffffff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.project-switcher-delete-confirm:hover {
+  background: #922018;
+}
+
+.project-switcher-check {
+  width: 14px;
+  flex-shrink: 0;
+
+  color: #315ca8;
+  font-size: 12px;
+}
+
+.project-switcher-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-switcher-item-text strong {
+  font-size: 13px;
+}
+
+.project-switcher-item-text span {
+  overflow: hidden;
+
+  color: #7a8294;
+  font-size: 11.5px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher-empty {
+  margin: 6px 4px;
+
+  color: #7a8294;
+  font-size: 12.5px;
+}
+
+.project-switcher-new {
+  padding: 9px 10px;
+
+  background: transparent;
+  border: none;
+  border-top: 1px solid #eceff5;
+
+  color: #315ca8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-switcher-new:hover {
+  background: #f0f4fb;
+}
+
+.project-switcher-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.project-switcher-form input {
+  padding: 9px 11px;
+
+  border: 1px solid #d8dce5;
+  border-radius: 8px;
+
+  font: inherit;
+  font-size: 13px;
+}
+
+.project-switcher-form-actions {
+  display: flex;
+  gap: 8px;
 }

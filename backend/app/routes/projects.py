@@ -3,9 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.project import Project
-from app.models.decision import Decision
+from app.models.candidate import Candidate
 from app.models.commitment import Commitment
+from app.models.commitment_history import CommitmentHistory
+from app.models.decision import Decision
+from app.models.decision_history import DecisionHistory
 from app.models.dependency import Dependency
+from app.models.discussion import Discussion
 from app.schemas.project import ProjectCreate, ProjectResponse
 from app.schemas.graph import ProjectGraphResponse
 from app.schemas.conflict import ProjectConflictsResponse
@@ -262,3 +266,71 @@ def get_project_conflicts(
         "conflict_count": len(conflicts),
         "conflicts": conflicts,
     }
+@router.delete(
+    "/{project_id}",
+    response_model=ProjectResponse
+)
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    # Tables are cleared children-first (histories before their parents,
+    # edges before the nodes they touch) so no row is left pointing at a
+    # deleted record, whatever the foreign keys' cascade settings are.
+    commitment_ids = [
+        row[0]
+        for row in db.query(Commitment.id).filter(
+            Commitment.project_id == project.id
+        ).all()
+    ]
+    decision_ids = [
+        row[0]
+        for row in db.query(Decision.id).filter(
+            Decision.project_id == project.id
+        ).all()
+    ]
+
+    if commitment_ids:
+        db.query(CommitmentHistory).filter(
+            CommitmentHistory.commitment_id.in_(commitment_ids)
+        ).delete(synchronize_session=False)
+
+    if decision_ids:
+        db.query(DecisionHistory).filter(
+            DecisionHistory.decision_id.in_(decision_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(Dependency).filter(
+        Dependency.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.query(Commitment).filter(
+        Commitment.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.query(Decision).filter(
+        Decision.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.query(Candidate).filter(
+        Candidate.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.query(Discussion).filter(
+        Discussion.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.delete(project)
+    db.commit()
+
+    return project

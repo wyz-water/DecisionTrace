@@ -1,8 +1,25 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import Pagination from "./Pagination";
 
 const API_URL = "http://127.0.0.1:8000";
+
+const UPLOAD_NAME = /\.(txt|md|markdown)$/i;
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+
+// Windows editors save text notes as UTF-8 (often with a BOM) or as GBK;
+// try UTF-8 strictly first so Chinese notes don't turn into mojibake.
+async function decodeTextFile(file) {
+  const buffer = await file.arrayBuffer();
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true })
+      .decode(buffer)
+      .replace(/^\uFEFF/, "");
+  } catch {
+    return new TextDecoder("gbk").decode(buffer).replace(/^\uFEFF/, "");
+  }
+}
 
 /**
  * Constraint brief (refactoring-ui, Workflow B):
@@ -19,6 +36,50 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
   const [extractingId, setExtractingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const fileInputRef = useRef(null);
+
+  async function uploadFile(event) {
+    const file = event.target.files?.[0];
+
+    // Reset so picking the same file again re-triggers onChange.
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!UPLOAD_NAME.test(file.name)) {
+      setError("Please upload a .txt or .md file.");
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError("File is larger than 2 MB; split the notes and upload again.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const text = await decodeTextFile(file);
+
+      if (!text.trim()) {
+        throw new Error("That file is empty.");
+      }
+
+      setContent(text);
+      setTitle((current) =>
+        current.trim() ? current : file.name.replace(UPLOAD_NAME, "")
+      );
+      setNotice(`Loaded ${file.name} — review the text, then save.`);
+    } catch (err) {
+      setError(err.message || `Could not read ${file.name}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function createDiscussion() {
     if (!title.trim() || !content.trim()) {
@@ -127,10 +188,27 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
           <textarea
             rows={6}
-            placeholder="Paste the meeting notes or chat transcript here..."
+            placeholder="Paste the meeting notes here, or upload a .txt/.md file below..."
             value={content}
             onChange={(event) => setContent(event.target.value)}
           />
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,.markdown,text/plain,text/markdown"
+            hidden
+            onChange={uploadFile}
+          />
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload .txt / .md file
+          </button>
 
           <button
             className="primary-button"

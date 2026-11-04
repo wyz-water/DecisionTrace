@@ -4,6 +4,7 @@ import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import Pagination from "./components/Pagination.jsx";
+import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
 import usePagedList from "./usePagedList.js";
@@ -284,10 +285,18 @@ function ViewHeader({ eyebrow, title, children }) {
 
 function App() {
   const [project, setProject] = useState(null);
+  const [projects, setProjects] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
-  const [graph, setGraph] = useState(null);
+  const [graph, setGraph] = useState({
+    nodes: [],
+    edges: [],
+    topological_order: [],
+    cycles: [],
+    has_cycles: false,
+    analysis: [],
+  });
   const [impact, setImpact] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [conflicts, setConflicts] = useState([]);
@@ -381,7 +390,7 @@ function App() {
       ? decisionImpact
       : null;
 
-  async function loadDashboard(keepSelected = null) {
+  async function loadDashboard(keepSelected = null, preferProjectId = null) {
     try {
       const projectsResponse = await fetch(`${API_URL}/projects`);
 
@@ -395,13 +404,28 @@ function App() {
       // the effect body triggers a cascading render
       // (react-hooks/set-state-in-effect).
       setError("");
+      setProjects(projects);
 
       if (projects.length === 0) {
-        setError("No projects yet. Create one through the API first.");
+        setError(
+          "No projects yet. Create one from the project switcher, " +
+            "top right of the page."
+        );
         return;
       }
 
-      const activeProject = projects[0];
+      const savedId = Number(
+        window.localStorage.getItem("decisiontrace.activeProjectId")
+      );
+
+      // Selection order: an explicit switch target, then the last project
+      // the user picked (persisted), then the first. Every path that
+      // changes the active project writes localStorage first, so the
+      // loader never needs to read component state.
+      const activeProject =
+        projects.find((item) => item.id === preferProjectId) ??
+        projects.find((item) => item.id === savedId) ??
+        projects[0];
 
       const [graphResponse, decisionsResponse, conflictsResponse] =
         await Promise.all([
@@ -456,6 +480,58 @@ function App() {
   async function reloadData(keepSelected = null) {
     await loadDashboard(keepSelected);
     setRefreshTick((tick) => tick + 1);
+  }
+
+  function selectProject(nextProject) {
+    window.localStorage.setItem(
+      "decisiontrace.activeProjectId",
+      String(nextProject.id)
+    );
+    setProject(nextProject);
+    loadDashboard(null, nextProject.id);
+  }
+
+  async function createProject(name, description) {
+    const response = await fetch(`${API_URL}/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || "Failed to create project");
+    }
+
+    const created = await response.json();
+
+    window.localStorage.setItem(
+      "decisiontrace.activeProjectId",
+      String(created.id)
+    );
+    setProject(created);
+    await loadDashboard(null, created.id);
+  }
+
+  async function deleteProject(targetProject) {
+    const response = await fetch(`${API_URL}/projects/${targetProject.id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || "Failed to delete project");
+    }
+
+    // Dropping the active project must not leave its id behind as the
+    // "last picked" project, or the loader would try to resurrect it.
+    if (project?.id === targetProject.id) {
+      window.localStorage.removeItem("decisiontrace.activeProjectId");
+      setProject(null);
+      await loadDashboard();
+    } else {
+      await loadDashboard(null, project?.id ?? null);
+    }
   }
 
   useEffect(() => {
@@ -827,10 +903,6 @@ function App() {
     return <div className="message">Loading DecisionTrace...</div>;
   }
 
-  if (error) {
-    return <div className="message error">Error: {error}</div>;
-  }
-
   const byId = {};
   for (const node of graph.nodes) {
     byId[node.id] = node;
@@ -931,9 +1003,13 @@ function App() {
               </a>
             )}
 
-            <div className="project-label">
-              {project?.name || "No project"}
-            </div>
+            <ProjectSwitcher
+              projects={projects}
+              activeProject={project}
+              onSelect={selectProject}
+              onCreate={createProject}
+              onDelete={deleteProject}
+            />
           </div>
         </div>
       </header>
@@ -944,6 +1020,12 @@ function App() {
       />
 
       <main className="dashboard">
+        {error && (
+          <div className="message error" role="alert">
+            Error: {error}
+          </div>
+        )}
+
         {view === "overview" && (
           <>
             <section className="hero">
