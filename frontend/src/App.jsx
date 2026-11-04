@@ -289,7 +289,14 @@ function App() {
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
-  const [graph, setGraph] = useState(null);
+  const [graph, setGraph] = useState({
+    nodes: [],
+    edges: [],
+    topological_order: [],
+    cycles: [],
+    has_cycles: false,
+    analysis: [],
+  });
   const [impact, setImpact] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [conflicts, setConflicts] = useState([]);
@@ -896,10 +903,6 @@ function App() {
     return <div className="message">Loading DecisionTrace...</div>;
   }
 
-  if (error) {
-    return <div className="message error">Error: {error}</div>;
-  }
-
   const byId = {};
   for (const node of graph.nodes) {
     byId[node.id] = node;
@@ -1017,6 +1020,12 @@ function App() {
       />
 
       <main className="dashboard">
+        {error && (
+          <div className="message error" role="alert">
+            Error: {error}
+          </div>
+        )}
+
         {view === "overview" && (
           <>
             <section className="hero">
