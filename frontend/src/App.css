@@ -2705,3 +2705,17 @@ body {
   font-size: 12px;
   margin: 0;
 }
+
+/* --- Discussion import: drag & drop ------------------------------------ */
+
+.discussion-form.is-dragging {
+  outline: 2px dashed #315ca8;
+  outline-offset: 4px;
+  border-radius: 10px;
+  background: #f5f8ff;
+}
+
+.import-formats {
+  display: block;
+  font-size: 12px;
+}

@@ -41,7 +41,6 @@ export default function SearchPanel({
     total,
     limit,
     offset,
-    hasMore,
     loading,
     error,
     setOffset,
@@ -173,8 +172,8 @@ export default function SearchPanel({
             total={total}
             limit={limit}
             offset={offset}
-            hasMore={hasMore}
-            setOffset={setOffset}
+            onChange={setOffset}
+            label="Search results"
           />
         </>
       )}
