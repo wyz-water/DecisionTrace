@@ -57,7 +57,7 @@ body {
 /* ---- App shell + sidebar --------------------------------------------
    Header pinned, nav pinned, content scrolls. The rail is fixed rather
    than laid out in a grid so the section markup stays a flat list of
-   blocks inside <main> â€?one section per view, no wrapper per view.
+   blocks inside <main> â€”one section per view, no wrapper per view.
 
    Both the rail and the content share the same centred 1400px measure:
    the rail's left edge is the container's left edge. */
@@ -644,7 +644,7 @@ body {
 }
 
 /* The status change sits under the title: as an inline span it ran
-   straight into the bold text ("PostgreSQL â†?PostgreSQLCONFIRMED"). */
+   straight into the bold text ("PostgreSQL â†’PostgreSQLCONFIRMED"). */
 .history-status {
   display: block;
   margin-top: 2px;
@@ -1670,7 +1670,7 @@ body {
 }
 
 /* Shown instead of the graph when the data contains a loop. A cycle has no
-   topological order, so there is no honest way to lay the plan out â€?the
+   topological order, so there is no honest way to lay the plan out â€”the
    card explains the loop and points at the links that can break it. */
 .graph-blocked {
   padding: 16px 18px;
