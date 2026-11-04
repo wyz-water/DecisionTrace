@@ -29,6 +29,7 @@ export const VIEW_GROUPS = [
   {
     label: "Trace",
     views: [
+      { id: "search", label: "Search" },
       { id: "consistency", label: "Consistency" },
       { id: "audit", label: "Audit trail" },
     ],
