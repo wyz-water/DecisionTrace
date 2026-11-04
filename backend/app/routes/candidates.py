@@ -6,7 +6,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.project import Project
 from app.models.discussion import Discussion
 from app.models.decision import Decision
 from app.models.commitment import Commitment
