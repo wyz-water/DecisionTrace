@@ -4,22 +4,8 @@ import Pagination from "./Pagination";
 
 const API_URL = "http://127.0.0.1:8000";
 
-const UPLOAD_NAME = /\.(txt|md|markdown)$/i;
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
-
-// Windows editors save text notes as UTF-8 (often with a BOM) or as GBK;
-// try UTF-8 strictly first so Chinese notes don't turn into mojibake.
-async function decodeTextFile(file) {
-  const buffer = await file.arrayBuffer();
-
-  try {
-    return new TextDecoder("utf-8", { fatal: true })
-      .decode(buffer)
-      .replace(/^\uFEFF/, "");
-  } catch {
-    return new TextDecoder("gbk").decode(buffer).replace(/^\uFEFF/, "");
-  }
-}
+const IMPORT_NAME = /\.(txt|md|markdown|docx|pdf)$/i;
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
 /**
  * Constraint brief (refactoring-ui, Workflow B):
@@ -36,25 +22,28 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
   const [extractingId, setExtractingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef(null);
 
-  async function uploadFile(event) {
+  function pickFile(event) {
     const file = event.target.files?.[0];
 
     // Reset so picking the same file again re-triggers onChange.
     event.target.value = "";
 
-    if (!file) {
+    if (file) {
+      importFile(file);
+    }
+  }
+
+  async function importFile(file) {
+    if (!IMPORT_NAME.test(file.name)) {
+      setError("Please import a .txt, .md, .docx or .pdf file.");
       return;
     }
 
-    if (!UPLOAD_NAME.test(file.name)) {
-      setError("Please upload a .txt or .md file.");
-      return;
-    }
-
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setError("File is larger than 2 MB; split the notes and upload again.");
+    if (file.size > MAX_IMPORT_BYTES) {
+      setError("File is larger than 5 MB; split the notes and import again.");
       return;
     }
 
@@ -63,21 +52,61 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
     setNotice("");
 
     try {
-      const text = await decodeTextFile(file);
+      const form = new FormData();
+      form.append("project_id", String(projectId));
+      form.append("file", file);
 
-      if (!text.trim()) {
-        throw new Error("That file is empty.");
+      const response = await fetch(`${API_URL}/discussions/import`, {
+        method: "POST",
+        body: form,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || `Could not import ${file.name}.`);
       }
 
-      setContent(text);
-      setTitle((current) =>
-        current.trim() ? current : file.name.replace(UPLOAD_NAME, "")
+      const discussion = await response.json();
+
+      // Import and extraction are one flow: the file just imported is the
+      // one the user wants candidates from.
+      setNotice(`Imported ${file.name} (${discussion.encoding}) — extracting…`);
+
+      const extractResponse = await fetch(
+        `${API_URL}/candidates/extract/${discussion.id}`,
+        { method: "POST" }
       );
-      setNotice(`Loaded ${file.name} — review the text, then save.`);
+
+      if (extractResponse.ok) {
+        const result = await extractResponse.json();
+        const noun = result.created === 1 ? "candidate" : "candidates";
+        const skipped =
+          result.skipped > 0 ? ` · ${result.skipped} already existed` : "";
+
+        setNotice(
+          `Imported ${file.name} (${discussion.encoding}) — ` +
+            `${result.created} ${noun} created${skipped}.`
+        );
+      } else {
+        setNotice(`Imported ${file.name} (${discussion.encoding}).`);
+      }
+
+      page.setOffset(0);
+      await reload();
     } catch (err) {
-      setError(err.message || `Could not read ${file.name}.`);
+      setError(err.message);
     } finally {
       setBusy(false);
+      setDragging(false);
+    }
+  }
+
+  function onDrop(event) {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0];
+
+    if (file) {
+      importFile(file);
     }
   }
 
@@ -178,7 +207,17 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
       <h2>Import a discussion</h2>
 
       <div className="pipeline-grid">
-        <div className="discussion-form">
+        <div
+          className={
+            dragging ? "discussion-form is-dragging" : "discussion-form"
+          }
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
           <input
             type="text"
             placeholder="Discussion title (e.g. Week 2 sync)"
@@ -188,7 +227,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
           <textarea
             rows={6}
-            placeholder="Paste the meeting notes here, or upload a .txt/.md file below..."
+            placeholder="Paste the meeting notes here, or drag a file anywhere onto this card..."
             value={content}
             onChange={(event) => setContent(event.target.value)}
           />
@@ -196,9 +235,9 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.markdown,text/plain,text/markdown"
+            accept=".txt,.md,.markdown,.docx,.pdf,text/plain,text/markdown"
             hidden
-            onChange={uploadFile}
+            onChange={pickFile}
           />
 
           <button
@@ -207,8 +246,13 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
             disabled={busy}
             onClick={() => fileInputRef.current?.click()}
           >
-            Upload .txt / .md file
+            {busy ? "Importing..." : "Import file"}
           </button>
+
+          <span className="muted import-formats">
+            .txt / .md / .docx / .pdf — imported files are saved and
+            extracted in one step
+          </span>
 
           <button
             className="primary-button"
