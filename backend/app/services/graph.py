@@ -246,3 +246,29 @@ def transitive_impact(source_id, source_status, commitments_by_id, edges):
         return []
 
     return downstream_closure(source_id, commitments_by_id, edges)
+
+
+def build_graph_payload(commitments, dependencies):
+    """Assemble the full graph response from row objects.
+
+    Pure: the caller owns the queries, this function only derives the
+    structure. Shared by the live graph endpoint and the snapshot
+    endpoint so a snapshot is always exactly what the live view showed.
+    """
+    node_ids = [commitment.id for commitment in commitments]
+
+    cycles = detect_cycles(dependencies, node_ids)
+
+    commitments_by_id = {
+        commitment.id: commitment
+        for commitment in commitments
+    }
+
+    return {
+        "nodes": commitments,
+        "edges": dependencies,
+        "cycles": cycles,
+        "has_cycles": len(cycles) > 0,
+        "topological_order": topological_order(dependencies, node_ids),
+        "analysis": analyze_node_states(commitments_by_id, dependencies),
+    }

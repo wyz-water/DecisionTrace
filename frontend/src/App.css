@@ -2719,3 +2719,66 @@ body {
   display: block;
   font-size: 12px;
 }
+
+/* --- Graph snapshots --------------------------------------------------- */
+
+.snapshot-form {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
+.snapshot-form input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.snapshot-hint {
+  margin: 6px 0 0;
+}
+
+.snapshot-viewing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.snapshot-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snapshot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.snapshot-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.snapshot-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* --- Overdue commitments ------------------------------------------------ */
+
+.due-overdue {
+  color: #b42318;
+}

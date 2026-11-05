@@ -10,13 +10,13 @@ from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
 from app.models.dependency import Dependency
 from app.models.discussion import Discussion
+from app.models.snapshot import Snapshot
 from app.schemas.project import ProjectCreate, ProjectResponse
 from app.schemas.graph import ProjectGraphResponse
 from app.schemas.conflict import ProjectConflictsResponse
 from app.services.graph import (
-    analyze_node_states,
+    build_graph_payload,
     detect_cycles,
-    topological_order,
 )
 from app.services.consistency import date_inversion
 
@@ -83,23 +83,9 @@ def get_project_graph(
         Dependency.project_id == project_id
     ).all()
 
-    node_ids = [commitment.id for commitment in commitments]
-
-    cycles = detect_cycles(dependencies, node_ids)
-
-    commitments_by_id = {
-        commitment.id: commitment
-        for commitment in commitments
-    }
-
     return {
         "project_id": project_id,
-        "nodes": commitments,
-        "edges": dependencies,
-        "cycles": cycles,
-        "has_cycles": len(cycles) > 0,
-        "topological_order": topological_order(dependencies, node_ids),
-        "analysis": analyze_node_states(commitments_by_id, dependencies),
+        **build_graph_payload(commitments, dependencies),
     }
 
 
@@ -328,6 +314,10 @@ def delete_project(
 
     db.query(Discussion).filter(
         Discussion.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    db.query(Snapshot).filter(
+        Snapshot.project_id == project.id
     ).delete(synchronize_session=False)
 
     db.delete(project)
