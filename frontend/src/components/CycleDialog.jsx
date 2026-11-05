@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import StatusBadge from "./StatusBadge.jsx";
+import { useI18n } from "../i18n";
 
 /**
  * Constraint brief (Refactoring UI, workflow B).
@@ -22,6 +23,7 @@ export default function CycleDialog({
   onRemoveLink,
   busy,
 }) {
+  const { t, te } = useI18n();
   const dialogRef = useRef(null);
 
   useEffect(() => {
@@ -77,6 +79,14 @@ export default function CycleDialog({
 
   const { attempted, nodes, hops, recommendation } = report;
 
+  const recommendationText =
+    recommendation.action === "MARK_BLOCKED"
+      ? t("cycle.recommendationMark", {
+          owner: recommendation.owner,
+          description: recommendation.description,
+        })
+      : t("cycle.recommendationReview");
+
   // Existing links that could be removed to break the loop. The dialog
   // only recommends this when nothing can be parked, so the advice has to
   // be executable here — pointing at a button that lives on another
@@ -112,15 +122,15 @@ export default function CycleDialog({
         ref={dialogRef}
         tabIndex={-1}
       >
-        <p className="eyebrow modal-eyebrow">Dependency refused</p>
+        <p className="eyebrow modal-eyebrow">{t("cycle.eyebrow")}</p>
 
-        <h2 id="cycle-title">This link would create a circular plan</h2>
+        <h2 id="cycle-title">{t("cycle.title")}</h2>
 
         <p className="modal-summary" id="cycle-summary">
-          Making <strong>{attempted.predecessor_owner}</strong> block{" "}
-          <strong>{attempted.successor_owner}</strong> closes a loop: these
-          tasks would end up waiting on each other, and none of them could
-          start. The link was not saved.
+          {t("cycle.summary", {
+            predecessor: attempted.predecessor_owner,
+            successor: attempted.successor_owner,
+          })}
         </p>
 
         <ol className="cycle-chain">
@@ -146,9 +156,11 @@ export default function CycleDialog({
                   <div className={`cycle-hop${hop.is_new ? " is-new" : ""}`}>
                     <span className="cycle-hop-rail" aria-hidden="true" />
                     <span className="cycle-hop-label">
-                      {hop.dependency_type}
-                      {hop.is_new && <em>new link</em>}
-                      {index === nodes.length - 1 && <em>closes the loop</em>}
+                      {t(`type.${hop.dependency_type}`, {}, hop.dependency_type)}
+                      {hop.is_new && <em>{t("cycle.newLink")}</em>}
+                      {index === nodes.length - 1 && (
+                        <em>{t("cycle.closesLoop")}</em>
+                      )}
                     </span>
                   </div>
                 )}
@@ -158,15 +170,15 @@ export default function CycleDialog({
         </ol>
 
         <div className="modal-recommendation">
-          <p className="eyebrow">Recommended</p>
+          <p className="eyebrow">{t("cycle.recommended")}</p>
 
-          <p>{recommendation.message}</p>
+          <p>{recommendationText}</p>
 
           {removableLinks.length > 0 && (
             <>
               {recommendation.commitment_id && (
                 <p className="cycle-removal-label">
-                  Or break the loop by removing a link:
+                  {t("cycle.breakByRemoving")}
                 </p>
               )}
 
@@ -174,7 +186,10 @@ export default function CycleDialog({
                 {removableLinks.map((link) => (
                   <li key={link.dependency_id}>
                     <span>
-                      {link.fromOwner} blocks {link.toOwner}
+                      {t("cycle.blocks", {
+                        from: link.fromOwner,
+                        to: link.toOwner,
+                      })}
                     </span>
 
                     <button
@@ -182,9 +197,12 @@ export default function CycleDialog({
                       className="secondary-button"
                       onClick={() => onRemoveLink(link.dependency_id)}
                       disabled={busy}
-                      aria-label={`Remove the link from ${link.fromOwner} to ${link.toOwner}`}
+                      aria-label={t("cycle.removeLinkAria", {
+                        from: link.fromOwner,
+                        to: link.toOwner,
+                      })}
                     >
-                      Remove link
+                      {t("cycle.removeLink")}
                     </button>
                   </li>
                 ))}
@@ -194,7 +212,7 @@ export default function CycleDialog({
 
           {error && (
             <p className="modal-error" role="alert">
-              {error}
+              {te(error)}
             </p>
           )}
 
@@ -207,8 +225,10 @@ export default function CycleDialog({
                 disabled={busy}
               >
                 {busy
-                  ? "Marking as blocked..."
-                  : `Mark ${recommendation.owner}'s task as blocked`}
+                  ? t("cycle.markingBlocked")
+                  : t("cycle.markBlocked", {
+                      owner: recommendation.owner,
+                    })}
               </button>
             )}
 
@@ -217,7 +237,7 @@ export default function CycleDialog({
               className="secondary-button"
               onClick={onClose}
             >
-              Close
+              {t("common.close")}
             </button>
           </div>
         </div>

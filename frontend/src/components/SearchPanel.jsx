@@ -3,16 +3,9 @@ import { useState } from "react";
 import Pagination from "./Pagination";
 import StatusBadge from "./StatusBadge";
 import usePagedList from "../usePagedList";
+import { useI18n } from "../i18n";
 
 const API_URL = "http://127.0.0.1:8000";
-
-const KIND_LABELS = {
-  decision: "Decision",
-  commitment: "Commitment",
-  discussion: "Discussion",
-  decision_history: "Decision change",
-  commitment_history: "Commitment change",
-};
 
 /**
  * UC08: search decision history and source context.
@@ -28,6 +21,7 @@ export default function SearchPanel({
   onOpenCommitment,
   onNavigate,
 }) {
+  const { t, tp, te, formatDateTime } = useI18n();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
 
@@ -54,6 +48,38 @@ export default function SearchPanel({
     }
   }
 
+  function kindLabel(kind) {
+    return t(`search.kind.${kind}`, {}, kind);
+  }
+
+  // History rows arrive as "Decision #5 · CONFIRMED → SUPERSEDED".
+  // Rebuild that label so the statuses follow the selected language.
+  function resultTitle(item) {
+    if (!item.kind.endsWith("history")) {
+      return item.title;
+    }
+
+    const history = /^(Decision|Commitment) #(\d+) · (\w+) → (\w+)$/.exec(
+      item.title
+    );
+
+    if (!history) {
+      return item.title;
+    }
+
+    const [, noun, id, oldStatus, newStatus] = history;
+    const key =
+      noun === "Decision"
+        ? "search.decisionHistoryTitle"
+        : "search.commitmentHistoryTitle";
+
+    return t(key, {
+      id,
+      old: t(`status.${oldStatus}`, {}, oldStatus),
+      new: t(`status.${newStatus}`, {}, newStatus),
+    });
+  }
+
   function openResult(item) {
     switch (item.kind) {
       case "decision":
@@ -77,45 +103,42 @@ export default function SearchPanel({
 
   return (
     <section className="card search-card">
-      <p className="eyebrow">TRACE</p>
-      <h2>Search decisions &amp; history</h2>
+      <p className="eyebrow">{t("search.eyebrow")}</p>
+      <h2>{t("search.title")}</h2>
 
       <form className="search-form" onSubmit={submit}>
         <input
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search decisions, commitments, discussions and changes…"
+          placeholder={t("search.placeholder")}
         />
         <button
           type="submit"
           className="primary-button"
           disabled={!query.trim()}
         >
-          Search
+          {t("common.search")}
         </button>
       </form>
 
-      {!submitted && (
-        <p className="muted">
-          Try “PostgreSQL”, “schema” or “Carol” — every term must match
-          somewhere in one record.
-        </p>
+      {!submitted && <p className="muted">{t("search.hint")}</p>}
+
+      {submitted && loading && (
+        <p className="muted">{t("search.searching")}</p>
       )}
 
-      {submitted && loading && <p className="muted">Searching…</p>}
-
-      {submitted && error && <p className="pipeline-error">{error}</p>}
+      {submitted && error && <p className="pipeline-error">{te(error)}</p>}
 
       {submitted && !loading && total === 0 && (
-        <p className="muted">No records match “{submitted}”.</p>
+        <p className="muted">
+          {t("search.noResults", { query: submitted })}
+        </p>
       )}
 
       {total > 0 && (
         <>
-          <p className="muted">
-            {total} {total === 1 ? "record" : "records"} match.
-          </p>
+          <p className="muted">{tp("search.matchCount", total)}</p>
 
           <ul className="search-results">
             {items.map((item) => (
@@ -131,14 +154,14 @@ export default function SearchPanel({
                         : item.kind
                     }`}
                   >
-                    {KIND_LABELS[item.kind]}
+                    {kindLabel(item.kind)}
                   </span>
 
                   {item.status && <StatusBadge status={item.status} />}
 
                   {item.changed_at && (
                     <span className="muted search-when">
-                      {item.changed_at.replace("T", " ").slice(0, 16)}
+                      {formatDateTime(item.changed_at)}
                     </span>
                   )}
                 </div>
@@ -148,7 +171,7 @@ export default function SearchPanel({
                   className="search-result-title"
                   onClick={() => openResult(item)}
                 >
-                  {item.title}
+                  {resultTitle(item)}
                 </button>
 
                 {item.snippet && (
@@ -161,8 +184,14 @@ export default function SearchPanel({
                 )}
 
                 <p className="muted search-matched">
-                  Matched {item.matched_field} · opens in{" "}
-                  {KIND_LABELS[item.kind]}
+                  {t("search.matched", {
+                    field: t(
+                      `search.field.${item.matched_field}`,
+                      {},
+                      item.matched_field
+                    ),
+                    kind: kindLabel(item.kind),
+                  })}
                 </p>
               </li>
             ))}
@@ -173,7 +202,7 @@ export default function SearchPanel({
             limit={limit}
             offset={offset}
             onChange={setOffset}
-            label="Search results"
+            label={t("search.resultsLabel")}
           />
         </>
       )}

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import Pagination from "./Pagination";
+import { useI18n } from "../i18n";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -16,6 +17,7 @@ const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
  * components/Pagination.jsx for the token list it draws from.
  */
 export default function DiscussionsPanel({ page, projectId, reload }) {
+  const { t, tp, te } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,12 +40,12 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
   async function importFile(file) {
     if (!IMPORT_NAME.test(file.name)) {
-      setError("Please import a .txt, .md, .docx or .pdf file.");
+      setError(t("intake.importError"));
       return;
     }
 
     if (file.size > MAX_IMPORT_BYTES) {
-      setError("File is larger than 5 MB; split the notes and import again.");
+      setError(t("intake.fileTooLarge"));
       return;
     }
 
@@ -63,14 +65,18 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || `Could not import ${file.name}.`);
+        throw new Error(
+          te(data.detail) || t("intake.importFailed", { name: file.name })
+        );
       }
 
       const discussion = await response.json();
 
       // Import and extraction are one flow: the file just imported is the
       // one the user wants candidates from.
-      setNotice(`Imported ${file.name} (${discussion.encoding}) — extracting…`);
+      setNotice(
+        t("intake.imported", { name: file.name, encoding: discussion.encoding })
+      );
 
       const extractResponse = await fetch(
         `${API_URL}/candidates/extract/${discussion.id}`,
@@ -79,22 +85,31 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
       if (extractResponse.ok) {
         const result = await extractResponse.json();
-        const noun = result.created === 1 ? "candidate" : "candidates";
         const skipped =
-          result.skipped > 0 ? ` · ${result.skipped} already existed` : "";
+          result.skipped > 0
+            ? t("intake.alreadyExisted", { count: result.skipped })
+            : "";
 
         setNotice(
-          `Imported ${file.name} (${discussion.encoding}) — ` +
-            `${result.created} ${noun} created${skipped}.`
+          tp("intake.importedCreated", result.created, {
+            name: file.name,
+            encoding: discussion.encoding,
+            skipped,
+          })
         );
       } else {
-        setNotice(`Imported ${file.name} (${discussion.encoding}).`);
+        setNotice(
+          t("intake.importedOnly", {
+            name: file.name,
+            encoding: discussion.encoding,
+          })
+        );
       }
 
       page.setOffset(0);
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("intake.importFailed", { name: file.name }));
     } finally {
       setBusy(false);
       setDragging(false);
@@ -134,7 +149,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Failed to create discussion");
+        throw new Error(te(data.detail) || t("intake.failedCreate"));
       }
 
       setTitle("");
@@ -145,7 +160,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
       page.setOffset(0);
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("intake.failedCreate"));
     } finally {
       setBusy(false);
     }
@@ -164,38 +179,41 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Extraction failed");
+        throw new Error(te(data.detail) || t("intake.extractionFailed"));
       }
 
       const result = await response.json();
-      const noun = result.created === 1 ? "candidate" : "candidates";
 
       if (result.created > 0 && result.skipped > 0) {
         setNotice(
-          `${result.created} ${noun} created · ${result.skipped} already ` +
-            `extracted or reviewed`
+          tp("intake.createdSomeSkipped", result.created, {
+            count: result.created,
+            skipped: result.skipped,
+          })
         );
       } else if (result.created > 0) {
-        setNotice(`${result.created} ${noun} created from discussion #${discussionId}`);
-      } else if (result.skipped === 1) {
         setNotice(
-          `Nothing new — that candidate already exists for discussion #${discussionId}`
+          tp("intake.created", result.created, {
+            count: result.created,
+            id: discussionId,
+          })
         );
+      } else if (result.skipped === 1) {
+        setNotice(t("intake.nothingNewOne", { id: discussionId }));
       } else if (result.skipped > 1) {
         setNotice(
-          `Nothing new — all ${result.skipped} candidates already exist ` +
-            `for discussion #${discussionId}`
+          t("intake.nothingNewMany", {
+            count: result.skipped,
+            id: discussionId,
+          })
         );
       } else {
-        setNotice(
-          "No candidates found. Extraction needs sentences like " +
-            '"Bob will ship the API by 2026-11-20."'
-        );
+        setNotice(t("intake.noCandidates"));
       }
 
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("intake.extractionFailed"));
     } finally {
       setExtractingId(null);
     }
@@ -203,8 +221,8 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
   return (
     <section className="card pipeline-card">
-      <p className="eyebrow">DISCUSSIONS</p>
-      <h2>Import a discussion</h2>
+      <p className="eyebrow">{t("intake.discussionsEyebrow")}</p>
+      <h2>{t("intake.importTitle")}</h2>
 
       <div className="pipeline-grid">
         <div
@@ -220,14 +238,14 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
         >
           <input
             type="text"
-            placeholder="Discussion title (e.g. Week 2 sync)"
+            placeholder={t("intake.titlePlaceholder")}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
           />
 
           <textarea
             rows={6}
-            placeholder="Paste the meeting notes here, or drag a file anywhere onto this card..."
+            placeholder={t("intake.contentPlaceholder")}
             value={content}
             onChange={(event) => setContent(event.target.value)}
           />
@@ -246,12 +264,11 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
             disabled={busy}
             onClick={() => fileInputRef.current?.click()}
           >
-            {busy ? "Importing..." : "Import file"}
+            {busy ? t("intake.importing") : t("intake.importFile")}
           </button>
 
           <span className="muted import-formats">
-            .txt / .md / .docx / .pdf — imported files are saved and
-            extracted in one step
+            {t("intake.formats")}
           </span>
 
           <button
@@ -259,7 +276,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
             disabled={busy || !title.trim() || !content.trim()}
             onClick={createDiscussion}
           >
-            {busy ? "Saving..." : "Save discussion"}
+            {busy ? t("common.saving") : t("intake.saveDiscussion")}
           </button>
         </div>
 
@@ -277,13 +294,13 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
             aria-busy={page.loading}
           >
             {page.total === 0 ? (
-              <p className="muted">No discussions recorded yet.</p>
+              <p className="muted">{t("intake.noDiscussions")}</p>
             ) : (
               page.items.map((discussion) => (
                 <div className="discussion-item" key={discussion.id}>
                   <div>
                     <strong>{discussion.title}</strong>
-                    <span>Discussion #{discussion.id}</span>
+                    <span>{t("intake.discussion", { id: discussion.id })}</span>
                   </div>
 
                   <p>{discussion.content}</p>
@@ -294,15 +311,17 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
                     onClick={() => extract(discussion.id)}
                   >
                     {extractingId === discussion.id
-                      ? "Extracting..."
-                      : "Extract candidates"}
+                      ? t("intake.extracting")
+                      : t("intake.extract")}
                   </button>
                 </div>
               ))
             )}
 
-            {error && <p className="pipeline-error">{error}</p>}
-            {page.error && <p className="pipeline-error">{page.error}</p>}
+            {error && <p className="pipeline-error">{te(error)}</p>}
+            {page.error && (
+              <p className="pipeline-error">{te(page.error)}</p>
+            )}
           </div>
 
           <Pagination
@@ -310,7 +329,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
             limit={page.limit}
             offset={page.offset}
             onChange={page.setOffset}
-            label="Discussions"
+            label={t("intake.discussionsLabel")}
             busy={page.loading}
           />
         </div>

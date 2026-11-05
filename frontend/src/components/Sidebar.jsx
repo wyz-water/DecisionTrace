@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { useI18n } from "../i18n";
 import { VIEW_GROUPS } from "../views";
 
 /**
@@ -38,6 +39,7 @@ function countsFor(view, counts) {
 }
 
 export default function Sidebar({ active, counts = {} }) {
+  const { t } = useI18n();
   const activeLink = useRef(null);
 
   useEffect(() => {
@@ -45,15 +47,15 @@ export default function Sidebar({ active, counts = {} }) {
   }, [active]);
 
   return (
-    <nav className="sidebar" aria-label="Sections">
+    <nav className="sidebar" aria-label={t("nav.sections")}>
       {VIEW_GROUPS.map((group) => (
         <div
           className="sidebar-group"
-          key={group.label}
+          key={group.labelKey}
           role="group"
-          aria-label={group.label}
+          aria-label={t(group.labelKey)}
         >
-          <p className="sidebar-label">{group.label}</p>
+          <p className="sidebar-label">{t(group.labelKey)}</p>
 
           <ul className="sidebar-list">
             {group.views.map((view) => {
@@ -70,7 +72,7 @@ export default function Sidebar({ active, counts = {} }) {
                     href={`#${view.id}`}
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <span>{view.label}</span>
+                    <span>{t(view.labelKey)}</span>
 
                     {count > 0 && (
                       <span

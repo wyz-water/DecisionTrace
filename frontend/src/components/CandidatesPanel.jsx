@@ -1,8 +1,16 @@
 import { useState } from "react";
 
 import Pagination from "./Pagination";
+import StatusBadge from "./StatusBadge";
+import { useI18n } from "../i18n";
 
 const API_URL = "http://127.0.0.1:8000";
+
+function backendDetail(data) {
+  return typeof data.detail === "string"
+    ? data.detail
+    : data.detail?.message;
+}
 
 /**
  * Constraint brief (refactoring-ui, Workflow B):
@@ -17,27 +25,28 @@ const API_URL = "http://127.0.0.1:8000";
 function candidateFields(candidate) {
   if (candidate.candidate_type === "DECISION") {
     return [
-      { key: "title", label: "Title" },
-      { key: "rationale", label: "Rationale" },
+      { key: "title", labelKey: "candidates.field.title" },
+      { key: "rationale", labelKey: "candidates.field.rationale" },
     ];
   }
 
   if (candidate.candidate_type === "COMMITMENT") {
     return [
-      { key: "owner", label: "Owner" },
-      { key: "description", label: "Description" },
-      { key: "due_date", label: "Due date" },
-      { key: "decision_title", label: "Linked decision" },
+      { key: "owner", labelKey: "candidates.field.owner" },
+      { key: "description", labelKey: "candidates.field.description" },
+      { key: "due_date", labelKey: "candidates.field.dueDate" },
+      { key: "decision_title", labelKey: "candidates.field.decisionTitle" },
     ];
   }
 
   return [
-    { key: "predecessor_owner", label: "Predecessor" },
-    { key: "successor_owner", label: "Successor" },
+    { key: "predecessor_owner", labelKey: "candidates.field.predecessor" },
+    { key: "successor_owner", labelKey: "candidates.field.successor" },
   ];
 }
 
 export default function CandidatesPanel({ pending, reviewed, reload }) {
+  const { t, te, formatDate } = useI18n();
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [busyId, setBusyId] = useState(null);
@@ -67,13 +76,15 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Failed to save candidate");
+        throw new Error(
+          te(backendDetail(data)) || t("candidates.failedSave")
+        );
       }
 
       setEditingId(null);
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("candidates.failedSave"));
     } finally {
       setBusyId(null);
     }
@@ -96,7 +107,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       );
 
       if (!response.ok) {
-        throw new Error("Could not load the prerequisite commitments.");
+        throw new Error(t("candidates.prereqLoad"));
       }
 
       const data = await response.json();
@@ -126,7 +137,11 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
       setPrereqData({ loading: false, rows, error: "" });
     } catch (err) {
-      setPrereqData({ loading: false, rows: [], error: err.message });
+      setPrereqData({
+        loading: false,
+        rows: [],
+        error: te(err.message) || t("candidates.prereqLoad"),
+      });
     }
   }
 
@@ -152,20 +167,27 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       if (!response.ok) {
         const data = await response.json();
 
+        if (data.detail?.code === "CYCLE_DETECTED") {
+          throw new Error(
+            t("candidates.cycleConfirm", {
+              predecessor:
+                data.detail.attempted?.predecessor_owner ?? "?",
+              successor: data.detail.attempted?.successor_owner ?? "?",
+            })
+          );
+        }
+
         // The confirm endpoint answers 409 with a structured detail
         // (cycle rejection carries code/message/hops), unlike the plain
         // strings the edit endpoints return.
-        const detail =
-          typeof data.detail === "string"
-            ? data.detail
-            : data.detail?.message;
-
-        throw new Error(detail || "Failed to confirm candidate");
+        throw new Error(
+          te(backendDetail(data)) || t("candidates.failedConfirm")
+        );
       }
 
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("candidates.failedConfirm"));
 
       // A dependency cannot be confirmed before the commitments it links
       // exist. When that happens, open the prerequisite list right where
@@ -202,14 +224,16 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Failed to reject candidate");
+        throw new Error(
+          te(backendDetail(data)) || t("candidates.failedReject")
+        );
       }
 
       setRejectingId(null);
       setRejectComment("");
       await reload();
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message) || t("candidates.failedReject"));
     } finally {
       setBusyId(null);
     }
@@ -222,27 +246,35 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
     const fields = candidateFields(candidate);
 
     return (
-      <div className="candidate-card" id={`candidate-${candidate.id}`} key={candidate.id}>
+      <div
+        className="candidate-card"
+        id={`candidate-${candidate.id}`}
+        key={candidate.id}
+      >
         <div className="candidate-top">
-          <span className={`type-badge type-${candidate.candidate_type.toLowerCase()}`}>
-            {candidate.candidate_type}
+          <span
+            className={`type-badge type-${candidate.candidate_type.toLowerCase()}`}
+          >
+            {t(`candidates.type.${candidate.candidate_type}`, {}, candidate.candidate_type)}
           </span>
 
           <StatusBadge status={candidate.status} />
 
           <span className="candidate-source">
-            from discussion #{candidate.discussion_id}
+            {t("candidates.fromDiscussion", {
+              id: candidate.discussion_id,
+            })}
           </span>
         </div>
 
         {candidate.source_text && (
-          <p className="candidate-excerpt">"{candidate.source_text}"</p>
+          <p className="candidate-excerpt">“{candidate.source_text}”</p>
         )}
 
         <div className="candidate-fields">
           {fields.map((field) => (
             <div className="field-row" key={field.key}>
-              <span>{field.label}</span>
+              <span>{t(field.labelKey)}</span>
 
               {editing ? (
                 <input
@@ -253,9 +285,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                   }
                 />
               ) : (
-                <strong>
-                  {values[field.key] || "—"}
-                </strong>
+                <strong>{values[field.key] || "—"}</strong>
               )}
             </div>
           ))}
@@ -263,7 +293,9 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
         {candidate.review_comment && (
           <p className="candidate-comment">
-            Review note: {candidate.review_comment}
+            {t("candidates.reviewNote", {
+              note: candidate.review_comment,
+            })}
           </p>
         )}
 
@@ -276,14 +308,14 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                   disabled={busyId === candidate.id}
                   onClick={() => saveEdit(candidate.id)}
                 >
-                  Save
+                  {t("common.save")}
                 </button>
 
                 <button
                   className="secondary-button"
                   onClick={() => setEditingId(null)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </>
             ) : (
@@ -291,7 +323,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                 className="secondary-button"
                 onClick={() => startEdit(candidate)}
               >
-                Edit
+                {t("common.edit")}
               </button>
             )}
 
@@ -300,14 +332,16 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
               disabled={busyId === candidate.id || editing}
               onClick={() => confirm(candidate)}
             >
-              {busyId === candidate.id ? "Working..." : "Confirm"}
+              {busyId === candidate.id
+                ? t("common.working")
+                : t("common.confirm")}
             </button>
 
             {rejecting ? (
               <>
                 <input
                   type="text"
-                  placeholder="Why reject?"
+                  placeholder={t("candidates.whyReject")}
                   value={rejectComment}
                   onChange={(event) => setRejectComment(event.target.value)}
                 />
@@ -317,7 +351,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                   disabled={busyId === candidate.id}
                   onClick={() => reject(candidate.id)}
                 >
-                  Confirm reject
+                  {t("common.confirmReject")}
                 </button>
               </>
             ) : (
@@ -326,7 +360,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                 disabled={busyId === candidate.id || editing}
                 onClick={() => setRejectingId(candidate.id)}
               >
-                Reject
+                {t("common.reject")}
               </button>
             )}
           </div>
@@ -341,27 +375,28 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                 onClick={() => togglePrerequisites(candidate)}
               >
                 {prereqFor === candidate.id
-                  ? "Hide prerequisite commitments"
-                  : "Review prerequisite commitments"}
+                  ? t("candidates.hidePrereq")
+                  : t("candidates.reviewPrereq")}
               </button>
 
               {prereqFor === candidate.id && prereqData && (
                 <div className="prereq-panel">
-                  <p className="prereq-hint">
-                    A dependency links two commitments. Confirm both
-                    commitments below first, then confirm this dependency.
-                  </p>
+                  <p className="prereq-hint">{t("candidates.prereqHint")}</p>
 
-                  {prereqData.loading && <p className="muted">Loading...</p>}
+                  {prereqData.loading && (
+                    <p className="muted">{t("common.loading")}</p>
+                  )}
                   {prereqData.error && (
-                    <p className="pipeline-error">{prereqData.error}</p>
+                    <p className="pipeline-error">{te(prereqData.error)}</p>
                   )}
 
                   {prereqData.rows.map((row) => (
                     <div className="prereq-row" key={row.role}>
                       <div className="prereq-owner">
                         <strong>{row.owner}</strong>
-                        <span className="prereq-role">{row.role}</span>
+                        <span className="prereq-role">
+                          {t(`candidates.prereqRole.${row.role}`, {}, row.role)}
+                        </span>
                       </div>
 
                       <div className="prereq-items">
@@ -370,12 +405,14 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                             <div className="prereq-item" key={item.id}>
                               <div>
                                 <span className="prereq-state state-pending">
-                                  PENDING
+                                  {t("candidates.prereqPending")}
                                 </span>
                                 <strong>{item.payload.description}</strong>
                                 {item.payload.due_date && (
                                   <span className="prereq-due">
-                                    due {item.payload.due_date}
+                                    {t("candidates.prereqDue", {
+                                      date: formatDate(item.payload.due_date),
+                                    })}
                                   </span>
                                 )}
                               </div>
@@ -391,7 +428,9 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                                   }
                                 }}
                               >
-                                {busyId === item.id ? "Working..." : "Confirm"}
+                                {busyId === item.id
+                                  ? t("common.working")
+                                  : t("common.confirm")}
                               </button>
                             </div>
                           ))
@@ -399,10 +438,12 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                           <div className="prereq-item">
                             <div>
                               <span className="prereq-state state-ok">
-                                CONFIRMED
+                                {t("candidates.prereqConfirmed")}
                               </span>
                               <span>
-                                {row.owner}'s commitment already exists.
+                                {t("candidates.prereqExists", {
+                                  owner: row.owner,
+                                })}
                               </span>
                             </div>
                           </div>
@@ -410,11 +451,12 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                           <div className="prereq-item">
                             <div>
                               <span className="prereq-state state-missing">
-                                NOT FOUND
+                                {t("candidates.prereqMissing")}
                               </span>
                               <span>
-                                No commitment for {row.owner} yet — check the
-                                name, or create the commitment first.
+                                {t("candidates.prereqMissingHint", {
+                                  owner: row.owner,
+                                })}
                               </span>
                             </div>
                           </div>
@@ -434,19 +476,23 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
   return (
     <section className="card pipeline-card">
-      <p className="eyebrow">AI CANDIDATES</p>
-      <h2>Human review</h2>
+      <p className="eyebrow">{t("candidates.eyebrow")}</p>
+      <h2>{t("candidates.title")}</h2>
 
-      {error && <p className="pipeline-error">{error}</p>}
+      {error && <p className="pipeline-error">{te(error)}</p>}
 
       {pending.total > 0 && (
         <>
           <h3 className="candidate-group">
-            Pending review ({pending.total})
+            {t("candidates.pending", { count: pending.total })}
           </h3>
 
           <div
-            className={pending.loading ? "candidate-grid is-loading" : "candidate-grid"}
+            className={
+              pending.loading
+                ? "candidate-grid is-loading"
+                : "candidate-grid"
+            }
             aria-busy={pending.loading}
           >
             {pending.items.map(renderCard)}
@@ -457,7 +503,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             limit={pending.limit}
             offset={pending.offset}
             onChange={pending.setOffset}
-            label="Pending candidates"
+            label={t("candidates.pendingLabel")}
             busy={pending.loading}
           />
         </>
@@ -466,11 +512,15 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       {reviewed.total > 0 && (
         <>
           <h3 className="candidate-group">
-            Reviewed ({reviewed.total})
+            {t("candidates.reviewed", { count: reviewed.total })}
           </h3>
 
           <div
-            className={reviewed.loading ? "candidate-grid is-loading" : "candidate-grid"}
+            className={
+              reviewed.loading
+                ? "candidate-grid is-loading"
+                : "candidate-grid"
+            }
             aria-busy={reviewed.loading}
           >
             {reviewed.items.map(renderCard)}
@@ -481,25 +531,20 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             limit={reviewed.limit}
             offset={reviewed.offset}
             onChange={reviewed.setOffset}
-            label="Reviewed candidates"
+            label={t("candidates.reviewedLabel")}
             busy={reviewed.loading}
           />
         </>
       )}
 
-      {!hasAny && (
-        <p className="muted">
-          No candidates yet. Save a discussion above and run extraction.
-        </p>
-      )}
+      {!hasAny && <p className="muted">{t("candidates.none")}</p>}
 
-      {pending.error && <p className="pipeline-error">{pending.error}</p>}
-      {reviewed.error && <p className="pipeline-error">{reviewed.error}</p>}
+      {pending.error && (
+        <p className="pipeline-error">{te(pending.error)}</p>
+      )}
+      {reviewed.error && (
+        <p className="pipeline-error">{te(reviewed.error)}</p>
+      )}
     </section>
   );
-}
-
-function StatusBadge({ status }) {
-  const className = `status-badge status-${status.toLowerCase()}`;
-  return <span className={className}>{status}</span>;
 }

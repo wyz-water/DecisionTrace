@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useI18n } from "../i18n";
+
 /**
  * GitHub-Desktop style project switcher: the project chip in the top bar
  * opens a searchable menu of every project, with an inline "new project"
@@ -12,6 +14,7 @@ export default function ProjectSwitcher({
   onCreate,
   onDelete,
 }) {
+  const { t, te } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState("list"); // list | create
@@ -74,7 +77,7 @@ export default function ProjectSwitcher({
       setConfirmingId(null);
       setOpen(false);
     } catch (err) {
-      setError(err.message || "Could not delete the project.");
+      setError(te(err.message) || t("project.couldNotDelete"));
     } finally {
       setSaving(false);
     }
@@ -100,7 +103,7 @@ export default function ProjectSwitcher({
       await onCreate(name.trim(), description.trim() || null);
       setOpen(false);
     } catch (err) {
-      setError(err.message || "Could not create the project.");
+      setError(te(err.message) || t("project.couldNotCreate"));
     } finally {
       setSaving(false);
     }
@@ -116,7 +119,7 @@ export default function ProjectSwitcher({
         onClick={() => (open ? setOpen(false) : openMenu())}
       >
         <span className="project-switcher-name">
-          {activeProject?.name || "Select a project"}
+          {activeProject?.name || t("project.select")}
         </span>
         <span className="project-switcher-caret" aria-hidden="true">
           ▾
@@ -139,7 +142,7 @@ export default function ProjectSwitcher({
                   ref={searchRef}
                   type="text"
                   className="project-switcher-search"
-                  placeholder="Find a project..."
+                  placeholder={t("project.find")}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -147,7 +150,7 @@ export default function ProjectSwitcher({
                 <div className="project-switcher-list">
                   {filtered.length === 0 && (
                     <p className="project-switcher-empty">
-                      No projects match “{query}”.
+                      {t("project.noMatch", { query })}
                     </p>
                   )}
 
@@ -161,8 +164,12 @@ export default function ProjectSwitcher({
                           key={project.id}
                         >
                           <div className="project-switcher-confirm-text">
-                            <strong>Delete “{project.name}”?</strong>
-                            <span>All of its records will be removed.</span>
+                            <strong>
+                              {t("project.deleteConfirm", {
+                                name: project.name,
+                              })}
+                            </strong>
+                            <span>{t("project.deleteWarning")}</span>
                           </div>
 
                           <div className="project-switcher-confirm-actions">
@@ -172,7 +179,7 @@ export default function ProjectSwitcher({
                               disabled={saving}
                               onClick={() => setConfirmingId(null)}
                             >
-                              Cancel
+                              {t("common.cancel")}
                             </button>
 
                             <button
@@ -181,7 +188,7 @@ export default function ProjectSwitcher({
                               disabled={saving}
                               onClick={() => handleDelete(project)}
                             >
-                              {saving ? "Deleting..." : "Delete"}
+                              {saving ? t("common.deleting") : t("common.delete")}
                             </button>
                           </div>
                         </div>
@@ -225,7 +232,9 @@ export default function ProjectSwitcher({
                         <button
                           type="button"
                           className="project-switcher-item-delete"
-                          aria-label={`Delete project ${project.name}`}
+                          aria-label={t("project.deleteAria", {
+                            name: project.name,
+                          })}
                           onClick={() => {
                             setConfirmingId(project.id);
                             setError("");
@@ -245,23 +254,23 @@ export default function ProjectSwitcher({
                   className="project-switcher-new"
                   onClick={startCreate}
                 >
-                  + New project…
+                  {t("project.new")}
                 </button>
               </>
             ) : (
               <form className="project-switcher-form" onSubmit={submitCreate}>
-                <strong>New project</strong>
+                <strong>{t("project.newTitle")}</strong>
 
                 <input
                   type="text"
-                  placeholder="Project name"
+                  placeholder={t("project.name")}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
 
                 <input
                   type="text"
-                  placeholder="Description (optional)"
+                  placeholder={t("project.description")}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
@@ -274,7 +283,7 @@ export default function ProjectSwitcher({
                     className="primary-button"
                     disabled={saving || !name.trim()}
                   >
-                    {saving ? "Creating..." : "Create project"}
+                    {saving ? t("common.creating") : t("project.create")}
                   </button>
 
                   <button
@@ -283,7 +292,7 @@ export default function ProjectSwitcher({
                     disabled={saving}
                     onClick={() => setMode("list")}
                   >
-                    Back
+                    {t("common.back")}
                   </button>
                 </div>
               </form>

@@ -2,14 +2,32 @@
   min-height: 100vh;
 }
 
+/* ---- Shared tokens -------------------------------------------------
+   The product already has a literal palette; these aliases let the new
+   language control and the Chinese typography rules draw from the same
+   values instead of inventing a second set. Existing rules keep their
+   literals — the system wins, and this is not a wholesale restyle. */
+:root {
+  --ink: #172033;
+  --body-text: #475467;
+  --muted: #697386;
+  --border: #e1e4eb;
+  --surface: #ffffff;
+  --canvas: #f6f7fb;
+  --accent: #315ca8;
+  --danger: #b42318;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #f6f7fb;
-  color: #172033;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
 }
 
 .app {
@@ -348,6 +366,12 @@ body {
 
 /* Two-up on a phone: four stacked cards push the attention list two
    screens down. */
+@media (max-width: 860px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 560px) {
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -657,6 +681,54 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+/* Language switch — tertiary, compact, and not colour-only.
+   The active option is raised with a surface + shadow + 700 weight, so
+   the state survives greyscale and colour-vision differences. */
+.language-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 2px;
+
+  background: #f8f9fc;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.language-option {
+  min-height: 28px;
+  padding: 0 9px;
+
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.language-option:hover {
+  color: var(--ink);
+}
+
+.language-option.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+.language-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .topbar-conflicts {
@@ -2354,6 +2426,7 @@ body {
    (the plain .project-label hides there; a switcher must stay usable). */
 .project-switcher {
   position: relative;
+  min-width: 0;
 }
 
 .project-label.project-switcher-trigger {
@@ -2777,8 +2850,566 @@ body {
   gap: 6px;
 }
 
+/* --- Snapshot comparison ------------------------------------------------ */
+
+.snapshot-compare {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.snapshot-compare h3 {
+  margin: 4px 0 6px;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.snapshot-compare-hint {
+  max-width: 70ch;
+  margin: 0 0 14px;
+}
+
+.snapshot-compare-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.snapshot-select {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.snapshot-select > span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.snapshot-select select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.snapshot-select select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.compare-arrow {
+  align-self: end;
+  padding-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.snapshot-compare-link {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.snapshot-compare-link:hover {
+  text-decoration: underline;
+}
+
+.snapshot-diff {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.snapshot-diff-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.snapshot-diff-head h3 {
+  margin: 3px 0 0;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.snapshot-diff-head .secondary-button {
+  flex-shrink: 0;
+}
+
+.diff-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: #f8f9fc;
+  border: 1px solid #eceef2;
+  border-radius: 12px;
+}
+
+.diff-summary-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-right: 10px;
+  border-right: 1px solid #e4e7ec;
+}
+
+.diff-summary-group:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.diff-summary-title {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.diff-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--body-text);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.diff-stat strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.diff-stat.is-zero strong {
+  color: var(--muted);
+}
+
+.diff-stat-added strong {
+  color: #267447;
+}
+
+.diff-stat-removed strong {
+  color: #b42318;
+}
+
+.diff-stat-changed strong {
+  color: #b54708;
+}
+
+.diff-order-pill {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.diff-order-pill.is-changed {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.diff-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin-top: 18px;
+}
+
+.diff-section {
+  min-width: 0;
+}
+
+.diff-section h4 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.diff-group + .diff-group {
+  margin-top: 12px;
+}
+
+.diff-group-title {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.diff-group-title.is-added {
+  color: #267447;
+}
+
+.diff-group-title.is-removed {
+  color: #b42318;
+}
+
+.diff-group-title.is-changed {
+  color: #b54708;
+}
+
+.diff-node-list,
+.diff-edge-list,
+.diff-move-list,
+.diff-state-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diff-node {
+  padding: 9px 10px;
+  border: 1px solid #eceef2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.diff-node-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.diff-node-id {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.diff-node-description {
+  margin: 4px 0 0;
+  color: var(--body-text);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.diff-node-meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.diff-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed #e4e7ec;
+  list-style: none;
+}
+
+.diff-field {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.diff-field-name {
+  color: var(--muted);
+}
+
+.diff-field-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.diff-before {
+  color: var(--muted);
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+}
+
+.diff-after {
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.diff-arrow {
+  color: var(--muted);
+}
+
+.diff-edge,
+.diff-move-list li,
+.diff-state-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid #eceef2;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.diff-edge .type-badge {
+  margin-left: auto;
+}
+
+.diff-move-rank {
+  color: var(--body-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-state-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.snapshot-diff-empty {
+  padding: 14px 16px;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+
+.snapshot-diff-empty strong {
+  display: block;
+  font-size: 13px;
+}
+
+.snapshot-diff-empty p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+}
+
+@media (max-width: 900px) {
+  .diff-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diff-summary-group {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .diff-sections {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .snapshot-form {
+    flex-direction: column;
+  }
+
+  .snapshot-form button {
+    width: 100%;
+  }
+
+  .snapshot-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .snapshot-item-actions {
+    flex-wrap: wrap;
+  }
+
+  .snapshot-compare-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .compare-arrow {
+    display: none;
+  }
+
+  .snapshot-compare-form .secondary-button {
+    width: 100%;
+  }
+
+  .snapshot-diff-head {
+    flex-direction: column;
+  }
+
+  .snapshot-diff-head .secondary-button {
+    width: 100%;
+  }
+
+  .diff-field {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 /* --- Overdue commitments ------------------------------------------------ */
 
 .due-overdue {
   color: #b42318;
+}
+
+/* ------------------------------------------------------------------
+   Chinese typography
+   ------------------------------------------------------------------
+   Microsoft YaHei has no true uppercase and no true 800 weight. Letting
+   the browser synthesise either makes Chinese labels look smeared, so
+   CJK headings drop to 700, the tracked-uppercase labels lose the
+   transform, and headings lose the negative tracking that only helps
+   Latin text. Sizes are nudged up where the Latin scale would leave a
+   10.5px Chinese label hard to read.
+   ------------------------------------------------------------------ */
+.graph-svg text {
+  font-family: var(--font-sans);
+}
+
+html[lang="zh-CN"] .hero h1,
+html[lang="zh-CN"] .view-header h1 {
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+html[lang="zh-CN"] .hero h1 {
+  font-size: clamp(32px, 4.6vw, 48px);
+  line-height: 1.2;
+}
+
+html[lang="zh-CN"] .hero > p:last-child {
+  max-width: 42em;
+}
+
+html[lang="zh-CN"] .sidebar-label,
+html[lang="zh-CN"] .eyebrow,
+html[lang="zh-CN"] .kpi-label,
+html[lang="zh-CN"] .attention-tag,
+html[lang="zh-CN"] .conflict-type,
+html[lang="zh-CN"] .link-field > span,
+html[lang="zh-CN"] .link-connector,
+html[lang="zh-CN"] .diff-summary-title,
+html[lang="zh-CN"] .diff-group-title {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+html[lang="zh-CN"] .sidebar-label,
+html[lang="zh-CN"] .kpi-label,
+html[lang="zh-CN"] .attention-tag {
+  font-size: 11.5px;
+}
+
+html[lang="zh-CN"] .diff-summary-title,
+html[lang="zh-CN"] .diff-group-title {
+  font-size: 11.5px;
+}
+
+html[lang="zh-CN"] .eyebrow {
+  font-size: 11.5px;
+}
+
+html[lang="zh-CN"] .conflict-type {
+  font-size: 11.5px;
+}
+
+html[lang="zh-CN"] .graph-blocked-badge,
+html[lang="zh-CN"] .severity-badge {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/* 375px top bar: the brand, the project switcher and the language switch
+   have to share one 76px row. The conflict badge is the one item that
+   can move into the sidebar without losing information. */
+@media (max-width: 640px) {
+  .topbar-inner {
+    width: 94%;
+  }
+
+  .brand {
+    font-size: 19px;
+    letter-spacing: 0;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .topbar-right {
+    gap: 8px;
+  }
+
+  .topbar-conflicts {
+    display: none;
+  }
+
+  .project-label.project-switcher-trigger {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .project-switcher-name {
+    max-width: 96px;
+  }
+
+  .language-option {
+    min-height: 26px;
+    padding: 0 7px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 400px) {
+  .brand {
+    font-size: 17px;
+  }
+
+  html[lang="zh-CN"] .hero h1 {
+    font-size: clamp(26px, 8vw, 32px);
+  }
+
+  .project-switcher-name {
+    max-width: 72px;
+  }
+
+  .language-option {
+    padding: 0 6px;
+  }
 }

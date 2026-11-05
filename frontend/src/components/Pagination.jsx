@@ -42,6 +42,8 @@
  * (§8.4).
  */
 
+import { useI18n } from "../i18n";
+
 function pageWindow(current, pageCount) {
   // First, last and the current neighbourhood; everything between
   // collapses into an ellipsis. Keeps the control row a fixed width no
@@ -81,6 +83,8 @@ export default function Pagination({
   label,
   busy = false,
 }) {
+  const { t } = useI18n();
+
   if (!total || total <= limit) {
     return null;
   }
@@ -91,9 +95,9 @@ export default function Pagination({
   const last = Math.min(offset + limit, total);
 
   return (
-    <nav className="pagination" aria-label={`${label} pages`}>
+    <nav className="pagination" aria-label={t("pagination.label", { label })}>
       <p className="pagination-meta" aria-live="polite">
-        {first}–{last} of {total}
+        {t("pagination.range", { first, last, total })}
       </p>
 
       <div className="pagination-controls">
@@ -102,9 +106,9 @@ export default function Pagination({
           className="pagination-button pagination-step"
           disabled={busy || current === 1}
           onClick={() => onChange(offset - limit)}
-          aria-label="Previous page"
+          aria-label={t("pagination.prevAria")}
         >
-          Prev
+          {t("pagination.prev")}
         </button>
 
         {pageWindow(current, pageCount).map((slot) => {
@@ -139,7 +143,7 @@ export default function Pagination({
               className="pagination-button"
               disabled={busy}
               onClick={() => onChange((slot - 1) * limit)}
-              aria-label={`Page ${slot}`}
+              aria-label={t("pagination.pageAria", { page: slot })}
             >
               {slot}
             </button>
@@ -151,9 +155,9 @@ export default function Pagination({
           className="pagination-button pagination-step"
           disabled={busy || current === pageCount}
           onClick={() => onChange(offset + limit)}
-          aria-label="Next page"
+          aria-label={t("pagination.nextAria")}
         >
-          Next
+          {t("pagination.next")}
         </button>
       </div>
     </nav>

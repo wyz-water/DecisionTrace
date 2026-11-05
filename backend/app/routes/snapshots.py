@@ -15,10 +15,16 @@ from app.models.project import Project
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
 from app.models.snapshot import Snapshot
-from app.schemas.snapshot import SnapshotCreate, SnapshotResponse
+from app.schemas.snapshot import (
+    SnapshotCreate,
+    SnapshotDiffResponse,
+    SnapshotResponse,
+    SnapshotSummary,
+)
 from app.schemas.page import Page
 from app.services.graph import build_graph_payload
 from app.services.pagination import PageParams, page_response, paginate
+from app.services.snapshot_diff import diff_graphs
 
 
 router = APIRouter(
@@ -49,6 +55,29 @@ def _edge_dict(dependency):
         "predecessor_commitment_id": dependency.predecessor_commitment_id,
         "successor_commitment_id": dependency.successor_commitment_id,
         "dependency_type": dependency.dependency_type,
+    }
+
+
+def _snapshot_summary(snapshot):
+    """List rows need counts, not a second copy of the whole graph."""
+    graph = snapshot.graph or {}
+
+    return {
+        "id": snapshot.id,
+        "project_id": snapshot.project_id,
+        "title": snapshot.title,
+        "created_at": snapshot.created_at,
+        "node_count": len(graph.get("nodes") or []),
+        "edge_count": len(graph.get("edges") or []),
+        "has_cycles": bool(graph.get("has_cycles") or graph.get("cycles")),
+    }
+
+
+def _snapshot_ref(snapshot):
+    return {
+        "id": snapshot.id,
+        "title": snapshot.title,
+        "created_at": snapshot.created_at,
     }
 
 
@@ -101,7 +130,7 @@ def create_snapshot(
 
 @router.get(
     "/{project_id}/snapshots",
-    response_model=Page[SnapshotResponse]
+    response_model=Page[SnapshotSummary]
 )
 def get_snapshots(
     project_id: int,
@@ -124,7 +153,84 @@ def get_snapshots(
 
     rows, total = paginate(query, page)
 
-    return page_response(rows, total, page)
+    return page_response(
+        [_snapshot_summary(row) for row in rows],
+        total,
+        page
+    )
+
+
+@router.get(
+    "/{project_id}/snapshots/{from_id}/diff/{to_id}",
+    response_model=SnapshotDiffResponse
+)
+def get_snapshot_diff(
+    project_id: int,
+    from_id: int,
+    to_id: int,
+    db: Session = Depends(get_db)
+):
+    """Compare two snapshots from the same project.
+
+    The direction matters: "from" is the older state and "to" is the
+    newer state. Reversing the ids produces the inverse diff.
+    """
+    project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    from_snapshot = db.query(Snapshot).filter(
+        Snapshot.id == from_id,
+        Snapshot.project_id == project_id
+    ).first()
+
+    to_snapshot = db.query(Snapshot).filter(
+        Snapshot.id == to_id,
+        Snapshot.project_id == project_id
+    ).first()
+
+    if not from_snapshot or not to_snapshot:
+        raise HTTPException(
+            status_code=404,
+            detail="Snapshot not found"
+        )
+
+    diff = diff_graphs(from_snapshot.graph, to_snapshot.graph)
+
+    return {
+        "from_snapshot": _snapshot_ref(from_snapshot),
+        "to_snapshot": _snapshot_ref(to_snapshot),
+        **diff,
+    }
+
+
+@router.get(
+    "/{project_id}/snapshots/{snapshot_id}",
+    response_model=SnapshotResponse
+)
+def get_snapshot(
+    project_id: int,
+    snapshot_id: int,
+    db: Session = Depends(get_db)
+):
+    snapshot = db.query(Snapshot).filter(
+        Snapshot.id == snapshot_id,
+        Snapshot.project_id == project_id
+    ).first()
+
+    if not snapshot:
+        raise HTTPException(
+            status_code=404,
+            detail="Snapshot not found"
+        )
+
+    return snapshot
 
 
 @router.delete(
