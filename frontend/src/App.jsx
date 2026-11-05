@@ -333,6 +333,15 @@ function App() {
   // cards re-fetch without losing the page the user is standing on.
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // Graph snapshots: saved copies of the dependency graph with a title
+  // and timestamp ("meeting summary as a graph").
+  const [snapshots, setSnapshots] = useState([]);
+  const [snapshotTitle, setSnapshotTitle] = useState("");
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
+  const [snapshotError, setSnapshotError] = useState("");
+  const [snapshotNotice, setSnapshotNotice] = useState("");
+  const [viewingSnapshot, setViewingSnapshot] = useState(null);
+
   // Which section is on screen. Driven by the URL hash so a reload, a
   // bookmark and the back button all land on the same section.
   const [view, setView] = useState(() => readView(window.location.hash));
@@ -534,6 +543,152 @@ function App() {
       await loadDashboard(null, project?.id ?? null);
     }
   }
+
+  async function loadSnapshots() {
+    if (!project?.id) {
+      setSnapshots([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/projects/${project.id}/snapshots?limit=20`
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await response.json();
+      setSnapshots(data.items ?? []);
+    } catch {
+      // A failed list refresh keeps the previous list on screen.
+    }
+  }
+
+  async function saveSnapshot(event) {
+    event.preventDefault();
+
+    const title = snapshotTitle.trim();
+
+    if (!title || !project?.id) {
+      return;
+    }
+
+    setSnapshotSaving(true);
+    setSnapshotError("");
+    setSnapshotNotice("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/projects/${project.id}/snapshots`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to save the snapshot.");
+      }
+
+      const snapshot = await response.json();
+
+      downloadGraphSvg(title);
+      setSnapshotTitle("");
+
+      const nodes = snapshot.graph?.nodes?.length ?? 0;
+      const edges = snapshot.graph?.edges?.length ?? 0;
+
+      setSnapshotNotice(
+        `Snapshot saved — ${nodes} ${nodes === 1 ? "commitment" : "commitments"}, ` +
+          `${edges} ${edges === 1 ? "dependency" : "dependencies"}. ` +
+          "The SVG was downloaded."
+      );
+
+      await loadSnapshots();
+    } catch (err) {
+      setSnapshotError(err.message);
+    } finally {
+      setSnapshotSaving(false);
+    }
+  }
+
+  function downloadGraphSvg(title) {
+    const svg = document.querySelector(".graph-svg");
+
+    if (!svg) {
+      return;
+    }
+
+    // The node in the DOM is React-owned; serialize a detached copy.
+    const clone = svg.cloneNode(true);
+    const xml = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([xml], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download =
+      `${title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.svg`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadSnapshotJson(snapshot) {
+    const blob = new Blob([JSON.stringify(snapshot.graph, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download =
+      `${snapshot.title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function deleteSnapshot(snapshotId) {
+    if (!project?.id) {
+      return;
+    }
+
+    try {
+      await fetch(
+        `${API_URL}/projects/${project.id}/snapshots/${snapshotId}`,
+        { method: "DELETE" }
+      );
+
+      if (viewingSnapshot?.id === snapshotId) {
+        setViewingSnapshot(null);
+      }
+
+      await loadSnapshots();
+    } catch (err) {
+      setSnapshotError(err.message || "Failed to delete the snapshot.");
+    }
+  }
+
+  function formatSnapshotTime(value) {
+    if (!value) {
+      return "";
+    }
+
+    return value.replace("T", " ").slice(0, 16);
+  }
+
+  useEffect(() => {
+    // Same deferred-loader pattern as the dashboard effect above.
+    async function load() {
+      await loadSnapshots();
+    }
+
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   useEffect(() => {
     // Defined locally and awaited: react-hooks' set-state-in-effect rule
@@ -945,6 +1100,13 @@ function App() {
     (node) => node.status !== "COMPLETED"
   ).length;
 
+  // Local date (YYYY-MM-DD) so due-date comparisons are calendar days,
+  // not instants. Overdue = past due and not finished.
+  const today = new Date().toISOString().slice(0, 10);
+  const isOverdue = (node) =>
+    node.due_date && node.due_date < today && node.status !== "COMPLETED";
+  const overdueCommitments = graph.nodes.filter(isOverdue);
+
   // Everything the user could act on, ordered by what unblocks the most:
   // a cycle breaks the plan, a conflict undermines the record, and
   // unreviewed candidates are simply work in the queue.
@@ -982,6 +1144,22 @@ function App() {
       } waiting for a human decision.`,
       action: "Review",
       view: "intake",
+    });
+  }
+
+  if (overdueCommitments.length > 0) {
+    attention.push({
+      key: "overdue",
+      tag: "Commitments",
+      message: `${overdueCommitments.length} ${
+        overdueCommitments.length === 1 ? "commitment is" : "commitments are"
+      } past ${
+        overdueCommitments.length === 1 ? "its" : "their"
+      } due date — ${overdueCommitments[0].owner}'s was due ${
+        overdueCommitments[0].due_date
+      }.`,
+      action: "Review",
+      view: "plan",
     });
   }
 
@@ -1721,11 +1899,121 @@ function App() {
             </div>
 
             <div className="card">
-              <GraphView
-                graph={graph}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
+              {viewingSnapshot ? (
+                <>
+                  <div className="snapshot-viewing">
+                    <span className="type-badge type-history">SNAPSHOT</span>
+
+                    <strong>{viewingSnapshot.title}</strong>
+
+                    <span className="muted">
+                      {formatSnapshotTime(viewingSnapshot.created_at)}
+                    </span>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setViewingSnapshot(null)}
+                    >
+                      Back to live graph
+                    </button>
+                  </div>
+
+                  <GraphView
+                    graph={viewingSnapshot.graph}
+                    selectedId={null}
+                    onSelect={() => {}}
+                  />
+                </>
+              ) : (
+                <GraphView
+                  graph={graph}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+              )}
+            </div>
+
+            <div className="card">
+              <p className="eyebrow">GRAPH SNAPSHOTS</p>
+              <h2>Meeting summaries as graphs</h2>
+              <p className="muted snapshot-hint">
+                Save the current graph with a title and timestamp — a
+                visual summary of a meeting you can review later.
+              </p>
+
+              <form className="snapshot-form" onSubmit={saveSnapshot}>
+                <input
+                  type="text"
+                  placeholder="Snapshot title (e.g. 2026-11-05 weekly sync)"
+                  value={snapshotTitle}
+                  onChange={(event) => setSnapshotTitle(event.target.value)}
+                />
+
+                <button
+                  type="submit"
+                  className="secondary-button"
+                  disabled={snapshotSaving || !snapshotTitle.trim()}
+                >
+                  {snapshotSaving ? "Saving..." : "Save snapshot + SVG"}
+                </button>
+              </form>
+
+              {snapshotNotice && (
+                <p className="pipeline-notice" aria-live="polite">
+                  {snapshotNotice}
+                </p>
+              )}
+
+              {snapshotError && (
+                <p className="pipeline-error" role="alert">
+                  {snapshotError}
+                </p>
+              )}
+
+              {snapshots.length === 0 ? (
+                <p className="muted">No snapshots saved yet.</p>
+              ) : (
+                <ul className="snapshot-list">
+                  {snapshots.map((snapshot) => (
+                    <li className="snapshot-item" key={snapshot.id}>
+                      <div className="snapshot-item-text">
+                        <strong>{snapshot.title}</strong>
+                        <span className="muted">
+                          {formatSnapshotTime(snapshot.created_at)} ·{" "}
+                          {snapshot.graph?.nodes?.length ?? 0} commitments
+                        </span>
+                      </div>
+
+                      <div className="snapshot-item-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setViewingSnapshot(snapshot)}
+                        >
+                          View
+                        </button>
+
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => downloadSnapshotJson(snapshot)}
+                        >
+                          JSON
+                        </button>
+
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => deleteSnapshot(snapshot.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
         )}
@@ -1768,7 +2056,12 @@ function App() {
 
                   <div className="due-date">
                     <span>Due date</span>
-                    <strong>{commitment.due_date || "Not set"}</strong>
+                    <strong
+                      className={isOverdue(commitment) ? "due-overdue" : ""}
+                    >
+                      {commitment.due_date || "Not set"}
+                      {isOverdue(commitment) ? " · overdue" : ""}
+                    </strong>
                   </div>
 
                   {editingId === commitment.id ? (
