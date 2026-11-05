@@ -3,11 +3,14 @@ import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
+import LanguageToggle from "./components/LanguageToggle.jsx";
 import Pagination from "./components/Pagination.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 import SearchPanel from "./components/SearchPanel.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import SnapshotDiff from "./components/SnapshotDiff.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
+import { useI18n } from "./i18n";
 import usePagedList from "./usePagedList.js";
 import { readView } from "./views.js";
 
@@ -32,18 +35,18 @@ function names(ids, byId) {
   return ids.map((id) => byId[id]?.owner ?? `#${id}`).join(", ");
 }
 
-function stateNote(analysis, byId) {
+function stateNote(analysis, byId, t) {
   switch (analysis.state) {
     case "DONE":
-      return "Done";
+      return t("status.DONE");
     case "READY":
-      return "No blockers";
+      return t("status.READY");
     case "WAITING":
-      return `Waiting on ${names(analysis.waiting_on, byId)}`;
+      return t("plan.waitingOn", { names: names(analysis.waiting_on, byId) });
     case "BLOCKED":
-      return `Blocked by ${names(analysis.blocked_by, byId)}`;
+      return t("plan.blockedBy", { names: names(analysis.blocked_by, byId) });
     case "CYCLIC":
-      return "Part of a dependency cycle";
+      return t("status.CYCLIC");
     default:
       return "";
   }
@@ -125,6 +128,7 @@ function computeLayout(graph) {
 }
 
 function CycleNotice({ graph }) {
+  const { t } = useI18n();
   const owners = {};
   for (const node of graph.nodes) {
     owners[node.id] = node.owner;
@@ -132,17 +136,16 @@ function CycleNotice({ graph }) {
 
   return (
     <div className="graph-blocked" role="alert">
-      <span className="graph-blocked-badge">CYCLE</span>
+      <span className="graph-blocked-badge">
+        {t("consistency.type.CYCLE")}
+      </span>
 
       <div className="graph-blocked-body">
         <p className="graph-blocked-title">
-          The graph contains a cycle and cannot be ordered
+          {t("plan.cycleNoticeTitle")}
         </p>
 
-        <p>
-          These commitments wait on each other, so no start-to-finish order
-          exists and the graph is not drawn.
-        </p>
+        <p>{t("plan.cycleNoticeBody")}</p>
 
         <ul className="graph-blocked-loops">
           {graph.cycles.map((cycle) => (
@@ -152,16 +155,15 @@ function CycleNotice({ graph }) {
           ))}
         </ul>
 
-        <p className="graph-blocked-hint">
-          Remove one of these links in the dependency list below to break the
-          loop.
-        </p>
+        <p className="graph-blocked-hint">{t("plan.cycleNoticeHint")}</p>
       </div>
     </div>
   );
 }
 
 function GraphView({ graph, selectedId, onSelect }) {
+  const { t } = useI18n();
+
   // A cycle has no topological order, so there is nothing honest to draw.
   if (graph.has_cycles) {
     return <CycleNotice graph={graph} />;
@@ -170,7 +172,7 @@ function GraphView({ graph, selectedId, onSelect }) {
   const layout = computeLayout(graph);
 
   if (!layout) {
-    return <p className="muted">No commitments to draw yet.</p>;
+    return <p className="muted">{t("plan.noCommitments")}</p>;
   }
 
   const { positions, svgWidth, svgHeight } = layout;
@@ -183,7 +185,7 @@ function GraphView({ graph, selectedId, onSelect }) {
         width={svgWidth}
         height={svgHeight}
         role="img"
-        aria-label="Dependency graph"
+        aria-label={t("dependencies.graphAria")}
       >
         <defs>
           <marker
@@ -249,7 +251,7 @@ function GraphView({ graph, selectedId, onSelect }) {
                 x={pos.x - NODE_W / 2 + 14}
                 y={pos.y - 5}
                 fontSize={13}
-                fontWeight={800}
+                fontWeight={700}
                 fill="#172033"
               >
                 {node.owner}
@@ -257,10 +259,15 @@ function GraphView({ graph, selectedId, onSelect }) {
               <text
                 x={pos.x - NODE_W / 2 + 14}
                 y={pos.y + 15}
-                fontSize={10.5}
+                fontSize={11.5}
                 fill={colors.text}
               >
-                #{node.id} · {node.status.replace("_", " ")}
+                #{node.id} ·{" "}
+                {t(
+                  `status.${node.status}`,
+                  {},
+                  node.status.replace("_", " ")
+                )}
               </text>
             </g>
           );
@@ -285,6 +292,7 @@ function ViewHeader({ eyebrow, title, children }) {
 // --- App ---------------------------------------------------------------------
 
 function App() {
+  const { t, tp, te, formatDate, formatDateTime } = useI18n();
   const [project, setProject] = useState(null);
   const [projects, setProjects] = useState([]);
   const [decisions, setDecisions] = useState([]);
@@ -341,6 +349,16 @@ function App() {
   const [snapshotError, setSnapshotError] = useState("");
   const [snapshotNotice, setSnapshotNotice] = useState("");
   const [viewingSnapshot, setViewingSnapshot] = useState(null);
+  const [viewingSnapshotLoading, setViewingSnapshotLoading] = useState(false);
+  const [viewingSnapshotError, setViewingSnapshotError] = useState("");
+
+  // Snapshot comparison: the two selected ids, the server-computed diff,
+  // and the loading/error states that keep the result from going stale.
+  const [compareFromId, setCompareFromId] = useState("");
+  const [compareToId, setCompareToId] = useState("");
+  const [snapshotDiff, setSnapshotDiff] = useState(null);
+  const [snapshotDiffLoading, setSnapshotDiffLoading] = useState(false);
+  const [snapshotDiffError, setSnapshotDiffError] = useState("");
 
   // Which section is on screen. Driven by the URL hash so a reload, a
   // bookmark and the back button all land on the same section.
@@ -417,10 +435,7 @@ function App() {
       setProjects(projects);
 
       if (projects.length === 0) {
-        setError(
-          "No projects yet. Create one from the project switcher, " +
-            "top right of the page."
-        );
+        setError(t("app.noProjects"));
         return;
       }
 
@@ -479,7 +494,7 @@ function App() {
           : trackedId
       );
     } catch (err) {
-      setError(err.message);
+      setError(te(err.message));
     } finally {
       setLoading(false);
     }
@@ -547,10 +562,19 @@ function App() {
   async function loadSnapshots() {
     if (!project?.id) {
       setSnapshots([]);
+      setViewingSnapshot(null);
+      setViewingSnapshotError("");
+      setSnapshotDiff(null);
+      setSnapshotDiffError("");
+      setCompareFromId("");
+      setCompareToId("");
       return;
     }
 
     try {
+      setViewingSnapshot(null);
+      setViewingSnapshotError("");
+
       const response = await fetch(
         `${API_URL}/projects/${project.id}/snapshots?limit=20`
       );
@@ -560,10 +584,117 @@ function App() {
       }
 
       const data = await response.json();
-      setSnapshots(data.items ?? []);
+      const items = data.items ?? [];
+
+      setSnapshots(items);
+      setSnapshotDiff(null);
+      setSnapshotDiffError("");
+
+      // Default to "previous vs latest": older on the left, newer on the
+      // right. Keep an explicit choice while it still exists in the list.
+      setCompareFromId((current) =>
+        items.some((item) => String(item.id) === String(current))
+          ? current
+          : items[1]?.id ?? items[0]?.id ?? ""
+      );
+      setCompareToId((current) =>
+        items.some((item) => String(item.id) === String(current))
+          ? current
+          : items[0]?.id ?? ""
+      );
+
+      if (items.length < 2) {
+        setSnapshotDiff(null);
+      }
     } catch {
       // A failed list refresh keeps the previous list on screen.
     }
+  }
+
+  async function fetchSnapshotDetail(snapshotId) {
+    const response = await fetch(
+      `${API_URL}/projects/${project.id}/snapshots/${snapshotId}`
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || "Failed to load the snapshot.");
+    }
+
+    return response.json();
+  }
+
+  async function viewSnapshot(snapshot) {
+    if (!project?.id) {
+      return;
+    }
+
+    setViewingSnapshot(null);
+    setViewingSnapshotLoading(true);
+    setViewingSnapshotError("");
+
+    try {
+      setViewingSnapshot(await fetchSnapshotDetail(snapshot.id));
+    } catch (err) {
+      setViewingSnapshotError(
+        te(err.message) || t("dependencies.failedLoadSnapshot")
+      );
+    } finally {
+      setViewingSnapshotLoading(false);
+    }
+  }
+
+  async function runSnapshotDiff(fromId, toId) {
+    if (!project?.id || !fromId || !toId) {
+      return;
+    }
+
+    if (String(fromId) === String(toId)) {
+      setSnapshotDiff(null);
+      setSnapshotDiffError(t("dependencies.compareSame"));
+      return;
+    }
+
+    setSnapshotDiff(null);
+    setSnapshotDiffError("");
+    setSnapshotDiffLoading(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/projects/${project.id}/snapshots/${fromId}/diff/${toId}`
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to compare snapshots.");
+      }
+
+      setSnapshotDiff(await response.json());
+    } catch (err) {
+      setSnapshotDiffError(
+        te(err.message) || t("dependencies.compareFailed")
+      );
+    } finally {
+      setSnapshotDiffLoading(false);
+    }
+  }
+
+  async function compareSnapshots(event) {
+    event.preventDefault();
+    await runSnapshotDiff(compareFromId, compareToId);
+  }
+
+  function compareWithPrevious(index) {
+    const current = snapshots[index];
+    const previous = snapshots[index + 1];
+
+    if (!current || !previous) {
+      return;
+    }
+
+    setCompareFromId(previous.id);
+    setCompareToId(current.id);
+    runSnapshotDiff(previous.id, current.id);
   }
 
   async function saveSnapshot(event) {
@@ -596,36 +727,155 @@ function App() {
 
       const snapshot = await response.json();
 
-      downloadGraphSvg(title);
+      downloadGraphSvg(snapshot.graph, title);
       setSnapshotTitle("");
 
       const nodes = snapshot.graph?.nodes?.length ?? 0;
       const edges = snapshot.graph?.edges?.length ?? 0;
 
       setSnapshotNotice(
-        `Snapshot saved — ${nodes} ${nodes === 1 ? "commitment" : "commitments"}, ` +
-          `${edges} ${edges === 1 ? "dependency" : "dependencies"}. ` +
-          "The SVG was downloaded."
+        t("dependencies.snapshotSaved", {
+          nodes,
+          nodeWord: tp("dependencies.snapshotCommitments", nodes, {
+            count: nodes,
+          }),
+          edges,
+          edgeWord: tp("dependencies.snapshotDependencies", edges, {
+            count: edges,
+          }),
+        })
       );
 
       await loadSnapshots();
     } catch (err) {
-      setSnapshotError(err.message);
+      setSnapshotError(te(err.message) || t("dependencies.failedSnapshot"));
     } finally {
       setSnapshotSaving(false);
     }
   }
 
-  function downloadGraphSvg(title) {
-    const svg = document.querySelector(".graph-svg");
+  function buildGraphSvg(graph, title) {
+    const layout = computeLayout(graph);
+
+    if (!layout) {
+      return null;
+    }
+
+    const { positions, svgWidth, svgHeight } = layout;
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+
+    svg.setAttribute("xmlns", svgNs);
+    svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
+    svg.setAttribute("width", svgWidth);
+    svg.setAttribute("height", svgHeight);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", title);
+
+    const titleNode = document.createElementNS(svgNs, "title");
+    titleNode.textContent = title;
+    svg.appendChild(titleNode);
+
+    const background = document.createElementNS(svgNs, "rect");
+    background.setAttribute("width", svgWidth);
+    background.setAttribute("height", svgHeight);
+    background.setAttribute("fill", "#ffffff");
+    svg.appendChild(background);
+
+    const defs = document.createElementNS(svgNs, "defs");
+    const marker = document.createElementNS(svgNs, "marker");
+    marker.setAttribute("id", "snapshot-arrow");
+    marker.setAttribute("viewBox", "0 0 10 10");
+    marker.setAttribute("refX", "9");
+    marker.setAttribute("refY", "5");
+    marker.setAttribute("markerWidth", "7");
+    marker.setAttribute("markerHeight", "7");
+    marker.setAttribute("orient", "auto-start-reverse");
+
+    const arrow = document.createElementNS(svgNs, "path");
+    arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+    arrow.setAttribute("fill", "#98a2b3");
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    for (const edge of graph.edges) {
+      const from = positions[edge.predecessor_commitment_id];
+      const to = positions[edge.successor_commitment_id];
+
+      if (!from || !to) {
+        continue;
+      }
+
+      const path = document.createElementNS(svgNs, "path");
+      path.setAttribute(
+        "d",
+        `M ${from.x + NODE_W / 2} ${from.y} L ${to.x - NODE_W / 2} ${to.y}`
+      );
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "#98a2b3");
+      path.setAttribute("stroke-width", "1.6");
+      path.setAttribute("marker-end", "url(#snapshot-arrow)");
+      svg.appendChild(path);
+    }
+
+    for (const node of graph.nodes) {
+      const pos = positions[node.id];
+
+      if (!pos) {
+        continue;
+      }
+
+      const colors = STATUS_COLORS[node.status] ?? STATUS_COLORS.OPEN;
+      const rect = document.createElementNS(svgNs, "rect");
+      rect.setAttribute("x", pos.x - NODE_W / 2);
+      rect.setAttribute("y", pos.y - NODE_H / 2);
+      rect.setAttribute("width", NODE_W);
+      rect.setAttribute("height", NODE_H);
+      rect.setAttribute("rx", "12");
+      rect.setAttribute("fill", colors.fill);
+      rect.setAttribute("stroke", colors.stroke);
+      rect.setAttribute("stroke-width", "1.5");
+      svg.appendChild(rect);
+
+      const owner = document.createElementNS(svgNs, "text");
+      owner.setAttribute("x", pos.x - NODE_W / 2 + 14);
+      owner.setAttribute("y", pos.y - 5);
+      owner.setAttribute("font-family", '"Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif');
+      owner.setAttribute("font-size", "13");
+      owner.setAttribute("font-weight", "700");
+      owner.setAttribute("fill", "#172033");
+      owner.textContent = node.owner;
+      svg.appendChild(owner);
+
+      const status = document.createElementNS(svgNs, "text");
+      status.setAttribute("x", pos.x - NODE_W / 2 + 14);
+      status.setAttribute("y", pos.y + 15);
+      status.setAttribute("font-family", '"Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif');
+      status.setAttribute("font-size", "11.5");
+      status.setAttribute("fill", colors.text);
+      status.textContent = `#${node.id} · ${t(
+        `status.${node.status}`,
+        {},
+        node.status.replace("_", " ")
+      )}`;
+      svg.appendChild(status);
+    }
+
+    return svg;
+  }
+
+  function downloadGraphSvg(graph, title) {
+    const svg = buildGraphSvg(graph, title);
 
     if (!svg) {
       return;
     }
 
-    // The node in the DOM is React-owned; serialize a detached copy.
-    const clone = svg.cloneNode(true);
-    const xml = new XMLSerializer().serializeToString(clone);
+    // Serialize a detached SVG built from the saved graph, not the SVG
+    // currently on screen: saving while viewing an older snapshot must
+    // download the graph that was just saved.
+    const xml = new XMLSerializer().serializeToString(svg);
     const blob = new Blob([xml], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
 
@@ -637,18 +887,29 @@ function App() {
     URL.revokeObjectURL(url);
   }
 
-  function downloadSnapshotJson(snapshot) {
-    const blob = new Blob([JSON.stringify(snapshot.graph, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
+  async function downloadSnapshotJson(snapshot) {
+    if (!project?.id) {
+      return;
+    }
 
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download =
-      `${snapshot.title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const detail = await fetchSnapshotDetail(snapshot.id);
+      const blob = new Blob([JSON.stringify(detail.graph, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download =
+        `${snapshot.title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSnapshotError(
+        te(err.message) || t("dependencies.failedLoadSnapshot")
+      );
+    }
   }
 
   async function deleteSnapshot(snapshotId) {
@@ -657,27 +918,31 @@ function App() {
     }
 
     try {
-      await fetch(
+      const response = await fetch(
         `${API_URL}/projects/${project.id}/snapshots/${snapshotId}`,
         { method: "DELETE" }
       );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to delete the snapshot.");
+      }
 
       if (viewingSnapshot?.id === snapshotId) {
         setViewingSnapshot(null);
       }
 
+      setSnapshotDiff(null);
       await loadSnapshots();
     } catch (err) {
-      setSnapshotError(err.message || "Failed to delete the snapshot.");
+      setSnapshotError(
+        te(err.message) || t("dependencies.failedDeleteSnapshot")
+      );
     }
   }
 
   function formatSnapshotTime(value) {
-    if (!value) {
-      return "";
-    }
-
-    return value.replace("T", " ").slice(0, 16);
+    return formatDateTime(value);
   }
 
   useEffect(() => {
@@ -701,6 +966,9 @@ function App() {
     }
 
     load();
+    // The loader is intentionally called once on mount; adding it to the
+    // dependency list would re-run the effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -752,7 +1020,7 @@ function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message);
+          setError(te(err.message));
         }
       }
     }
@@ -762,7 +1030,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, refreshTick]);
+  }, [selectedId, refreshTick, te]);
 
   useEffect(() => {
     if (decisionId == null) {
@@ -787,7 +1055,7 @@ function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          setDecisionTraceError(err.message);
+          setDecisionTraceError(te(err.message));
         }
       }
     }
@@ -797,7 +1065,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [decisionId, refreshTick]);
+  }, [decisionId, refreshTick, te]);
 
   function startDecisionEdit() {
     setDecisionDraft({
@@ -812,7 +1080,7 @@ function App() {
 
   async function saveDecision() {
     if (!decisionDraft.title?.trim()) {
-      setDecisionError("Title cannot be empty");
+      setDecisionError(t("decisions.titleRequired"));
       return;
     }
 
@@ -838,7 +1106,7 @@ function App() {
     }
 
     if (Object.keys(body).length === 0) {
-      setDecisionError("No changes to save");
+      setDecisionError(t("decisions.noChanges"));
       return;
     }
 
@@ -863,7 +1131,7 @@ function App() {
 
       await reloadData(selectedId);
     } catch (err) {
-      setDecisionError(err.message);
+      setDecisionError(te(err.message) || t("decisions.failedUpdate"));
     } finally {
       setUpdatingDecision(false);
     }
@@ -903,7 +1171,7 @@ function App() {
 
       await reloadData(commitmentId);
     } catch (err) {
-      setEditorError(err.message);
+      setEditorError(te(err.message) || t("plan.failedStatus"));
     } finally {
       setUpdating(false);
     }
@@ -917,9 +1185,7 @@ function App() {
     }
 
     if (!dependencyDraft.predecessor || !dependencyDraft.successor) {
-      setDependencyError(
-        "Pick the commitment that finishes first and the one that starts after it."
-      );
+      setDependencyError(t("dependencies.pickBoth"));
       return;
     }
 
@@ -953,6 +1219,23 @@ function App() {
           return;
         }
 
+        if (detail && detail.code === "DUPLICATE_DEPENDENCY") {
+          const predecessor = graph.nodes.find(
+            (node) => node.id === Number(dependencyDraft.predecessor)
+          );
+          const successor = graph.nodes.find(
+            (node) => node.id === Number(dependencyDraft.successor)
+          );
+
+          setDependencyError(
+            t("dependencies.duplicate", {
+              from: predecessor?.owner ?? "?",
+              to: successor?.owner ?? "?",
+            })
+          );
+          return;
+        }
+
         throw new Error(
           typeof detail === "string"
             ? detail
@@ -970,7 +1253,7 @@ function App() {
       );
       await reloadData(selectedId);
     } catch (err) {
-      setDependencyError(err.message);
+      setDependencyError(te(err.message) || t("dependencies.failedAdd"));
     } finally {
       setDependencySaving(false);
     }
@@ -1001,9 +1284,9 @@ function App() {
       await reloadData(selectedId);
     } catch (err) {
       if (cycleReport) {
-        setCycleError(err.message);
+        setCycleError(te(err.message));
       } else {
-        setDependencyError(err.message);
+        setDependencyError(te(err.message) || t("dependencies.failedRemove"));
       }
     } finally {
       setDependencySaving(false);
@@ -1030,7 +1313,9 @@ function App() {
           },
           body: JSON.stringify({
             status: "BLOCKED",
-            reason: `Circular dependency: ${cycleReport.chain.join(" -> ")}.`,
+            reason: t("cycle.blockedReason", {
+              chain: cycleReport.chain.join(" → "),
+            }),
           }),
         }
       );
@@ -1049,14 +1334,14 @@ function App() {
       setSelectedId(target.commitment_id);
       await reloadData(target.commitment_id);
     } catch (err) {
-      setCycleError(err.message);
+      setCycleError(te(err.message));
     } finally {
       setDependencySaving(false);
     }
   }
 
   if (loading) {
-    return <div className="message">Loading DecisionTrace...</div>;
+    return <div className="message">{t("app.loading")}</div>;
   }
 
   const byId = {};
@@ -1072,6 +1357,86 @@ function App() {
   const analysisById = {};
   for (const item of graph.analysis) {
     analysisById[item.commitment_id] = item;
+  }
+
+  // The API sends a stable `type` plus the record ids; the English
+  // `message` is only a fallback. Rebuilding the sentence here keeps the
+  // consistency screen in the same language as the rest of the UI.
+  function describeConflict(conflict) {
+    const ids = conflict.commitment_ids ?? [];
+
+    switch (conflict.type) {
+      case "CYCLE":
+        return t("consistency.cycle", { owners: names(ids, byId) });
+
+      case "ORDER_VIOLATION": {
+        const successor = byId[ids[0]];
+        const predecessor = byId[ids[1]];
+
+        return t("consistency.orderViolation", {
+          successor: successor?.owner ?? `#${ids[0]}`,
+          predecessor: predecessor?.owner ?? `#${ids[1]}`,
+          status: predecessor
+            ? t(
+                `status.${predecessor.status}`,
+                {},
+                predecessor.status.replace("_", " ")
+              )
+            : "?",
+        });
+      }
+
+      case "DATE_INVERSION": {
+        const successor = byId[ids[0]];
+        const predecessor = byId[ids[1]];
+
+        return t("consistency.dateInversion", {
+          successor: successor?.owner ?? `#${ids[0]}`,
+          successorDate: formatDate(successor?.due_date),
+          predecessor: predecessor?.owner ?? `#${ids[1]}`,
+          predecessorDate: formatDate(predecessor?.due_date),
+        });
+      }
+
+      case "DUPLICATE": {
+        const first = byId[ids[0]];
+
+        return t("consistency.duplicate", {
+          owner: first?.owner ?? "?",
+          count: ids.length,
+          ids: ids.map((id) => `#${id}`).join(", "),
+        });
+      }
+
+      case "STALE_DECISION": {
+        const commitment = byId[ids[0]];
+        const linkedDecision = decisions.find(
+          (item) => item.id === conflict.decision_ids?.[0]
+        );
+
+        return t("consistency.staleDecision", {
+          owner: commitment?.owner ?? "?",
+          status: commitment
+            ? t(
+                `status.${commitment.status}`,
+                {},
+                commitment.status.replace("_", " ")
+              )
+            : "?",
+          title: linkedDecision?.title ?? "?",
+          decisionStatus: linkedDecision
+            ? t(
+                `consistency.decisionStatus.${linkedDecision.status}`,
+                {},
+                linkedDecision.status.toLowerCase()
+              )
+            : "?",
+        });
+      }
+
+      default:
+        return te(conflict.message);
+    }
   }
 
   const orderedNodes = graph.topological_order
@@ -1100,9 +1465,13 @@ function App() {
     (node) => node.status !== "COMPLETED"
   ).length;
 
-  // Local date (YYYY-MM-DD) so due-date comparisons are calendar days,
-  // not instants. Overdue = past due and not finished.
-  const today = new Date().toISOString().slice(0, 10);
+  // Local calendar day, not a UTC instant: an evening in UTC+8 must not
+  // mark today's due date as overdue.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(now.getDate()).padStart(2, "0")}`;
   const isOverdue = (node) =>
     node.due_date && node.due_date < today && node.status !== "COMPLETED";
   const overdueCommitments = graph.nodes.filter(isOverdue);
@@ -1115,10 +1484,9 @@ function App() {
   if (graph.has_cycles) {
     attention.push({
       key: "cycles",
-      tag: "Plan",
-      message:
-        "A circular dependency is holding part of the plan out of order.",
-      action: "Open plan",
+      tag: t("overview.tagPlan"),
+      message: t("overview.attentionCycle"),
+      action: t("overview.actionOpenPlan"),
       view: "plan",
     });
   }
@@ -1126,11 +1494,12 @@ function App() {
   if (conflicts.length > 0) {
     attention.push({
       key: "conflicts",
-      tag: "Consistency",
-      message: `${conflicts.length} ${
-        conflicts.length === 1 ? "record conflicts" : "records conflict"
-      } — ${conflicts[0].message}`,
-      action: "Review",
+      tag: t("overview.tagConsistency"),
+      message: tp("overview.attentionConflicts", conflicts.length, {
+        count: conflicts.length,
+        message: describeConflict(conflicts[0]),
+      }),
+      action: t("overview.actionReview"),
       view: "consistency",
     });
   }
@@ -1138,11 +1507,11 @@ function App() {
   if (pendingTotal > 0) {
     attention.push({
       key: "pending",
-      tag: "Intake",
-      message: `${pendingTotal} extracted ${
-        pendingTotal === 1 ? "candidate is" : "candidates are"
-      } waiting for a human decision.`,
-      action: "Review",
+      tag: t("overview.tagIntake"),
+      message: tp("overview.attentionPending", pendingTotal, {
+        count: pendingTotal,
+      }),
+      action: t("overview.actionReview"),
       view: "intake",
     });
   }
@@ -1150,15 +1519,13 @@ function App() {
   if (overdueCommitments.length > 0) {
     attention.push({
       key: "overdue",
-      tag: "Commitments",
-      message: `${overdueCommitments.length} ${
-        overdueCommitments.length === 1 ? "commitment is" : "commitments are"
-      } past ${
-        overdueCommitments.length === 1 ? "its" : "their"
-      } due date — ${overdueCommitments[0].owner}'s was due ${
-        overdueCommitments[0].due_date
-      }.`,
-      action: "Review",
+      tag: t("overview.tagCommitments"),
+      message: tp("overview.attentionOverdue", overdueCommitments.length, {
+        count: overdueCommitments.length,
+        owner: overdueCommitments[0].owner,
+        date: formatDate(overdueCommitments[0].due_date),
+      }),
+      action: t("overview.actionReview"),
       view: "plan",
     });
   }
@@ -1168,17 +1535,16 @@ function App() {
       <header className="topbar">
         <div className="topbar-inner">
           <div>
-            <div className="brand">DecisionTrace</div>
-            <div className="brand-subtitle">
-              Decision intelligence & traceability
-            </div>
+            <div className="brand">{t("app.brand")}</div>
+            <div className="brand-subtitle">{t("app.tagline")}</div>
           </div>
 
           <div className="topbar-right">
             {conflicts.length > 0 && (
               <a className="topbar-conflicts" href="#consistency">
-                {conflicts.length}{" "}
-                {conflicts.length === 1 ? "conflict" : "conflicts"}
+                {tp("app.conflict", conflicts.length, {
+                  count: conflicts.length,
+                })}
               </a>
             )}
 
@@ -1189,6 +1555,8 @@ function App() {
               onCreate={createProject}
               onDelete={deleteProject}
             />
+
+            <LanguageToggle />
           </div>
         </div>
       </header>
@@ -1201,71 +1569,69 @@ function App() {
       <main className="dashboard">
         {error && (
           <div className="message error" role="alert">
-            Error: {error}
+            {t("app.error", { message: error })}
           </div>
         )}
 
         {view === "overview" && (
           <>
             <section className="hero">
-              <p className="eyebrow">PROJECT OVERVIEW</p>
-              <h1>Trace decisions to downstream impact.</h1>
-              <p>
-                Preserve the reasoning behind decisions, connect
-                commitments, and understand what changes affect next.
-              </p>
+              <p className="eyebrow">{t("overview.eyebrow")}</p>
+              <h1>{t("overview.title")}</h1>
+              <p>{t("overview.subtitle")}</p>
             </section>
 
             <div className="kpi-grid">
               <article className="card kpi">
-                <p className="kpi-label">Decisions</p>
+                <p className="kpi-label">{t("overview.decisions")}</p>
                 <p className="kpi-value">{decisions.length}</p>
-                <p className="kpi-hint">reasoning recorded</p>
+                <p className="kpi-hint">{t("overview.decisionsHint")}</p>
                 <a className="text-link" href="#decisions">
-                  Open decisions
+                  {t("overview.openDecisions")}
                 </a>
               </article>
 
               <article className="card kpi">
-                <p className="kpi-label">Commitments</p>
+                <p className="kpi-label">{t("overview.commitments")}</p>
                 <p className="kpi-value">{graph.nodes.length}</p>
-                <p className="kpi-hint">{openCommitments} still open</p>
+                <p className="kpi-hint">
+                  {t("overview.commitmentsHint", {
+                    count: openCommitments,
+                  })}
+                </p>
                 <a className="text-link" href="#plan">
-                  Open plan
+                  {t("overview.openPlan")}
                 </a>
               </article>
 
               <article className="card kpi">
-                <p className="kpi-label">Consistency</p>
+                <p className="kpi-label">{t("overview.consistency")}</p>
                 <p className="kpi-value">{conflicts.length}</p>
                 <p className="kpi-hint">
                   {conflicts.length === 0
-                    ? "no conflicts"
-                    : "records to reconcile"}
+                    ? t("overview.consistencyClean")
+                    : t("overview.consistencyDirty")}
                 </p>
                 <a className="text-link" href="#consistency">
-                  Open check
+                  {t("overview.openCheck")}
                 </a>
               </article>
 
               <article className="card kpi">
-                <p className="kpi-label">Pending review</p>
+                <p className="kpi-label">{t("overview.pending")}</p>
                 <p className="kpi-value">{pendingTotal}</p>
-                <p className="kpi-hint">AI candidates</p>
+                <p className="kpi-hint">{t("overview.pendingHint")}</p>
                 <a className="text-link" href="#intake">
-                  Open intake
+                  {t("overview.openIntake")}
                 </a>
               </article>
             </div>
 
             <section className="card attention-card">
-              <p className="eyebrow">NEEDS ATTENTION</p>
+              <p className="eyebrow">{t("overview.attention")}</p>
 
               {attention.length === 0 ? (
-                <p className="muted">
-                  Nothing needs attention — the trace is consistent and
-                  every candidate has been reviewed.
-                </p>
+                <p className="muted">{t("overview.attentionEmpty")}</p>
               ) : (
                 <ul className="attention-list">
                   {attention.map((item) => (
@@ -1286,9 +1652,11 @@ function App() {
         )}
 
         {view === "decisions" && (
-          <ViewHeader eyebrow="DECIDE" title="Decisions">
-            The reasoning commitments must stay true to, and what a
-            change to it puts at risk.
+          <ViewHeader
+            eyebrow={t("decisions.eyebrow")}
+            title={t("decisions.title")}
+          >
+            {t("decisions.subtitle")}
           </ViewHeader>
         )}
 
@@ -1297,10 +1665,10 @@ function App() {
             <section className="card decision-card">
               <div className="card-header">
                 <div>
-                  <p className="eyebrow">DECISION</p>
+                  <p className="eyebrow">{t("decisions.cardEyebrow")}</p>
 
                   <div className="decision-title-row">
-                    <h2>{decision?.title || "No decision"}</h2>
+                    <h2>{decision?.title || t("decisions.none")}</h2>
 
                     {decisions.length > 1 && (
                       <select
@@ -1329,7 +1697,7 @@ function App() {
                       className="secondary-button"
                       onClick={startDecisionEdit}
                     >
-                      Edit
+                      {t("decisions.edit")}
                     </button>
                   )}
                 </div>
@@ -1339,7 +1707,7 @@ function App() {
                 <div className="decision-editor">
                   <input
                     type="text"
-                    placeholder="Title"
+                    placeholder={t("decisions.titlePlaceholder")}
                     value={decisionDraft.title ?? ""}
                     onChange={(event) =>
                       setDecisionDraft({
@@ -1351,7 +1719,7 @@ function App() {
 
                   <textarea
                     rows={2}
-                    placeholder="Rationale"
+                    placeholder={t("decisions.rationalePlaceholder")}
                     value={decisionDraft.rationale ?? ""}
                     onChange={(event) =>
                       setDecisionDraft({
@@ -1370,14 +1738,20 @@ function App() {
                       })
                     }
                   >
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="SUPERSEDED">Superseded</option>
-                    <option value="REVOKED">Revoked</option>
+                    <option value="CONFIRMED">
+                      {t("decisions.statusConfirmed")}
+                    </option>
+                    <option value="SUPERSEDED">
+                      {t("decisions.statusSuperseded")}
+                    </option>
+                    <option value="REVOKED">
+                      {t("decisions.statusRevoked")}
+                    </option>
                   </select>
 
                   <input
                     type="text"
-                    placeholder="Reason for this change"
+                    placeholder={t("decisions.reasonPlaceholder")}
                     value={decisionDraft.reason ?? ""}
                     onChange={(event) =>
                       setDecisionDraft({
@@ -1395,14 +1769,16 @@ function App() {
                       }
                       onClick={saveDecision}
                     >
-                      {updatingDecision ? "Saving..." : "Save"}
+                      {updatingDecision
+                        ? t("decisions.saving")
+                        : t("decisions.save")}
                     </button>
 
                     <button
                       className="secondary-button"
                       onClick={() => setEditingDecision(false)}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </button>
                   </div>
 
@@ -1413,19 +1789,21 @@ function App() {
               ) : (
                 <>
                   <div className="rationale">
-                    <span>Rationale</span>
-                    <p>{decision?.rationale || "No rationale recorded."}</p>
+                    <span>{t("decisions.rationale")}</span>
+                    <p>{decision?.rationale || t("decisions.noRationale")}</p>
                   </div>
 
                   <div className="trace-source">
-                    Source discussion #{decision?.source_discussion_id ?? "—"}
+                    {t("decisions.sourceDiscussion", {
+                      id: decision?.source_discussion_id ?? "—",
+                    })}
                   </div>
                 </>
               )}
 
               {decisionTraceError && (
                 <p className="pipeline-error">
-                  Could not load decision trace: {decisionTraceError}
+                  {t("decisions.traceError", { message: decisionTraceError })}
                 </p>
               )}
 
@@ -1433,12 +1811,13 @@ function App() {
                 <>
                   <div className="decision-subsection">
                     <div className="decision-subheading">
-                      <span>DECISION IMPACT</span>
+                      <span>{t("decisions.impactEyebrow")}</span>
 
                       {currentDecisionImpact?.has_changes && (
                         <span className="change-warning">
-                          changed {currentDecisionImpact.change_count}× — linked
-                          commitments may need review
+                          {t("decisions.changed", {
+                            count: currentDecisionImpact.change_count,
+                          })}
                         </span>
                       )}
                     </div>
@@ -1453,33 +1832,40 @@ function App() {
                         >
                           <strong>{item.owner}</strong>
                           <span>
-                            #{item.id} · {item.status.replace("_", " ")}
+                            #{item.id} ·{" "}
+                            {t(
+                              `status.${item.status}`,
+                              {},
+                              item.status.replace("_", " ")
+                            )}
                           </span>
 
                           {item.downstream.length > 0 ? (
                             <span className="downstream-note">
-                              affects {names(item.downstream, byId)}
+                              {t("decisions.affects", {
+                                names: names(item.downstream, byId),
+                              })}
                             </span>
                           ) : (
                             <span className="downstream-note dim">
-                              no downstream
+                              {t("decisions.noDownstream")}
                             </span>
                           )}
                         </div>
                       ))
                     ) : (
-                      <p className="muted">
-                        No commitments linked to this decision yet.
-                      </p>
+                      <p className="muted">{t("decisions.noLinked")}</p>
                     )}
                   </div>
 
                   <div className="decision-subsection">
                     <div className="decision-subheading">
-                      <span>CHANGE HISTORY</span>
+                      <span>{t("decisions.historyEyebrow")}</span>
 
                       {decisionHistory.total > 0 && (
-                        <span className="subheading-note">newest first</span>
+                        <span className="subheading-note">
+                          {t("common.newestFirst")}
+                        </span>
                       )}
                     </div>
 
@@ -1504,16 +1890,26 @@ function App() {
 
                                 {item.old_status !== item.new_status && (
                                   <span className="history-status">
-                                    {item.old_status.replace("_", " ")}
+                                    {t(
+                                      `status.${item.old_status}`,
+                                      {},
+                                      item.old_status.replace("_", " ")
+                                    )}
                                     {" → "}
-                                    {item.new_status.replace("_", " ")}
+                                    {t(
+                                      `status.${item.new_status}`,
+                                      {},
+                                      item.new_status.replace("_", " ")
+                                    )}
                                   </span>
                                 )}
 
-                                <p>{item.reason || "No reason provided."}</p>
+                                <p>
+                                  {item.reason || t("common.noReason")}
+                                </p>
 
                                 <span>
-                                  {new Date(item.changed_at).toLocaleString()}
+                                  {formatDateTime(item.changed_at)}
                                 </span>
                               </div>
                             </div>
@@ -1525,18 +1921,18 @@ function App() {
                           limit={decisionHistory.limit}
                           offset={decisionHistory.offset}
                           onChange={decisionHistory.setOffset}
-                          label="Decision change history"
+                          label={t("decisions.historyLabel")}
                           busy={decisionHistory.loading}
                         />
 
                         {decisionHistory.error && (
                           <p className="pipeline-error">
-                            {decisionHistory.error}
+                            {te(decisionHistory.error)}
                           </p>
                         )}
                       </>
                     ) : (
-                      <p className="muted">No changes recorded yet.</p>
+                      <p className="muted">{t("decisions.noHistory")}</p>
                     )}
                   </div>
                 </>
@@ -1548,20 +1944,26 @@ function App() {
                 currentImpact?.has_impact ? "impact-active" : ""
               }`}
             >
-              <p className="eyebrow">IMPACT ANALYSIS</p>
+              <p className="eyebrow">{t("impact.eyebrow")}</p>
 
               {currentImpact ? (
                 <>
                   <h2>
                     {currentImpact.has_impact
-                      ? "Downstream impact detected"
-                      : "No active impact"}
+                      ? t("impact.detected")
+                      : t("impact.none")}
                   </h2>
 
                   <p className="muted source-note">
-                    Source: {selectedNode?.owner || "?"} · Commitment #
-                    {currentImpact.commitment_id} ·{" "}
-                    {currentImpact.commitment_status.replace("_", " ")}
+                    {t("impact.source", {
+                      owner: selectedNode?.owner || "?",
+                      id: currentImpact.commitment_id,
+                      status: t(
+                        `status.${currentImpact.commitment_status}`,
+                        {},
+                        currentImpact.commitment_status.replace("_", " ")
+                      ),
+                    })}
                   </p>
 
                   {currentImpact.has_impact ? (
@@ -1577,22 +1979,16 @@ function App() {
                       </div>
                     ))
                   ) : (
-                    <p className="muted">
-                      This commitment is not delayed or blocked, so nothing
-                      downstream is currently at risk.
-                    </p>
+                    <p className="muted">{t("impact.safe")}</p>
                   )}
                 </>
               ) : (
                 <>
-                  <h2>No commitment selected</h2>
-                  <p className="muted">
-                    Pick a commitment in the plan to see what a delay there
-                    puts at risk.
-                  </p>
+                  <h2>{t("impact.noSelection")}</h2>
+                  <p className="muted">{t("impact.pick")}</p>
 
                   <a className="text-link" href="#plan">
-                    Open plan
+                    {t("impact.openPlan")}
                   </a>
                 </>
               )}
@@ -1601,9 +1997,8 @@ function App() {
         )}
 
         {view === "plan" && (
-          <ViewHeader eyebrow="EXECUTE" title="Plan & commitments">
-            The order work has to happen in, and the commitments that
-            carry it.
+          <ViewHeader eyebrow={t("plan.eyebrow")} title={t("plan.title")}>
+            {t("plan.subtitle")}
           </ViewHeader>
         )}
 
@@ -1611,14 +2006,14 @@ function App() {
           <section className="section-block">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">EXECUTION PLAN</p>
-                <h2>Topological order</h2>
+                <p className="eyebrow">{t("plan.sectionEyebrow")}</p>
+                <h2>{t("plan.topological")}</h2>
               </div>
             </div>
 
             {graph.has_cycles && (
               <div className="cycle-banner">
-                <strong>Circular dependency detected</strong>
+                <strong>{t("plan.cycleDetected")}</strong>
                 <span>
                   {graph.cycles
                     .map((cycle) =>
@@ -1632,7 +2027,7 @@ function App() {
             <div className="plan-list">
               {orderedNodes.map((node, index) => {
                 const analysis = analysisById[node.id];
-                const note = stateNote(analysis, byId);
+                const note = stateNote(analysis, byId, t);
                 const risk = ["BLOCKED", "CYCLIC"].includes(analysis?.state);
 
                 return (
@@ -1645,7 +2040,7 @@ function App() {
 
                     <div className="plan-owner">
                       <strong>{node.owner}</strong>
-                      <span>Commitment #{node.id}</span>
+                      <span>{t("plan.commitment", { id: node.id })}</span>
                     </div>
 
                     <StatusBadge status={node.status} />
@@ -1670,13 +2065,13 @@ function App() {
 
                     <div className="plan-owner">
                       <strong>{node.owner}</strong>
-                      <span>Commitment #{node.id}</span>
+                      <span>{t("plan.commitment", { id: node.id })}</span>
                     </div>
 
                     <StatusBadge status={node.status} />
 
                     <span className="plan-note risk">
-                      {stateNote(analysis, byId)}
+                      {stateNote(analysis, byId, t)}
                     </span>
                   </div>
                 );
@@ -1695,13 +2090,14 @@ function App() {
 
                     <div className="plan-owner">
                       <strong>{node.owner}</strong>
-                      <span>Commitment #{node.id}</span>
+                      <span>{t("plan.commitment", { id: node.id })}</span>
                     </div>
 
                     <StatusBadge status={node.status} />
 
                     <span className="plan-note">
-                      {stateNote(analysis, byId)} · blocked by a cycle
+                      {stateNote(analysis, byId, t)} ·{" "}
+                      {t("plan.blockedByCycle")}
                     </span>
                   </div>
                 );
@@ -1711,9 +2107,11 @@ function App() {
         )}
 
         {view === "consistency" && (
-          <ViewHeader eyebrow="TRACE" title="Consistency">
-            Duplicate and stale records the trace cannot reconcile —
-            each one points at the commitments and decisions involved.
+          <ViewHeader
+            eyebrow={t("consistency.eyebrow")}
+            title={t("consistency.title")}
+          >
+            {t("consistency.subtitle")}
           </ViewHeader>
         )}
 
@@ -1723,7 +2121,7 @@ function App() {
               {conflicts.length === 0 ? (
                 <div className="conflicts-clean">
                   <span className="clean-dot" />
-                  No conflicts detected — the project trace is consistent.
+                  {t("consistency.clean")}
                 </div>
               ) : (
                 conflicts.map((conflict, index) => (
@@ -1731,21 +2129,29 @@ function App() {
                     <span
                       className={`severity-badge severity-${conflict.severity.toLowerCase()}`}
                     >
-                      {conflict.severity}
+                      {t(
+                        `consistency.severity.${conflict.severity}`,
+                        {},
+                        conflict.severity
+                      )}
                     </span>
 
                     <span className="conflict-type">
-                      {conflict.type.replace("_", " ")}
+                      {t(
+                        `consistency.type.${conflict.type}`,
+                        {},
+                        conflict.type.replace("_", " ")
+                      )}
                     </span>
 
-                    <p>{conflict.message}</p>
+                    <p>{describeConflict(conflict)}</p>
 
                     <div className="conflict-refs">
                       {conflict.commitment_ids.map((id) => (
                         <button
                           className="ref-chip"
                           key={`commitment-${id}`}
-                          title="Open this commitment in the audit trail"
+                          title={t("consistency.openCommitment")}
                           onClick={() => {
                             setSelectedId(id);
                             navigate("audit");
@@ -1759,13 +2165,13 @@ function App() {
                         <button
                           className="ref-chip decision-chip"
                           key={`decision-${id}`}
-                          title="Open this decision"
+                          title={t("consistency.openDecision")}
                           onClick={() => {
                             setDecisionId(id);
                             navigate("decisions");
                           }}
                         >
-                          Decision #{id}
+                          {t("consistency.decision", { id })}
                         </button>
                       ))}
                     </div>
@@ -1777,24 +2183,23 @@ function App() {
         )}
 
         {view === "dependencies" && (
-          <ViewHeader eyebrow="EXECUTE" title="Dependencies">
-            What blocks what, and how far a delay travels downstream.
+          <ViewHeader
+            eyebrow={t("dependencies.eyebrow")}
+            title={t("dependencies.title")}
+          >
+            {t("dependencies.subtitle")}
           </ViewHeader>
         )}
 
         {view === "dependencies" && (
           <section className="card link-card">
-            <p className="eyebrow">NEW DEPENDENCY</p>
-            <h2>Link two commitments</h2>
-            <p className="card-hint">
-              The first commitment has to finish before the second one can
-              start. A link that would close a loop is refused before it is
-              stored.
-            </p>
+            <p className="eyebrow">{t("dependencies.newEyebrow")}</p>
+            <h2>{t("dependencies.newTitle")}</h2>
+            <p className="card-hint">{t("dependencies.newHint")}</p>
 
             <form className="link-form" onSubmit={addDependency}>
               <label className="link-field">
-                <span>Finishes first</span>
+                <span>{t("dependencies.finishesFirst")}</span>
                 <select
                   value={dependencyDraft.predecessor}
                   onChange={(event) =>
@@ -1804,7 +2209,7 @@ function App() {
                     }))
                   }
                 >
-                  <option value="">Choose a commitment</option>
+                  <option value="">{t("dependencies.choose")}</option>
                   {graph.nodes.map((node) => (
                     <option key={node.id} value={node.id}>
                       {node.owner} — {node.description}
@@ -1814,11 +2219,11 @@ function App() {
               </label>
 
               <span className="link-connector" aria-hidden="true">
-                blocks
+                {t("dependencies.blocks")}
               </span>
 
               <label className="link-field">
-                <span>Starts after</span>
+                <span>{t("dependencies.startsAfter")}</span>
                 <select
                   value={dependencyDraft.successor}
                   onChange={(event) =>
@@ -1828,7 +2233,7 @@ function App() {
                     }))
                   }
                 >
-                  <option value="">Choose a commitment</option>
+                  <option value="">{t("dependencies.choose")}</option>
                   {graph.nodes.map((node) => (
                     <option key={node.id} value={node.id}>
                       {node.owner} — {node.description}
@@ -1842,25 +2247,47 @@ function App() {
                 className="primary-button"
                 disabled={dependencySaving}
               >
-                {dependencySaving ? "Adding..." : "Add dependency"}
+                {dependencySaving
+                  ? t("dependencies.adding")
+                  : t("dependencies.add")}
               </button>
             </form>
 
             {dependencyError && (
               <p className="form-error" role="alert">
-                {dependencyError}
+                {te(dependencyError)}
               </p>
             )}
 
             {dependencyNotice && (
               <div className="form-notice" role="status">
-                <span className="form-notice-badge">DATE MISMATCH</span>
+                <span className="form-notice-badge">
+                  {t("dependencies.dateMismatch")}
+                </span>
 
                 <div className="form-notice-body">
-                  <p>{dependencyNotice.message}</p>
+                  <p>
+                    {t("dependencies.dateNotice", {
+                      successor: dependencyNotice.successor.owner,
+                      successorId: dependencyNotice.successor.id,
+                      successorDate: formatDate(
+                        dependencyNotice.successor.due_date
+                      ),
+                      predecessor: dependencyNotice.predecessor.owner,
+                      predecessorId: dependencyNotice.predecessor.id,
+                      predecessorDate: formatDate(
+                        dependencyNotice.predecessor.due_date
+                      ),
+                    })}
+                  </p>
                   <p className="form-notice-hint">
-                    {dependencyNotice.suggestion} The link was saved — it is
-                    listed on the consistency screen until the dates agree.
+                    {t("dependencies.dateSuggestion", {
+                      successor: dependencyNotice.successor.owner,
+                      predecessorDate: formatDate(
+                        dependencyNotice.predecessor.due_date
+                      ),
+                    })}{" "}
+                    {t("dependencies.dateSaved")}
                   </p>
                 </div>
 
@@ -1868,17 +2295,21 @@ function App() {
                   <button
                     type="button"
                     className="form-notice-undo"
-                    onClick={() => removeDependency(dependencyNotice.dependency_id)}
+                    onClick={() =>
+                      removeDependency(dependencyNotice.dependency_id)
+                    }
                     disabled={dependencySaving}
                   >
-                    {dependencySaving ? "Undoing..." : "Undo"}
+                    {dependencySaving
+                      ? t("common.undoing")
+                      : t("common.undo")}
                   </button>
 
                   <button
                     type="button"
                     className="form-notice-close"
                     onClick={() => setDependencyNotice(null)}
-                    aria-label="Dismiss the date warning"
+                    aria-label={t("dependencies.dismissWarning")}
                   >
                     ×
                   </button>
@@ -1892,17 +2323,27 @@ function App() {
           <section className="section-block">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">DEPENDENCY GRAPH</p>
-                <h2>Work graph</h2>
+                <p className="eyebrow">{t("dependencies.graphEyebrow")}</p>
+                <h2>{t("dependencies.graphTitle")}</h2>
               </div>
-              <span>click a node to analyze it</span>
+              <span>{t("dependencies.graphHint")}</span>
             </div>
 
             <div className="card">
-              {viewingSnapshot ? (
+              {viewingSnapshotError && (
+                <p className="pipeline-error" role="alert">
+                  {te(viewingSnapshotError)}
+                </p>
+              )}
+
+              {viewingSnapshotLoading ? (
+                <p className="muted">{t("common.loading")}</p>
+              ) : viewingSnapshot ? (
                 <>
                   <div className="snapshot-viewing">
-                    <span className="type-badge type-history">SNAPSHOT</span>
+                    <span className="type-badge type-history">
+                      {t("dependencies.snapshot")}
+                    </span>
 
                     <strong>{viewingSnapshot.title}</strong>
 
@@ -1913,9 +2354,12 @@ function App() {
                     <button
                       type="button"
                       className="secondary-button"
-                      onClick={() => setViewingSnapshot(null)}
+                      onClick={() => {
+                        setViewingSnapshot(null);
+                        setViewingSnapshotError("");
+                      }}
                     >
-                      Back to live graph
+                      {t("dependencies.backToLive")}
                     </button>
                   </div>
 
@@ -1935,17 +2379,16 @@ function App() {
             </div>
 
             <div className="card">
-              <p className="eyebrow">GRAPH SNAPSHOTS</p>
-              <h2>Meeting summaries as graphs</h2>
+              <p className="eyebrow">{t("dependencies.snapshotsEyebrow")}</p>
+              <h2>{t("dependencies.snapshotsTitle")}</h2>
               <p className="muted snapshot-hint">
-                Save the current graph with a title and timestamp — a
-                visual summary of a meeting you can review later.
+                {t("dependencies.snapshotsHint")}
               </p>
 
               <form className="snapshot-form" onSubmit={saveSnapshot}>
                 <input
                   type="text"
-                  placeholder="Snapshot title (e.g. 2026-11-05 weekly sync)"
+                  placeholder={t("dependencies.snapshotPlaceholder")}
                   value={snapshotTitle}
                   onChange={(event) => setSnapshotTitle(event.target.value)}
                 />
@@ -1955,7 +2398,9 @@ function App() {
                   className="secondary-button"
                   disabled={snapshotSaving || !snapshotTitle.trim()}
                 >
-                  {snapshotSaving ? "Saving..." : "Save snapshot + SVG"}
+                  {snapshotSaving
+                    ? t("dependencies.savingSnapshot")
+                    : t("dependencies.saveSnapshot")}
                 </button>
               </form>
 
@@ -1967,31 +2412,45 @@ function App() {
 
               {snapshotError && (
                 <p className="pipeline-error" role="alert">
-                  {snapshotError}
+                  {te(snapshotError)}
                 </p>
               )}
 
               {snapshots.length === 0 ? (
-                <p className="muted">No snapshots saved yet.</p>
+                <p className="muted">{t("dependencies.noSnapshots")}</p>
               ) : (
                 <ul className="snapshot-list">
-                  {snapshots.map((snapshot) => (
+                  {snapshots.map((snapshot, index) => (
                     <li className="snapshot-item" key={snapshot.id}>
                       <div className="snapshot-item-text">
                         <strong>{snapshot.title}</strong>
                         <span className="muted">
                           {formatSnapshotTime(snapshot.created_at)} ·{" "}
-                          {snapshot.graph?.nodes?.length ?? 0} commitments
+                          {tp(
+                            "dependencies.snapshotCommitments",
+                            snapshot.node_count ?? 0,
+                            { count: snapshot.node_count ?? 0 }
+                          )}
                         </span>
+
+                        {index < snapshots.length - 1 && (
+                          <button
+                            type="button"
+                            className="snapshot-compare-link"
+                            onClick={() => compareWithPrevious(index)}
+                          >
+                            {t("dependencies.compareWithPrevious")}
+                          </button>
+                        )}
                       </div>
 
                       <div className="snapshot-item-actions">
                         <button
                           type="button"
                           className="secondary-button"
-                          onClick={() => setViewingSnapshot(snapshot)}
+                          onClick={() => viewSnapshot(snapshot)}
                         >
-                          View
+                          {t("common.view")}
                         </button>
 
                         <button
@@ -2007,13 +2466,121 @@ function App() {
                           className="secondary-button"
                           onClick={() => deleteSnapshot(snapshot.id)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </div>
                     </li>
                   ))}
                 </ul>
               )}
+
+              <div className="snapshot-compare" id="snapshot-diff">
+                <p className="eyebrow">
+                  {t("dependencies.compareEyebrow")}
+                </p>
+                <h3>{t("dependencies.compareTitle")}</h3>
+                <p className="muted snapshot-compare-hint">
+                  {t("dependencies.compareHint")}
+                </p>
+
+                {snapshots.length < 2 ? (
+                  <p className="diff-none">
+                    {t("dependencies.compareNeedTwo")}
+                  </p>
+                ) : (
+                  <form
+                    className="snapshot-compare-form"
+                    onSubmit={compareSnapshots}
+                    aria-label={t("dependencies.compareTitle")}
+                  >
+                    <label className="snapshot-select">
+                      <span>{t("dependencies.compareFrom")}</span>
+                      <select
+                        value={compareFromId}
+                        onChange={(event) => {
+                          setCompareFromId(event.target.value);
+                          setSnapshotDiff(null);
+                          setSnapshotDiffError("");
+                        }}
+                      >
+                        <option value="">
+                          {t("dependencies.compareSelect")}
+                        </option>
+                        {snapshots.map((snapshot) => (
+                          <option value={snapshot.id} key={snapshot.id}>
+                            {snapshot.title} ·{" "}
+                            {formatSnapshotTime(snapshot.created_at)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <span className="compare-arrow" aria-hidden="true">
+                      →
+                    </span>
+
+                    <label className="snapshot-select">
+                      <span>{t("dependencies.compareTo")}</span>
+                      <select
+                        value={compareToId}
+                        onChange={(event) => {
+                          setCompareToId(event.target.value);
+                          setSnapshotDiff(null);
+                          setSnapshotDiffError("");
+                        }}
+                      >
+                        <option value="">
+                          {t("dependencies.compareSelect")}
+                        </option>
+                        {snapshots.map((snapshot) => (
+                          <option value={snapshot.id} key={snapshot.id}>
+                            {snapshot.title} ·{" "}
+                            {formatSnapshotTime(snapshot.created_at)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <button
+                      type="submit"
+                      className="secondary-button"
+                      disabled={
+                        snapshotDiffLoading ||
+                        !compareFromId ||
+                        !compareToId ||
+                        String(compareFromId) === String(compareToId)
+                      }
+                    >
+                      {snapshotDiffLoading
+                        ? t("dependencies.comparing")
+                        : t("dependencies.compareAction")}
+                    </button>
+                  </form>
+                )}
+
+                {snapshots.length >= 2 &&
+                  compareFromId &&
+                  compareToId &&
+                  String(compareFromId) === String(compareToId) && (
+                    <p className="diff-none">
+                      {t("dependencies.compareSame")}
+                    </p>
+                  )}
+
+                {snapshotDiffError && (
+                  <p className="pipeline-error" role="alert">
+                    {te(snapshotDiffError)}
+                  </p>
+                )}
+
+                {snapshotDiffLoading && (
+                  <p className="muted" role="status">
+                    {t("common.loading")}
+                  </p>
+                )}
+
+                {snapshotDiff && <SnapshotDiff diff={snapshotDiff} />}
+              </div>
             </div>
           </section>
         )}
@@ -2022,10 +2589,14 @@ function App() {
           <section className="section-block">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">EXECUTION</p>
-                <h2>Commitments</h2>
+                <p className="eyebrow">{t("plan.commitmentsEyebrow")}</p>
+                <h2>{t("plan.commitments")}</h2>
               </div>
-              <span>{graph.nodes.length} commitments</span>
+              <span>
+                {tp("plan.commitmentCount", graph.nodes.length, {
+                  count: graph.nodes.length,
+                })}
+              </span>
             </div>
 
             <div className="commitment-grid">
@@ -2044,7 +2615,9 @@ function App() {
 
                     <div>
                       <h3>{commitment.owner}</h3>
-                      <span>Commitment #{commitment.id}</span>
+                      <span>
+                        {t("plan.commitment", { id: commitment.id })}
+                      </span>
                     </div>
 
                     <StatusBadge status={commitment.status} />
@@ -2055,12 +2628,16 @@ function App() {
                   </p>
 
                   <div className="due-date">
-                    <span>Due date</span>
+                    <span>{t("plan.dueDate")}</span>
                     <strong
                       className={isOverdue(commitment) ? "due-overdue" : ""}
                     >
-                      {commitment.due_date || "Not set"}
-                      {isOverdue(commitment) ? " · overdue" : ""}
+                      {commitment.due_date
+                        ? formatDate(commitment.due_date)
+                        : t("common.notSet")}
+                      {isOverdue(commitment)
+                        ? ` · ${t("plan.overdue")}`
+                        : ""}
                     </strong>
                   </div>
 
@@ -2070,23 +2647,31 @@ function App() {
                         value={newStatus}
                         onChange={(event) => setNewStatus(event.target.value)}
                       >
-                        <option value="">Select status</option>
-                        <option value="OPEN">Open</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="DELAYED">Delayed</option>
-                        <option value="BLOCKED">Blocked</option>
-                        <option value="COMPLETED">Completed</option>
+                        <option value="">{t("plan.selectStatus")}</option>
+                        <option value="OPEN">{t("plan.statusOpen")}</option>
+                        <option value="IN_PROGRESS">
+                          {t("plan.statusInProgress")}
+                        </option>
+                        <option value="DELAYED">
+                          {t("plan.statusDelayed")}
+                        </option>
+                        <option value="BLOCKED">
+                          {t("plan.statusBlocked")}
+                        </option>
+                        <option value="COMPLETED">
+                          {t("plan.statusCompleted")}
+                        </option>
                       </select>
 
                       <input
                         type="text"
-                        placeholder="Reason for this change"
+                        placeholder={t("common.reason")}
                         value={reason}
                         onChange={(event) => setReason(event.target.value)}
                       />
 
                       {editorError && (
-                        <p className="pipeline-error">{editorError}</p>
+                        <p className="pipeline-error">{te(editorError)}</p>
                       )}
 
                       <div className="editor-actions">
@@ -2098,7 +2683,9 @@ function App() {
                             updateCommitmentStatus(commitment.id);
                           }}
                         >
-                          {updating ? "Updating..." : "Update Status"}
+                          {updating
+                            ? t("common.updating")
+                            : t("plan.updateStatus")}
                         </button>
 
                         <button
@@ -2110,7 +2697,7 @@ function App() {
                             setReason("");
                           }}
                         >
-                          Cancel
+                          {t("common.cancel")}
                         </button>
                       </div>
                     </div>
@@ -2124,7 +2711,7 @@ function App() {
                         setReason("");
                       }}
                     >
-                      Change status
+                      {t("plan.changeStatus")}
                     </button>
                   )}
                 </article>
@@ -2134,9 +2721,11 @@ function App() {
         )}
 
         {view === "intake" && (
-          <ViewHeader eyebrow="DECIDE" title="Intake & review">
-            AI proposes candidates from meeting notes; you decide what
-            becomes an authoritative record.
+          <ViewHeader
+            eyebrow={t("intake.eyebrow")}
+            title={t("intake.title")}
+          >
+            {t("intake.subtitle")}
           </ViewHeader>
         )}
 
@@ -2158,8 +2747,12 @@ function App() {
 
         {view === "dependencies" && (
           <section className="card">
-            <p className="eyebrow">DEPENDENCY TRACE</p>
-            <h2>Work dependencies</h2>
+            <p className="eyebrow">{t("dependencies.traceEyebrow")}</p>
+            <h2>{t("dependencies.traceTitle")}</h2>
+
+            {graph.edges.length === 0 && (
+              <p className="muted">{t("dependencies.none")}</p>
+            )}
 
             {graph.edges.map((dependency) => {
               const predecessor = byId[dependency.predecessor_commitment_id];
@@ -2168,21 +2761,35 @@ function App() {
               return (
                 <div className="dependency" key={dependency.id}>
                   <div className="dependency-node">
-                    <strong>{predecessor?.owner || "Unknown"}</strong>
+                    <strong>
+                      {predecessor?.owner || t("dependencies.unknown")}
+                    </strong>
                     <span>
-                      Commitment #{dependency.predecessor_commitment_id}
+                      {t("plan.commitment", {
+                        id: dependency.predecessor_commitment_id,
+                      })}
                     </span>
                   </div>
 
                   <div className="dependency-arrow">
-                    <span>{dependency.dependency_type}</span>
+                    <span>
+                      {t(
+                        `type.${dependency.dependency_type}`,
+                        {},
+                        dependency.dependency_type
+                      )}
+                    </span>
                     <div>→</div>
                   </div>
 
                   <div className="dependency-node">
-                    <strong>{successor?.owner || "Unknown"}</strong>
+                    <strong>
+                      {successor?.owner || t("dependencies.unknown")}
+                    </strong>
                     <span>
-                      Commitment #{dependency.successor_commitment_id}
+                      {t("plan.commitment", {
+                        id: dependency.successor_commitment_id,
+                      })}
                     </span>
                   </div>
 
@@ -2191,11 +2798,13 @@ function App() {
                     className="dependency-remove"
                     onClick={() => removeDependency(dependency.id)}
                     disabled={dependencySaving}
-                    aria-label={`Remove dependency: ${
-                      predecessor?.owner || "unknown"
-                    } blocks ${successor?.owner || "unknown"}`}
+                    aria-label={t("dependencies.removeAria", {
+                      from:
+                        predecessor?.owner || t("dependencies.unknown"),
+                      to: successor?.owner || t("dependencies.unknown"),
+                    })}
                   >
-                    Remove
+                    {t("dependencies.remove")}
                   </button>
                 </div>
               );
@@ -2204,10 +2813,11 @@ function App() {
         )}
 
         {view === "search" && (
-          <ViewHeader eyebrow="TRACE" title="Search">
-            Find any decision, commitment, discussion or change by
-            keyword — including the reasoning and source context behind
-            it.
+          <ViewHeader
+            eyebrow={t("search.eyebrow")}
+            title={t("nav.search")}
+          >
+            {t("search.subtitle")}
           </ViewHeader>
         )}
 
@@ -2223,9 +2833,8 @@ function App() {
         )}
 
         {view === "audit" && (
-          <ViewHeader eyebrow="TRACE" title="Audit trail">
-            Every status change on the selected commitment, newest
-            first, with the reason that was given.
+          <ViewHeader eyebrow={t("audit.eyebrow")} title={t("audit.title")}>
+            {t("audit.subtitle")}
           </ViewHeader>
         )}
 
@@ -2233,14 +2842,14 @@ function App() {
           <section className="card">
             <div className="card-header">
               <div>
-                <h2>Change history</h2>
+                <h2>{t("audit.changeHistory")}</h2>
               </div>
 
               {graph.nodes.length > 0 && (
                 <select
                   className="decision-select"
                   value={selectedId ?? ""}
-                  aria-label="Commitment to audit"
+                  aria-label={t("audit.commitmentToAudit")}
                   onChange={(event) =>
                     setSelectedId(Number(event.target.value))
                   }
@@ -2248,7 +2857,11 @@ function App() {
                   {graph.nodes.map((node) => (
                     <option key={node.id} value={node.id}>
                       #{node.id} {node.owner} ·{" "}
-                      {node.status.replace("_", " ")}
+                      {t(
+                        `status.${node.status}`,
+                        {},
+                        node.status.replace("_", " ")
+                      )}
                     </option>
                   ))}
                 </select>
@@ -2256,7 +2869,7 @@ function App() {
             </div>
 
             {selectedNode && commitmentHistory.total > 1 && (
-              <p className="muted source-note">Newest first</p>
+              <p className="muted source-note">{t("audit.newestFirst")}</p>
             )}
 
             {commitmentHistory.total > 0 ? (
@@ -2275,16 +2888,22 @@ function App() {
 
                       <div>
                         <strong>
-                          {item.old_status.replace("_", " ")}
+                          {t(
+                            `status.${item.old_status}`,
+                            {},
+                            item.old_status.replace("_", " ")
+                          )}
                           {" → "}
-                          {item.new_status.replace("_", " ")}
+                          {t(
+                            `status.${item.new_status}`,
+                            {},
+                            item.new_status.replace("_", " ")
+                          )}
                         </strong>
 
-                        <p>{item.reason || "No reason provided."}</p>
+                        <p>{item.reason || t("common.noReason")}</p>
 
-                        <span>
-                          {new Date(item.changed_at).toLocaleString()}
-                        </span>
+                        <span>{formatDateTime(item.changed_at)}</span>
                       </div>
                     </div>
                   ))}
@@ -2295,16 +2914,18 @@ function App() {
                   limit={commitmentHistory.limit}
                   offset={commitmentHistory.offset}
                   onChange={commitmentHistory.setOffset}
-                  label="Commitment change history"
+                  label={t("audit.historyLabel")}
                   busy={commitmentHistory.loading}
                 />
 
                 {commitmentHistory.error && (
-                  <p className="pipeline-error">{commitmentHistory.error}</p>
+                  <p className="pipeline-error">
+                    {te(commitmentHistory.error)}
+                  </p>
                 )}
               </>
             ) : (
-              <p className="muted">No changes recorded yet.</p>
+              <p className="muted">{t("audit.noHistory")}</p>
             )}
           </section>
         )}

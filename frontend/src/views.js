@@ -5,33 +5,37 @@
  * exist in one and not the other. Grouping follows the order the product
  * actually works in: what we decided -> what we are doing -> how we check
  * it. Each view is one job, not one card.
+ *
+ * Labels are translation keys, not display strings: the sidebar resolves
+ * them through `useI18n`, so switching language never leaves a stale
+ * English label in the navigation.
  */
 
 export const VIEW_GROUPS = [
   {
-    label: "Workspace",
-    views: [{ id: "overview", label: "Overview" }],
+    labelKey: "nav.group.workspace",
+    views: [{ id: "overview", labelKey: "nav.overview" }],
   },
   {
-    label: "Decide",
+    labelKey: "nav.group.decide",
     views: [
-      { id: "decisions", label: "Decisions" },
-      { id: "intake", label: "Intake & review" },
+      { id: "decisions", labelKey: "nav.decisions" },
+      { id: "intake", labelKey: "nav.intake" },
     ],
   },
   {
-    label: "Execute",
+    labelKey: "nav.group.execute",
     views: [
-      { id: "plan", label: "Plan & commitments" },
-      { id: "dependencies", label: "Dependencies" },
+      { id: "plan", labelKey: "nav.plan" },
+      { id: "dependencies", labelKey: "nav.dependencies" },
     ],
   },
   {
-    label: "Trace",
+    labelKey: "nav.group.trace",
     views: [
-      { id: "search", label: "Search" },
-      { id: "consistency", label: "Consistency" },
-      { id: "audit", label: "Audit trail" },
+      { id: "search", labelKey: "nav.search" },
+      { id: "consistency", labelKey: "nav.consistency" },
+      { id: "audit", labelKey: "nav.audit" },
     ],
   },
 ];
