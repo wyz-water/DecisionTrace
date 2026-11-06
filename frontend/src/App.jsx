@@ -2114,7 +2114,7 @@ function App() {
                   <div
                     className="plan-row"
                     key={node.id}
-                    onClick={() => openImpact(node.id, "DELAYED")}
+                    onClick={() => setSelectedId(node.id)}
                   >
                     <span className="plan-index">{index + 1}</span>
 
@@ -2139,7 +2139,7 @@ function App() {
                   <div
                     className="plan-row cyclic"
                     key={node.id}
-                    onClick={() => openImpact(node.id, "DELAYED")}
+                    onClick={() => setSelectedId(node.id)}
                   >
                     <span className="plan-index">↻</span>
 
@@ -2164,7 +2164,7 @@ function App() {
                   <div
                     className="plan-row deferred"
                     key={node.id}
-                    onClick={() => openImpact(node.id, "DELAYED")}
+                    onClick={() => setSelectedId(node.id)}
                   >
                     <span className="plan-index">—</span>
 
@@ -2714,7 +2714,7 @@ function App() {
                     commitment.id === selectedId ? "selected" : ""
                   }`}
                   key={commitment.id}
-                  onClick={() => openImpact(commitment.id, "DELAYED")}
+                  onClick={() => setSelectedId(commitment.id)}
                 >
                   <div className="commitment-top">
                     <div className="avatar">
@@ -2761,7 +2761,10 @@ function App() {
                   </button>
 
                   {editingId === commitment.id ? (
-                    <div className="status-editor">
+                    <div
+                      className="status-editor"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <select
                         value={newStatus}
                         onChange={(event) => setNewStatus(event.target.value)}
