@@ -45,3 +45,22 @@ class CommitmentImpactResponse(BaseModel):
     commitment_status: str
     has_impact: bool
     affected_commitments: list[AffectedCommitment]
+
+
+class WhatIfAffectedCommitment(AffectedCommitment):
+    """One downstream commitment, with whether this preview is new risk."""
+
+    newly_affected: bool
+
+
+class CommitmentWhatIfResponse(BaseModel):
+    commitment_id: int
+    current_status: str
+    hypothetical_status: str
+    preview: bool
+    has_cycle: bool
+    total: int
+    current_total: int
+    newly_affected: list[int]
+    already_affected: list[int]
+    affected: list[WhatIfAffectedCommitment]
