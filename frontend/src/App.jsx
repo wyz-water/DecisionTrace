@@ -1285,8 +1285,14 @@ function App() {
       return;
     }
 
-    // Send only the fields that actually changed. An empty rationale
-    // must still be sent so clearing it works (null means "unchanged").
+    // A decision keeps its recorded goal: the rationale may change, but
+    // it cannot be erased (mirrors the backend rule on PATCH).
+    if (!(decisionDraft.rationale ?? "").trim()) {
+      setDecisionError(t("decisions.rationaleRequired"));
+      return;
+    }
+
+    // Send only the fields that actually changed.
     const body = {};
 
     if (decisionDraft.title !== decision.title) {

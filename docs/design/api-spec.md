@@ -61,17 +61,17 @@ list endpoint is automatically UI-ready.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/discussions` | Record a discussion (title + content) — paste or file upload path (UC01) |
-| GET | `/discussions?project_id=` | List, paginated |
+| POST | `/discussions` | Record a discussion (title + content) — paste or file upload path (UC01). Responses carry a rule-based `summary` |
+| GET | `/discussions?project_id=` | List, paginated; each row carries a computed `summary` (decisions / commitments / dependencies with names) |
 | DELETE | `/discussions/{id}` | Delete; its candidates go with it, confirmed decisions keep their text but lose the pointer |
 
 ### Decisions — `/decisions`
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/decisions` | Create a decision (UC04) |
+| POST | `/decisions` | Create a decision (UC04). **Rationale (the decision goal) is required** — `400` otherwise |
 | GET | `/decisions?project_id=` | List, paginated |
-| PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history` |
+| PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty) |
 | GET | `/decisions/{id}/history` | Change log, newest first |
 | GET | `/decisions/{id}/impact` | Downstream commitments affected through `BLOCKS` closure |
 
@@ -82,6 +82,7 @@ list endpoint is automatically UI-ready.
 | POST | `/commitments` | Create a commitment (UC05) |
 | GET | `/commitments?project_id=` | List, paginated |
 | PATCH | `/commitments/{id}/status` | Update status (validated set); appends `commitment_history` |
+| GET | `/commitments/{id}/what-if` | Read-only preview: hypothetical DELAYED/BLOCKED downstream impact, split into newly vs already affected; never writes history |
 | GET | `/commitments/{id}/impact` | Transitive downstream impact |
 | GET | `/commitments/{id}/history` | Audit trail, newest first |
 | DELETE | `/commitments/{id}` | Delete; audit rows and touching edges go with it |
@@ -98,11 +99,22 @@ list endpoint is automatically UI-ready.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/candidates/extract/{discussion_id}` | Run extraction (rules or DeepSeek); idempotent per discussion (UC02) |
-| GET | `/candidates?project_id=&status=` | List; `status` accepts a comma list (UC03) |
+| POST | `/candidates/extract/{discussion_id}` | Run extraction (rules or DeepSeek); idempotent per discussion (UC02). Returns created candidates and a rule-based `summary` |
+| GET | `/candidates?project_id=&status=` | List; `status` accepts a comma list (UC03). Pending rows carry `duplicate_of` against authoritative records |
 | PATCH | `/candidates/{id}` | Edit the candidate payload before confirming |
-| POST | `/candidates/{id}/confirm` | Promote to an authoritative record; cycle/duplicate checks apply here too |
+| POST | `/candidates/{id}/confirm` | Promote to an authoritative record; cycle/duplicate checks apply here too. Single confirm is allowed even for duplicates |
+| POST | `/candidates/confirm-batch` | Body `{candidate_ids}`. Confirms each; per-item failures reported; duplicates skipped by default |
 | POST | `/candidates/{id}/reject` | Reject with an optional comment |
+
+### Snapshots — `/projects/{id}/snapshots`
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/projects/{id}/snapshots` | Capture the current graph under a title (a meeting summary as a graph) |
+| GET | `/projects/{id}/snapshots?limit=` | List, newest first |
+| GET | `/projects/{id}/snapshots/{sid}` | Full graph payload of one snapshot |
+| GET | `/projects/{id}/snapshots/{a}/diff/{b}` | Structural diff between two snapshots (added/removed/changed nodes and edges) |
+| DELETE | `/projects/{id}/snapshots/{sid}` | Delete one snapshot |
 
 ### Search — `/search`
 

@@ -156,6 +156,17 @@ def update_decision(
         )
 
     if (
+        update.rationale is not None
+        and not update.rationale.strip()
+    ):
+        # A decision must keep its recorded goal (feedback point 0):
+        # revision may change the rationale, but never erase it.
+        raise HTTPException(
+            status_code=400,
+            detail="Rationale is required: a decision must record its goal"
+        )
+
+    if (
         new_title == old_title
         and new_rationale == old_rationale
         and new_status == old_status

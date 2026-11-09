@@ -56,9 +56,10 @@ goal evolved.
 
 - Rationale is displayed wherever a decision appears, and revising a
   decision writes the old and the new rationale to history, so the
-  goal's evolution is never silently dropped. (Making rationale a
-  required field on creation is a candidate change for Part III — see
-  the change log.)
+  goal's evolution is never silently dropped. Manually created
+  decisions require the rationale (API and form); extracted candidates
+  are exempt because their goal context is the source discussion they
+  point back to. See the requirements change log.
 - The source link is first-class: search covers discussions, decisions and
   histories together, so "why did we decide this?" is one query.
 - The impact panel and the what-if preview exist because owners and leads
@@ -198,3 +199,13 @@ which discussion types), then a fix — prompt change, new rule, or a
 stronger human-review step — and the same gold set is re-run. If the LLM
 path does not beat the rule engine, we stay on rules (A3). Evaluation
 results and their consequences for the design are reported in Part III.
+
+## 10. Open Issues & Risks (to test in Part III)
+
+| # | Issue / risk | Part III validation |
+|---|---|---|
+| R1 | Status-transition matrix: only the vocabulary is enforced today; which jumps are legal (e.g. `DELAYED → COMPLETED`) has no formal rule | PoC an explicit transition rule set and measure how many real updates it blocks vs saves |
+| R2 | Scale ceiling: SQLite single-machine + no authentication fits a team MVP only | Multi-tenant hosting would need auth, roles and a server database (A1 covers the migration path) |
+| R3 | AI trust: field accuracy ≥ 80% is a target, not a measurement yet; whether review actually saves time vs manual entry is unmeasured | The evaluation plan in §9 is the protocol; results reported in Part III |
+| R4 | Concurrent updates: append-only history prevents overwriting the trace, but two members updating the same commitment still race (last write wins) | Confirm mechanism or a version check on update |
+| R5 | Dependency editing: edges can be created and removed but not edited (change type/endpoints) | Add PATCH for edges with the same cycle/duplicate checks |

@@ -96,6 +96,42 @@ class FeedbackAutomationTests(unittest.TestCase):
         self.assertEqual(created.title, "Use Redis")
         self.assertEqual(created.rationale, "Caching layer for hot paths")
 
+    def test_decision_goal_cannot_be_erased_by_revision(self):
+        from app.routes.decisions import update_decision
+        from app.schemas.decision import DecisionUpdate
+        created = create_decision(
+            DecisionCreate(
+                project_id=self.project.id,
+                title="Use Redis",
+                rationale="Caching hot paths",
+            ),
+            db=self.db,
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            update_decision(
+                created.id,
+                DecisionUpdate(rationale=""),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn("Rationale is required", raised.exception.detail)
+
+        # Changing the rationale is fine; erasing it is not.
+        revised = update_decision(
+            created.id,
+            DecisionUpdate(
+                rationale="Caching hot paths and session state",
+                reason="scope widened",
+            ),
+            db=self.db,
+        )
+        self.assertEqual(
+            revised.rationale,
+            "Caching hot paths and session state",
+        )
+
     def test_candidate_confirm_still_allows_missing_rationale(self):
         # The extracted path keeps rationale optional: the source
         # discussion is the goal context for meeting-derived decisions.
