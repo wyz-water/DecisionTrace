@@ -76,13 +76,14 @@ graph TD
 8. **Manual entry is the fallback.** Decisions and Plan & commitments each
    offer an expandable creation form for missed extractions and decisions
    that never appear in a meeting — not as the primary path. A decision
-   requires a title and can include rationale and a source discussion
-   number. A commitment requires an owner and description and can include
-   a due date and linked decision. Successful creation clears the form and
-   selects the new record after refreshing project data. Failed
-   submissions retain the draft. Switching projects resets the form and
-   prevents late creation responses from changing the selection in
-   another project.
+   requires a title and a rationale (the decision goal — the API enforces
+   the same rule) and can include a source discussion number; revision
+   may change the rationale but never erase it. A commitment requires an
+   owner and description and can include a due date and linked decision.
+   Successful creation clears the form and selects the new record after
+   refreshing project data. Failed submissions retain the draft. Switching
+   projects resets the form and prevents late creation responses from
+   changing the selection in another project.
 
 ## 4. Component Inventory
 
