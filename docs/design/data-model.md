@@ -112,9 +112,12 @@ notes are mixed). Discussions are the *source context* every authoritative
 record points back to.
 
 ### Decision
-A decision with its rationale (UC04). `source_discussion_id` is nullable:
-a decision can be created directly, not only extracted. If its source
-discussion is deleted, the pointer is cleared and the decision stays.
+A decision with its rationale — the recorded *decision goal* (UC04).
+`source_discussion_id` is nullable: a decision can be created directly,
+not only extracted. If its source discussion is deleted, the pointer is
+cleared and the decision stays. Rationale is optional on creation but is
+displayed wherever the decision appears; revisions write the old and the
+new rationale to `decision_history`, so the goal's evolution is preserved.
 
 **Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
 

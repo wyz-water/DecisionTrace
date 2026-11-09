@@ -26,7 +26,7 @@ graph TD
 |---|---|---|
 | Overview | Dashboard: KPIs, graph preview, "needs attention" list | — |
 | Decisions | Create/revise decisions; see rationale, history, impact | UC04, UC07 |
-| Intake & review | Paste/upload discussions; review AI candidates (confirm/edit/reject) | UC01–UC03 |
+| Intake & review | Paste/upload discussions → automatic extraction → batch review of AI candidates (confirm/edit/reject) | UC01–UC03 |
 | Plan & commitments | Assign and track commitments; update status with a reason | UC05 |
 | Dependencies | The graph: topological layout, blocked-by, cycles, add/remove edges | UC06, UC07 |
 | Search | Keyword search across records and history; hit links to its home view | UC08 |
@@ -65,14 +65,24 @@ graph TD
 6. **Empty states are routes, not walls.** A fresh database shows the
    dashboard with a banner and a working project switcher, so the first
    project can always be created from the UI.
-7. **Manual entry.** Decisions and Plan & commitments each offer an
-   expandable creation form. A decision requires a title and can include
-   rationale and a source discussion number. A commitment requires an
-   owner and description and can include a due date and linked decision.
-   Successful creation clears the form and selects the new record after
-   refreshing project data. Failed submissions retain the draft. Switching
-   projects resets the form and prevents late creation responses from
-   changing the selection in another project.
+7. **Automation-first intake.** Dropping a discussion into the intake
+   view triggers extraction automatically; the review list is built for
+   batch confirmation (paged, one click per candidate, source text always
+   visible). The human's job is *verifying*, never *transcribing*.
+   Part III upgrades: one-click batch confirm above a confidence
+   threshold, an auto-generated meeting summary with a suggested graph
+   snapshot, duplicate detection, and owner suggestions (see the
+   architecture document, §5).
+8. **Manual entry is the fallback.** Decisions and Plan & commitments each
+   offer an expandable creation form for missed extractions and decisions
+   that never appear in a meeting — not as the primary path. A decision
+   requires a title and can include rationale and a source discussion
+   number. A commitment requires an owner and description and can include
+   a due date and linked decision. Successful creation clears the form and
+   selects the new record after refreshing project data. Failed
+   submissions retain the draft. Switching projects resets the form and
+   prevents late creation responses from changing the selection in
+   another project.
 
 ## 4. Component Inventory
 
