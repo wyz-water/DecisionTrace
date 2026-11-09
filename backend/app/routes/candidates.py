@@ -299,6 +299,25 @@ def _duplicate_of(db, candidate):
             existing = _find_decision_by_title(
                 db, candidate.project_id, title
             )
+            if not existing:
+                # Tolerance for the extractor's title cleaning: manual
+                # entry says "Use Redis" while extraction cleans the
+                # leading verb and yields "Redis". Both name the same
+                # decision.
+                for row in db.query(Decision).filter(
+                    Decision.project_id == candidate.project_id
+                ).all():
+                    a = row.title.strip().lower()
+                    b = title.lower()
+                    for prefix in ("use ", "using ", "to "):
+                        if (
+                            (a.startswith(prefix) and b == a[len(prefix):])
+                            or (b.startswith(prefix) and a == b[len(prefix):])
+                        ):
+                            existing = row
+                            break
+                    if existing:
+                        break
             if existing:
                 return f"Decision #{existing.id}"
 

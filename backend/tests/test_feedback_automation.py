@@ -144,6 +144,25 @@ class FeedbackAutomationTests(unittest.TestCase):
         self.assertEqual(result["created"], 1)
         self.assertEqual(result["candidates"][0]["duplicate_of"], "Decision #1")
 
+    def test_duplicate_title_tolerates_cleaned_prefix(self):
+        # Manual entry says "Use Redis"; extraction cleans the verb and
+        # yields "Redis". Both must be recognized as the same decision.
+        self.db.add(Decision(
+            project_id=self.project.id,
+            title="Use Redis",
+            rationale="Cache layer",
+            status="CONFIRMED",
+        ))
+        self.db.commit()
+
+        discussion = self.add_discussion(
+            "We decided to use Redis because caching hot paths helps."
+        )
+        result = extract_from_discussion(discussion.id, db=self.db)
+
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["candidates"][0]["duplicate_of"], "Decision #1")
+
     def test_duplicate_commitment_candidate_is_flagged(self):
         from app.models.commitment import Commitment
         self.db.add(Commitment(
