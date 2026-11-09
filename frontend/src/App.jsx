@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
+import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
+import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import ImpactPanel from "./components/ImpactPanel.jsx";
 import LanguageToggle from "./components/LanguageToggle.jsx";
 import Pagination from "./components/Pagination.jsx";
@@ -380,6 +382,8 @@ function App() {
   // Which section is on screen. Driven by the URL hash so a reload, a
   // bookmark and the back button all land on the same section.
   const [view, setView] = useState(() => readView(window.location.hash));
+  const activeProjectIdRef = useRef(null);
+  const dashboardRequestRef = useRef(0);
 
   const projectId = project?.id ?? null;
 
@@ -449,6 +453,8 @@ function App() {
       : null;
 
   async function loadDashboard(keepSelected = null, preferProjectId = null) {
+    const requestId = ++dashboardRequestRef.current;
+
     try {
       const projectsResponse = await fetch(`${API_URL}/projects`);
 
@@ -458,6 +464,10 @@ function App() {
 
       const projects = await projectsResponse.json();
 
+      if (requestId !== dashboardRequestRef.current) {
+        return false;
+      }
+
       // Cleared only after an await: setting state synchronously inside
       // the effect body triggers a cascading render
       // (react-hooks/set-state-in-effect).
@@ -465,8 +475,10 @@ function App() {
       setProjects(projects);
 
       if (projects.length === 0) {
+        activeProjectIdRef.current = null;
+        setProject(null);
         setError(t("app.noProjects"));
-        return;
+        return false;
       }
 
       const savedId = Number(
@@ -501,6 +513,11 @@ function App() {
       const decisionsData = await decisionsResponse.json();
       const conflictsData = await conflictsResponse.json();
 
+      if (requestId !== dashboardRequestRef.current) {
+        return false;
+      }
+
+      activeProjectIdRef.current = activeProject.id;
       setProject(activeProject);
       setGraph(graphData);
       setDecisions(decisionsData);
@@ -523,18 +540,30 @@ function App() {
           ? keepSelected
           : trackedId
       );
+      return true;
     } catch (err) {
-      setError(te(err.message));
+      if (requestId === dashboardRequestRef.current) {
+        setError(te(err.message));
+      }
     } finally {
-      setLoading(false);
+      if (requestId === dashboardRequestRef.current) {
+        setLoading(false);
+      }
     }
+
+    return false;
   }
 
   // Reload everything after a write. `loadDashboard` alone would leave
   // the paginated lists and the impact cards showing pre-write data.
-  async function reloadData(keepSelected = null) {
-    await loadDashboard(keepSelected);
-    setRefreshTick((tick) => tick + 1);
+  async function reloadData(keepSelected = null, preferProjectId = null) {
+    const refreshed = await loadDashboard(keepSelected, preferProjectId);
+
+    if (refreshed) {
+      setRefreshTick((tick) => tick + 1);
+    }
+
+    return refreshed;
   }
 
   function openImpact(commitmentId, status = "DELAYED") {
@@ -576,6 +605,7 @@ function App() {
       "decisiontrace.activeProjectId",
       String(nextProject.id)
     );
+    activeProjectIdRef.current = nextProject.id;
     setProject(nextProject);
     loadDashboard(null, nextProject.id);
   }
@@ -599,6 +629,7 @@ function App() {
       "decisiontrace.activeProjectId",
       String(created.id)
     );
+    activeProjectIdRef.current = created.id;
     setProject(created);
     await loadDashboard(null, created.id);
   }
@@ -618,11 +649,62 @@ function App() {
     if (project?.id === targetProject.id) {
       closeImpact();
       window.localStorage.removeItem("decisiontrace.activeProjectId");
+      activeProjectIdRef.current = null;
       setProject(null);
       await loadDashboard();
     } else {
       await loadDashboard(null, project?.id ?? null);
     }
+  }
+
+  async function createRecord(path, payload, errorKey) {
+    if (project?.id == null) {
+      throw new Error(t("recordForm.chooseProject"));
+    }
+
+    const response = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, project_id: project.id }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : t(errorKey)
+      );
+    }
+
+    return response.json();
+  }
+
+  async function createDecision(payload) {
+    const created = await createRecord(
+      "/decisions", payload, "recordForm.decisionFailed"
+    );
+
+    if (activeProjectIdRef.current === created.project_id) {
+      const refreshed = await reloadData(selectedId, created.project_id);
+
+      if (refreshed && activeProjectIdRef.current === created.project_id) {
+        setDecisionId(created.id);
+        setEditingDecision(false);
+      }
+    }
+
+    return created;
+  }
+
+  async function createCommitment(payload) {
+    const created = await createRecord(
+      "/commitments", payload, "recordForm.commitmentFailed"
+    );
+
+    if (activeProjectIdRef.current === created.project_id) {
+      await reloadData(created.id, created.project_id);
+    }
+
+    return created;
   }
 
   async function loadSnapshots() {
@@ -1777,6 +1859,14 @@ function App() {
         )}
 
         {view === "decisions" && (
+          <DecisionCreateForm
+            key={projectId}
+            projectId={projectId}
+            onCreate={createDecision}
+          />
+        )}
+
+        {view === "decisions" && (
           <div className="dashboard-grid">
             <section className="card decision-card">
               <div className="card-header">
@@ -2080,6 +2170,15 @@ function App() {
           <ViewHeader eyebrow={t("plan.eyebrow")} title={t("plan.title")}>
             {t("plan.subtitle")}
           </ViewHeader>
+        )}
+
+        {view === "plan" && (
+          <CommitmentCreateForm
+            key={projectId}
+            projectId={projectId}
+            decisions={decisions.filter((item) => item.project_id === projectId)}
+            onCreate={createCommitment}
+          />
         )}
 
         {view === "plan" && (

@@ -580,6 +580,48 @@ body {
   resize: vertical;
 }
 
+.record-create-card {
+  margin-bottom: 20px;
+}
+
+.record-create-form {
+  max-width: 760px;
+  gap: 16px;
+}
+
+.record-create-form h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.record-create-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.record-create-form .link-field {
+  flex: none;
+}
+
+.record-create-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.record-create-notice {
+  margin: 0;
+  color: #267447;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .record-create-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .decision-editor input:focus,
 .decision-editor textarea:focus,
 .decision-editor select:focus {
