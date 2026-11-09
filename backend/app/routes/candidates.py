@@ -16,12 +16,18 @@ from app.schemas.candidate import (
     CandidateUpdate,
     CandidateReject,
     CandidateConfirmResponse,
+    CandidateBatchConfirmRequest,
+    CandidateBatchConfirmResponse,
     ExtractResponse,
 )
 from app.schemas.dependency import DependencyCreate
 from app.schemas.page import Page
 from app.routes.dependencies import cycle_rejection_payload
-from app.services.extractor import extract_candidates, serialize_candidate
+from app.services.extractor import (
+    extract_candidates,
+    serialize_candidate,
+    summarize_discussion,
+)
 from app.services.graph import find_cycle_with_edge
 from app.services.pagination import PageParams, page_response, paginate
 from app.statuses import COMMITMENT_STATUSES, DECISION_STATUSES
@@ -169,7 +175,8 @@ def extract_from_discussion(
         "discussion_id": discussion.id,
         "created": len(created),
         "skipped": skipped,
-        "candidates": [serialize_candidate(c) for c in created],
+        "candidates": [_serialize_candidate(db, c) for c in created],
+        "summary": summarize_discussion(discussion.content),
     }
 
 
@@ -215,7 +222,7 @@ def get_candidates(
     rows, total = paginate(query, page)
 
     return page_response(
-        [serialize_candidate(candidate) for candidate in rows],
+        [_serialize_candidate(db, candidate) for candidate in rows],
         total,
         page
     )
@@ -272,6 +279,77 @@ def _field(payload, key):
     return value or None
 
 
+def _duplicate_of(db, candidate):
+    """Name the authoritative record this pending candidate repeats.
+
+    Feedback point 1 (reduce manual burden): re-stating an existing fact
+    in a meeting is the common case, so duplicates are detected against
+    authoritative records (decisions, commitments, dependencies) — not
+    against other candidates, which extraction keys already cover — and
+    surfaced on the candidate itself. None when the candidate is new.
+    """
+    payload = json.loads(candidate.payload)
+
+    if not isinstance(payload, dict):
+        return None
+
+    if candidate.candidate_type == "DECISION":
+        title = _field(payload, "title")
+        if title:
+            existing = _find_decision_by_title(
+                db, candidate.project_id, title
+            )
+            if existing:
+                return f"Decision #{existing.id}"
+
+    elif candidate.candidate_type == "COMMITMENT":
+        owner = _field(payload, "owner")
+        description = _field(payload, "description")
+        if owner and description:
+            match = db.query(Commitment).filter(
+                Commitment.project_id == candidate.project_id,
+                func.lower(Commitment.owner) == owner.lower(),
+                func.lower(Commitment.description) == description.lower(),
+            ).first()
+            if match:
+                return f"Commitment #{match.id}"
+
+    elif candidate.candidate_type == "DEPENDENCY":
+        predecessor_owner = _field(payload, "predecessor_owner")
+        successor_owner = _field(payload, "successor_owner")
+        if predecessor_owner and successor_owner:
+            predecessors = _find_commitments_by_owner(
+                db, candidate.project_id, predecessor_owner
+            )
+            successors = _find_commitments_by_owner(
+                db, candidate.project_id, successor_owner
+            )
+            if len(predecessors) == 1 and len(successors) == 1:
+                edge = db.query(Dependency).filter(
+                    Dependency.project_id == candidate.project_id,
+                    Dependency.predecessor_commitment_id == predecessors[0].id,
+                    Dependency.successor_commitment_id == successors[0].id,
+                ).first()
+                if edge:
+                    return f"Dependency #{edge.id}"
+
+    return None
+
+
+def _serialize_candidate(db, candidate):
+    """CandidateResponse plus duplicate_of, computed on read.
+
+    Only pending candidates are checked: once reviewed, the candidate no
+    longer competes with the records it would create.
+    """
+    data = serialize_candidate(candidate).model_dump()
+
+    if candidate.status == "PENDING":
+        data["duplicate_of"] = _duplicate_of(db, candidate)
+
+    return data
+
+
 def _find_commitments_by_owner(db, project_id, owner):
     return db.query(Commitment).filter(
         Commitment.project_id == project_id,
@@ -302,14 +380,9 @@ def _normalize_status(value, allowed, default):
     return status
 
 
-@router.post(
-    "/{candidate_id}/confirm",
-    response_model=CandidateConfirmResponse
-)
-def confirm_candidate(
-    candidate_id: int,
-    db: Session = Depends(get_db)
-):
+def _confirm_pending(db, candidate_id):
+    """Confirm one pending candidate: validate, create the authoritative
+    record, commit. Raises HTTPException on failure."""
     candidate = db.query(Candidate).filter(
         Candidate.id == candidate_id
     ).first()
@@ -557,7 +630,90 @@ def confirm_candidate(
     return {
         "candidate_id": candidate.id,
         "created_id": record.id,
+    }
+
+
+@router.post(
+    "/{candidate_id}/confirm",
+    response_model=CandidateConfirmResponse
+)
+def confirm_candidate(
+    candidate_id: int,
+    db: Session = Depends(get_db)
+):
+    """Single confirmation: the human gate for one candidate."""
+    result = _confirm_pending(db, candidate_id)
+
+    candidate = db.query(Candidate).filter(
+        Candidate.id == candidate_id
+    ).first()
+
+    return {
+        "candidate_id": result["candidate_id"],
+        "created_id": result["created_id"],
         "candidate": serialize_candidate(candidate),
+    }
+
+
+@router.post(
+    "/confirm-batch",
+    response_model=CandidateBatchConfirmResponse
+)
+def confirm_candidates_batch(
+    request: CandidateBatchConfirmRequest,
+    db: Session = Depends(get_db)
+):
+    """Confirm many candidates in one request (feedback point 1).
+
+    Partial success is reported item by item: earlier candidates stay
+    confirmed even when a later one fails. Duplicates are skipped by
+    default — re-stating an existing record in a meeting should not
+    re-enter it into the trace; single confirm remains the deliberate
+    path for genuine re-statements.
+    """
+    confirmed = []
+    failed = []
+    skipped_duplicates = []
+
+    for candidate_id in request.candidate_ids:
+        candidate = db.query(Candidate).filter(
+            Candidate.id == candidate_id
+        ).first()
+
+        if not candidate:
+            failed.append({
+                "candidate_id": candidate_id,
+                "detail": "Candidate not found",
+            })
+            continue
+
+        if candidate.status != "PENDING":
+            failed.append({
+                "candidate_id": candidate_id,
+                "detail": "Only pending candidates can be confirmed",
+            })
+            continue
+
+        if _duplicate_of(db, candidate):
+            skipped_duplicates.append(candidate_id)
+            continue
+
+        try:
+            result = _confirm_pending(db, candidate_id)
+            confirmed.append({
+                "candidate_id": result["candidate_id"],
+                "created_id": result["created_id"],
+            })
+        except HTTPException as exc:
+            failed.append({
+                "candidate_id": candidate_id,
+                "detail": str(exc.detail),
+            })
+
+    return {
+        "confirmed": confirmed,
+        "failed": failed,
+        "skipped_duplicates": skipped_duplicates,
     }
 
 

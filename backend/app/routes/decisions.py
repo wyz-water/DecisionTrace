@@ -70,6 +70,15 @@ def create_decision(
             detail="Invalid decision status"
         )
 
+    # Feedback point 0 (decision goals): a manually created decision must
+    # record its goal. Extracted candidates are exempt — their goal
+    # context is the source discussion they point back to.
+    if not (decision.rationale or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Rationale is required: a decision must record its goal"
+        )
+
     new_decision = Decision(
         project_id=decision.project_id,
         source_discussion_id=decision.source_discussion_id,
