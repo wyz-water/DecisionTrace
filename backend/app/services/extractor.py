@@ -195,6 +195,44 @@ SYSTEM_PROMPT = (
 )
 
 
+def summarize_discussion(text):
+    """Rule-based meeting summary: names and counts per record type.
+
+    Always uses the rule engine — never the LLM — so the summary is
+    deterministic, offline and free, and so listing discussions cannot
+    trigger API calls. It is a preview of what extraction will find, not
+    a second opinion on it.
+    """
+    items = rule_based_extract(text or "")
+
+    decisions = []
+    commitments = []
+    dependencies = []
+
+    for item in items:
+        payload = item.get("payload") or {}
+        candidate_type = item.get("candidate_type")
+
+        if candidate_type == "DECISION" and payload.get("title"):
+            decisions.append(str(payload["title"]))
+        elif candidate_type == "COMMITMENT" and payload.get("owner"):
+            commitments.append(str(payload["owner"]))
+        elif candidate_type == "DEPENDENCY":
+            pair = (
+                payload.get("predecessor_owner"),
+                payload.get("successor_owner"),
+            )
+            if all(pair):
+                dependencies.append(f"{pair[0]} → {pair[1]}")
+
+    return {
+        "decisions": decisions,
+        "commitments": commitments,
+        "dependencies": dependencies,
+        "total": len(decisions) + len(commitments) + len(dependencies),
+    }
+
+
 def _extract_via_llm(text):
     """Return candidate dicts from DeepSeek, or None when unavailable."""
     api_key = os.environ.get("DEEPSEEK_API_KEY")

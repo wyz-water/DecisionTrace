@@ -17,11 +17,12 @@ const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
  * components/Pagination.jsx for the token list it draws from.
  */
 export default function DiscussionsPanel({ page, projectId, reload }) {
-  const { t, tp, te } = useI18n();
+  const { t, tp, te, formatDate } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
   const [extractingId, setExtractingId] = useState(null);
+  const [snapshotSavingId, setSnapshotSavingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -166,6 +167,40 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
     }
   }
 
+  async function saveSnapshot(discussion) {
+    setSnapshotSavingId(discussion.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/projects/${projectId}/snapshots`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: `${discussion.title} · ${formatDate(
+              new Date().toISOString().slice(0, 10)
+            )}`,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(te(data.detail) || t("intake.snapshotFailed"));
+      }
+
+      // Feedback point 1: the meeting summary is a graph snapshot — one
+      // click from the discussion, no manual assembly.
+      setNotice(t("intake.snapshotSaved"));
+    } catch (err) {
+      setError(te(err.message) || t("intake.snapshotFailed"));
+    } finally {
+      setSnapshotSavingId(null);
+    }
+  }
+
   async function extract(discussionId) {
     setExtractingId(discussionId);
     setError("");
@@ -305,15 +340,67 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
 
                   <p>{discussion.content}</p>
 
-                  <button
-                    className="secondary-button"
-                    disabled={extractingId === discussion.id}
-                    onClick={() => extract(discussion.id)}
-                  >
-                    {extractingId === discussion.id
-                      ? t("intake.extracting")
-                      : t("intake.extract")}
-                  </button>
+                  {discussion.summary && (
+                    <div className="discussion-summary">
+                      <span className="summary-label">
+                        {t("intake.summaryLabel")}
+                      </span>
+
+                      {discussion.summary.total === 0 ? (
+                        <span className="muted">
+                          {t("intake.summaryEmpty")}
+                        </span>
+                      ) : (
+                        <>
+                          {discussion.summary.decisions.length > 0 && (
+                            <span>
+                              {t("intake.summary.decisions", {
+                                names: discussion.summary.decisions.join("、"),
+                              })}
+                            </span>
+                          )}
+                          {discussion.summary.commitments.length > 0 && (
+                            <span>
+                              {t("intake.summary.commitments", {
+                                names:
+                                  discussion.summary.commitments.join("、"),
+                              })}
+                            </span>
+                          )}
+                          {discussion.summary.dependencies.length > 0 && (
+                            <span>
+                              {t("intake.summary.dependencies", {
+                                names:
+                                  discussion.summary.dependencies.join("、"),
+                              })}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="discussion-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={extractingId === discussion.id}
+                      onClick={() => extract(discussion.id)}
+                    >
+                      {extractingId === discussion.id
+                        ? t("intake.extracting")
+                        : t("intake.extract")}
+                    </button>
+
+                    <button
+                      className="secondary-button"
+                      disabled={snapshotSavingId === discussion.id}
+                      onClick={() => saveSnapshot(discussion)}
+                    >
+                      {snapshotSavingId === discussion.id
+                        ? t("common.working")
+                        : t("intake.saveSnapshot")}
+                    </button>
+                  </div>
                 </div>
               ))
             )}

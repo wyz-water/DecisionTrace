@@ -1095,13 +1095,16 @@ function App() {
 
   useEffect(() => {
     // Same deferred-loader pattern as the dashboard effect above.
+    // `view` is in the deps so a snapshot saved from the intake view
+    // (meeting summary → snapshot) is visible the moment the user opens
+    // the Dependencies view, without a full dashboard reload.
     async function load() {
       await loadSnapshots();
     }
 
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id]);
+  }, [project?.id, view]);
 
   useEffect(() => {
     // Defined locally and awaited: react-hooks' set-state-in-effect rule

@@ -7,6 +7,7 @@ export default function DecisionCreateForm({ projectId, onCreate }) {
   const formId = useId();
   const titleRef = useRef(null);
   const sourceRef = useRef(null);
+  const rationaleRef = useRef(null);
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const [open, setOpen] = useState(false);
@@ -38,6 +39,14 @@ export default function DecisionCreateForm({ projectId, onCreate }) {
     if (!title.trim()) {
       setError(t("recordForm.titleRequired"));
       titleRef.current?.focus();
+      return;
+    }
+
+    // Feedback point 0: a decision must record its goal. The backend
+    // enforces the same rule for the API path.
+    if (!rationale.trim()) {
+      setError(t("recordForm.rationaleRequired"));
+      rationaleRef.current?.focus();
       return;
     }
 
@@ -154,12 +163,14 @@ export default function DecisionCreateForm({ projectId, onCreate }) {
 
           <label className="link-field" htmlFor={`${formId}-rationale`}>
             <span>
-              {t("common.rationale")} · {t("common.optional")}
+              {t("common.rationale")} · {t("recordForm.goalNote")}
             </span>
             <textarea
+              ref={rationaleRef}
               id={`${formId}-rationale`}
               rows={3}
               value={rationale}
+              required
               disabled={saving}
               onChange={(event) => setRationale(event.target.value)}
             />

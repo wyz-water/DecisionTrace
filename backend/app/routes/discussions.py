@@ -26,6 +26,7 @@ from app.services.importing import (
     extract_docx_text,
     extract_pdf_text,
 )
+from app.services.extractor import summarize_discussion
 from app.services.pagination import PageParams, page_response, paginate
 
 
@@ -113,6 +114,7 @@ async def import_discussion(
         title=new_discussion.title,
         content=new_discussion.content,
         encoding=encoding,
+        summary=summarize_discussion(new_discussion.content),
     )
 
 
@@ -144,7 +146,13 @@ def create_discussion(
     db.commit()
     db.refresh(new_discussion)
 
-    return new_discussion
+    return {
+        "id": new_discussion.id,
+        "project_id": new_discussion.project_id,
+        "title": new_discussion.title,
+        "content": new_discussion.content,
+        "summary": summarize_discussion(new_discussion.content),
+    }
 
 
 @router.get(
@@ -167,7 +175,18 @@ def get_discussions(
 
     rows, total = paginate(query, page)
 
-    return page_response(rows, total, page)
+    items = [
+        {
+            "id": row.id,
+            "project_id": row.project_id,
+            "title": row.title,
+            "content": row.content,
+            "summary": summarize_discussion(row.content),
+        }
+        for row in rows
+    ]
+
+    return page_response(items, total, page)
 @router.delete(
     "/{discussion_id}",
     response_model=DiscussionResponse
@@ -197,7 +216,15 @@ def delete_discussion(
         Decision.source_discussion_id == discussion.id
     ).update({"source_discussion_id": None}, synchronize_session=False)
 
+    summary = summarize_discussion(discussion.content)
+
     db.delete(discussion)
     db.commit()
 
-    return discussion
+    return {
+        "id": discussion.id,
+        "project_id": discussion.project_id,
+        "title": discussion.title,
+        "content": discussion.content,
+        "summary": summary,
+    }
