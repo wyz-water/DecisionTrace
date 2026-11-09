@@ -209,6 +209,7 @@ export default {
   "decisions.historyLabel": "Decision change history",
   "decisions.noHistory": "No changes recorded yet.",
   "decisions.titleRequired": "Title cannot be empty",
+  "decisions.rationaleRequired": "The decision goal (rationale) cannot be empty.",
   "decisions.noChanges": "No changes to save",
   "decisions.failedUpdate": "Failed to update decision",
 
