@@ -3,6 +3,7 @@ import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
+import ImpactPanel from "./components/ImpactPanel.jsx";
 import LanguageToggle from "./components/LanguageToggle.jsx";
 import Pagination from "./components/Pagination.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
@@ -161,7 +162,7 @@ function CycleNotice({ graph }) {
   );
 }
 
-function GraphView({ graph, selectedId, onSelect }) {
+function GraphView({ graph, selectedId, onSelect, highlightIds = [] }) {
   const { t } = useI18n();
 
   // A cycle has no topological order, so there is nothing honest to draw.
@@ -230,10 +231,13 @@ function GraphView({ graph, selectedId, onSelect }) {
 
           const colors = STATUS_COLORS[node.status] ?? STATUS_COLORS.OPEN;
           const selected = node.id === selectedId;
+          const affected = highlightIds.includes(node.id);
 
           return (
             <g
-              className={`graph-node ${selected ? "selected" : ""}`}
+              className={`graph-node ${selected ? "selected" : ""} ${
+                affected ? "affected" : ""
+              }`}
               key={node.id}
               onClick={() => onSelect(node.id)}
             >
@@ -244,8 +248,15 @@ function GraphView({ graph, selectedId, onSelect }) {
                 height={NODE_H}
                 rx={12}
                 fill={colors.fill}
-                stroke={selected ? "#172033" : colors.stroke}
-                strokeWidth={selected ? 2.5 : 1.5}
+                stroke={
+                  selected
+                    ? "#172033"
+                    : affected
+                      ? "#b54708"
+                      : colors.stroke
+                }
+                strokeWidth={selected || affected ? 2.5 : 1.5}
+                strokeDasharray={affected && !selected ? "5 3" : undefined}
               />
               <text
                 x={pos.x - NODE_W / 2 + 14}
@@ -307,7 +318,13 @@ function App() {
     analysis: [],
   });
   const [impact, setImpact] = useState(null);
+  const [impactLoading, setImpactLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const [whatIfOpen, setWhatIfOpen] = useState(false);
+  const [whatIfStatus, setWhatIfStatus] = useState("DELAYED");
+  const [whatIf, setWhatIf] = useState(null);
+  const [whatIfLoading, setWhatIfLoading] = useState(false);
+  const [whatIfError, setWhatIfError] = useState("");
   const [conflicts, setConflicts] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -413,6 +430,19 @@ function App() {
   const currentImpact =
     impact && impact.commitment_id === selectedId ? impact : null;
 
+  const currentWhatIf =
+    whatIfOpen &&
+    whatIf?.commitment_id === selectedId &&
+    whatIf?.hypothetical_status === whatIfStatus
+      ? whatIf
+      : null;
+
+  // Remount the impact panel when the source, hypothesis, or mode changes
+  // so its internal list pagination always starts on page one.
+  const impactPanelKey = `impact-${selectedId ?? "none"}-${whatIfStatus}-${
+    whatIfOpen ? "preview" : "current"
+  }`;
+
   const currentDecisionImpact =
     decisionImpact && decisionImpact.decision_id === decisionId
       ? decisionImpact
@@ -507,7 +537,41 @@ function App() {
     setRefreshTick((tick) => tick + 1);
   }
 
+  function openImpact(commitmentId, status = "DELAYED") {
+    setSelectedId(commitmentId);
+    setWhatIfStatus(status);
+    setWhatIfError("");
+    setWhatIfOpen(true);
+
+    // The Plan page renders the preview below the commitment grid. Bring
+    // it into view after the click so the preview is genuinely one click
+    // away instead of one click plus a manual scroll.
+    if (view === "plan") {
+      window.setTimeout(() => {
+        document
+          .getElementById("impact-panel")
+          ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }, 0);
+    }
+  }
+
+  function previewImpact(status = whatIfStatus) {
+    if (selectedId == null) {
+      return;
+    }
+
+    setWhatIfStatus(status);
+    setWhatIfError("");
+    setWhatIfOpen(true);
+  }
+
+  function closeImpact() {
+    setWhatIfOpen(false);
+    setWhatIfError("");
+  }
+
   function selectProject(nextProject) {
+    closeImpact();
     window.localStorage.setItem(
       "decisiontrace.activeProjectId",
       String(nextProject.id)
@@ -530,6 +594,7 @@ function App() {
 
     const created = await response.json();
 
+    closeImpact();
     window.localStorage.setItem(
       "decisiontrace.activeProjectId",
       String(created.id)
@@ -551,6 +616,7 @@ function App() {
     // Dropping the active project must not leave its id behind as the
     // "last picked" project, or the loader would try to resurrect it.
     if (project?.id === targetProject.id) {
+      closeImpact();
       window.localStorage.removeItem("decisiontrace.activeProjectId");
       setProject(null);
       await loadDashboard();
@@ -1006,6 +1072,8 @@ function App() {
     let cancelled = false;
 
     async function loadTrace() {
+      setImpactLoading(true);
+
       try {
         const impactResponse = await fetch(
           `${API_URL}/commitments/${selectedId}/impact`
@@ -1022,6 +1090,10 @@ function App() {
         if (!cancelled) {
           setError(te(err.message));
         }
+      } finally {
+        if (!cancelled) {
+          setImpactLoading(false);
+        }
       }
     }
 
@@ -1031,6 +1103,50 @@ function App() {
       cancelled = true;
     };
   }, [selectedId, refreshTick, te]);
+
+  useEffect(() => {
+    if (!whatIfOpen || selectedId == null) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadWhatIf() {
+      setWhatIfLoading(true);
+      setWhatIfError("");
+
+      try {
+        const response = await fetch(
+          `${API_URL}/commitments/${selectedId}/what-if?status=${whatIfStatus}`
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || "Failed to preview impact.");
+        }
+
+        if (!cancelled) {
+          setWhatIf(await response.json());
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setWhatIfError(
+            te(err.message) || t("impact.failedPreview")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setWhatIfLoading(false);
+        }
+      }
+    }
+
+    loadWhatIf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [whatIfOpen, selectedId, whatIfStatus, refreshTick, te, t]);
 
   useEffect(() => {
     if (decisionId == null) {
@@ -1828,7 +1944,9 @@ function App() {
                         <div
                           className="linked-commitment"
                           key={item.id}
-                          onClick={() => setSelectedId(item.id)}
+                          onClick={() =>
+                            openImpact(item.id, "DELAYED")
+                          }
                         >
                           <strong>{item.owner}</strong>
                           <span>
@@ -1939,60 +2057,22 @@ function App() {
               )}
             </section>
 
-            <section
-              className={`card impact-card ${
-                currentImpact?.has_impact ? "impact-active" : ""
-              }`}
-            >
-              <p className="eyebrow">{t("impact.eyebrow")}</p>
-
-              {currentImpact ? (
-                <>
-                  <h2>
-                    {currentImpact.has_impact
-                      ? t("impact.detected")
-                      : t("impact.none")}
-                  </h2>
-
-                  <p className="muted source-note">
-                    {t("impact.source", {
-                      owner: selectedNode?.owner || "?",
-                      id: currentImpact.commitment_id,
-                      status: t(
-                        `status.${currentImpact.commitment_status}`,
-                        {},
-                        currentImpact.commitment_status.replace("_", " ")
-                      ),
-                    })}
-                  </p>
-
-                  {currentImpact.has_impact ? (
-                    currentImpact.affected_commitments.map((item) => (
-                      <div className="impact-item" key={item.id}>
-                        <strong>{item.owner}</strong>
-                        <p>{item.description}</p>
-                        <span className="impact-path">
-                          {item.path
-                            .map((id) => byId[id]?.owner ?? `#${id}`)
-                            .join(" → ")}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="muted">{t("impact.safe")}</p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <h2>{t("impact.noSelection")}</h2>
-                  <p className="muted">{t("impact.pick")}</p>
-
-                  <a className="text-link" href="#plan">
-                    {t("impact.openPlan")}
-                  </a>
-                </>
-              )}
-            </section>
+            <ImpactPanel
+              key={impactPanelKey}
+              selectedNode={selectedNode}
+              currentImpact={currentImpact}
+              whatIf={currentWhatIf}
+              whatIfStatus={whatIfStatus}
+              onPreview={previewImpact}
+              onStatusChange={setWhatIfStatus}
+              onClose={closeImpact}
+              previewOpen={whatIfOpen}
+              impactLoading={impactLoading}
+              previewLoading={whatIfLoading}
+              error={whatIfError}
+              byId={byId}
+              variant="card"
+            />
           </div>
         )}
 
@@ -2329,51 +2409,79 @@ function App() {
               <span>{t("dependencies.graphHint")}</span>
             </div>
 
-            <div className="card">
-              {viewingSnapshotError && (
-                <p className="pipeline-error" role="alert">
-                  {te(viewingSnapshotError)}
-                </p>
-              )}
+            <div
+              className={`dependencies-workspace ${
+                whatIfOpen && selectedNode ? "has-impact" : ""
+              }`}
+            >
+              <div className="card dependencies-graph-card">
+                {viewingSnapshotError && (
+                  <p className="pipeline-error" role="alert">
+                    {te(viewingSnapshotError)}
+                  </p>
+                )}
 
-              {viewingSnapshotLoading ? (
-                <p className="muted">{t("common.loading")}</p>
-              ) : viewingSnapshot ? (
-                <>
-                  <div className="snapshot-viewing">
-                    <span className="type-badge type-history">
-                      {t("dependencies.snapshot")}
-                    </span>
+                {viewingSnapshotLoading ? (
+                  <p className="muted">{t("common.loading")}</p>
+                ) : viewingSnapshot ? (
+                  <>
+                    <div className="snapshot-viewing">
+                      <span className="type-badge type-history">
+                        {t("dependencies.snapshot")}
+                      </span>
 
-                    <strong>{viewingSnapshot.title}</strong>
+                      <strong>{viewingSnapshot.title}</strong>
 
-                    <span className="muted">
-                      {formatSnapshotTime(viewingSnapshot.created_at)}
-                    </span>
+                      <span className="muted">
+                        {formatSnapshotTime(viewingSnapshot.created_at)}
+                      </span>
 
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => {
-                        setViewingSnapshot(null);
-                        setViewingSnapshotError("");
-                      }}
-                    >
-                      {t("dependencies.backToLive")}
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setViewingSnapshot(null);
+                          setViewingSnapshotError("");
+                        }}
+                      >
+                        {t("dependencies.backToLive")}
+                      </button>
+                    </div>
 
+                    <GraphView
+                      graph={viewingSnapshot.graph}
+                      selectedId={null}
+                      onSelect={() => {}}
+                    />
+                  </>
+                ) : (
                   <GraphView
-                    graph={viewingSnapshot.graph}
-                    selectedId={null}
-                    onSelect={() => {}}
+                    graph={graph}
+                    selectedId={selectedId}
+                    onSelect={(id) => openImpact(id, "DELAYED")}
+                    highlightIds={
+                      currentWhatIf?.affected.map((item) => item.id) ?? []
+                    }
                   />
-                </>
-              ) : (
-                <GraphView
-                  graph={graph}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
+                )}
+              </div>
+
+              {whatIfOpen && selectedNode && (
+                <ImpactPanel
+                  key={impactPanelKey}
+                  selectedNode={selectedNode}
+                  currentImpact={currentImpact}
+                  whatIf={currentWhatIf}
+                  whatIfStatus={whatIfStatus}
+                  onPreview={previewImpact}
+                  onStatusChange={setWhatIfStatus}
+                  onClose={closeImpact}
+                  previewOpen={whatIfOpen}
+                  impactLoading={impactLoading}
+                  previewLoading={whatIfLoading}
+                  error={whatIfError}
+                  byId={byId}
+                  variant="docked"
                 />
               )}
             </div>
@@ -2641,8 +2749,22 @@ function App() {
                     </strong>
                   </div>
 
+                  <button
+                    type="button"
+                    className="impact-trigger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openImpact(commitment.id, "DELAYED");
+                    }}
+                  >
+                    {t("impact.whatIfDelayed")}
+                  </button>
+
                   {editingId === commitment.id ? (
-                    <div className="status-editor">
+                    <div
+                      className="status-editor"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <select
                         value={newStatus}
                         onChange={(event) => setNewStatus(event.target.value)}
@@ -2717,6 +2839,23 @@ function App() {
                 </article>
               ))}
             </div>
+
+            <ImpactPanel
+              key={impactPanelKey}
+              selectedNode={selectedNode}
+              currentImpact={currentImpact}
+              whatIf={currentWhatIf}
+              whatIfStatus={whatIfStatus}
+              onPreview={previewImpact}
+              onStatusChange={setWhatIfStatus}
+              onClose={closeImpact}
+              previewOpen={whatIfOpen}
+              impactLoading={impactLoading}
+              previewLoading={whatIfLoading}
+              error={whatIfError}
+              byId={byId}
+              variant="card"
+            />
           </section>
         )}
 
