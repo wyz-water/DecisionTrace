@@ -172,6 +172,10 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
     setError("");
     setNotice("");
 
+    // Local date, not UTC: near midnight UTC+8 the ISO slice would name
+    // the snapshot after yesterday's meeting.
+    const today = new Date().toLocaleDateString("sv-SE");
+
     try {
       const response = await fetch(
         `${API_URL}/projects/${projectId}/snapshots`,
@@ -179,9 +183,7 @@ export default function DiscussionsPanel({ page, projectId, reload }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: `${discussion.title} · ${formatDate(
-              new Date().toISOString().slice(0, 10)
-            )}`,
+            title: `${discussion.title} · ${formatDate(today)}`,
           }),
         }
       );
