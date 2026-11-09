@@ -53,8 +53,11 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectComment, setRejectComment] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [prereqFor, setPrereqFor] = useState(null);
   const [prereqData, setPrereqData] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
 
   function startEdit(candidate) {
     setEditingId(candidate.id);
@@ -204,6 +207,62 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
     }
   }
 
+  function toggleSelect(candidateId) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  }
+
+  async function confirmSelected() {
+    setBatchBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${API_URL}/candidates/confirm-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_ids: [...selected] }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(
+          te(backendDetail(data)) || t("candidates.failedBatch")
+        );
+      }
+
+      const result = await response.json();
+      setSelected(new Set());
+
+      if (result.failed.length > 0) {
+        const details = result.failed
+          .map((item) => `#${item.candidate_id}: ${item.detail}`)
+          .join("; ");
+        setError(t("candidates.batchFailed", { details }));
+      } else {
+        setNotice(
+          t("candidates.batchResult", {
+            confirmed: result.confirmed.length,
+            skipped: result.skipped_duplicates.length,
+          })
+        );
+      }
+
+      await reload();
+    } catch (err) {
+      setError(te(err.message) || t("candidates.failedBatch"));
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
   async function reject(candidateId) {
     setBusyId(candidateId);
     setError("");
@@ -252,6 +311,19 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
         key={candidate.id}
       >
         <div className="candidate-top">
+          {candidate.status === "PENDING" && !editing && (
+            <input
+              type="checkbox"
+              className="candidate-select"
+              checked={selected.has(candidate.id)}
+              disabled={batchBusy}
+              onChange={() => toggleSelect(candidate.id)}
+              aria-label={t("candidates.selectCandidate", {
+                id: candidate.id,
+              })}
+            />
+          )}
+
           <span
             className={`type-badge type-${candidate.candidate_type.toLowerCase()}`}
           >
@@ -259,6 +331,14 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
           </span>
 
           <StatusBadge status={candidate.status} />
+
+          {candidate.duplicate_of && (
+            <span className="dup-badge">
+              {t("candidates.duplicateBadge", {
+                ref: candidate.duplicate_of,
+              })}
+            </span>
+          )}
 
           <span className="candidate-source">
             {t("candidates.fromDiscussion", {
@@ -480,12 +560,59 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       <h2>{t("candidates.title")}</h2>
 
       {error && <p className="pipeline-error">{te(error)}</p>}
+      {notice && <p className="pipeline-notice">{te(notice)}</p>}
 
       {pending.total > 0 && (
         <>
           <h3 className="candidate-group">
             {t("candidates.pending", { count: pending.total })}
           </h3>
+
+          {(() => {
+            const pageIds = pending.items.map((item) => item.id);
+            const pageSelectedCount = pageIds.filter((id) =>
+              selected.has(id)
+            ).length;
+            const pageAllSelected =
+              pageIds.length > 0 && pageSelectedCount === pageIds.length;
+
+            return (
+              <div className="batch-bar">
+                <label className="batch-select-all">
+                  <input
+                    type="checkbox"
+                    checked={pageAllSelected}
+                    disabled={batchBusy || pending.loading}
+                    onChange={() =>
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        if (pageAllSelected) {
+                          pageIds.forEach((id) => next.delete(id));
+                        } else {
+                          pageIds.forEach((id) => next.add(id));
+                        }
+                        return next;
+                      })
+                    }
+                  />
+                  {t("candidates.selectAll")}
+                </label>
+
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={pageSelectedCount === 0 || batchBusy}
+                  onClick={confirmSelected}
+                >
+                  {batchBusy
+                    ? t("common.working")
+                    : t("candidates.confirmSelected", {
+                        count: pageSelectedCount,
+                      })}
+                </button>
+              </div>
+            );
+          })()}
 
           <div
             className={
