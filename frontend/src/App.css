@@ -3323,6 +3323,318 @@ body {
   }
 }
 
+/* --- Shared impact panel / what-if -------------------------------------- */
+
+.impact-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.impact-panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.impact-panel-head h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.impact-panel-badges {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.impact-panel .source-note {
+  margin: 6px 0 0;
+}
+
+.preview-badge {
+  padding: 5px 8px;
+  border: 1px solid #fedf89;
+  border-radius: 999px;
+  background: #fffaeb;
+  color: #b54708;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.impact-panel.is-preview {
+  border-color: #fedf89;
+  background: linear-gradient(180deg, #fffdf7 0, #ffffff 140px);
+}
+
+.impact-panel.impact-active:not(.is-preview) {
+  border-color: #f3c6c2;
+}
+
+.impact-close {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475467;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.impact-close:hover {
+  background: #f2f4f7;
+}
+
+.impact-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 16px;
+  padding: 10px;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+
+.impact-control-label {
+  color: #697386;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.impact-status-toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.impact-status-toggle button {
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: #475467;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.impact-status-toggle button + button {
+  border-left: 1px solid #dfe3ea;
+}
+
+.impact-status-toggle button.is-active {
+  background: #172033;
+  color: #ffffff;
+}
+
+.impact-controls .primary-button {
+  margin-left: auto;
+}
+
+.impact-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.impact-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid #eceef2;
+  border-radius: 9px;
+  background: #f8f9fc;
+}
+
+.impact-stat strong {
+  color: #172033;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.impact-stat span {
+  color: #697386;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.impact-stat.is-new strong {
+  color: #b42318;
+}
+
+.impact-stat.is-already strong {
+  color: #475467;
+}
+
+.impact-warning {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  background: #fffaeb;
+  color: #b54708;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.impact-group {
+  margin-top: 16px;
+}
+
+.impact-group-title {
+  margin: 0 0 8px;
+  color: #697386;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.impact-group-title.is-new {
+  color: #b42318;
+}
+
+.impact-group-title.is-already {
+  color: #697386;
+}
+
+.impact-panel .impact-item {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.impact-panel .impact-item.is-new {
+  border-color: #f3c6c2;
+  background: #fff4f2;
+}
+
+.impact-panel .impact-item.is-already {
+  border-color: #eceef2;
+  background: #f8f9fc;
+}
+
+.impact-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.impact-item-id {
+  color: #8b92a1;
+  font-size: 11.5px;
+}
+
+.impact-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.impact-depth {
+  color: #8b92a1;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.impact-panel .impact-item.is-already .impact-path {
+  color: #697386;
+}
+
+.impact-preview-note {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #eceef2;
+  color: #697386;
+  font-size: 11.5px;
+}
+
+.impact-trigger {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 6px 9px;
+  border: 1px solid #fedf89;
+  border-radius: 7px;
+  background: #fffaeb;
+  color: #b54708;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.impact-trigger:hover {
+  background: #fff7e6;
+}
+
+.dependencies-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.dependencies-workspace.has-impact {
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.75fr);
+}
+
+.dependencies-graph-card {
+  min-width: 0;
+}
+
+.impact-panel-docked {
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  border-color: #d8dce5;
+  box-shadow: 0 8px 30px rgba(16, 24, 40, 0.08);
+}
+
+@media (max-width: 1100px) {
+  .dependencies-workspace.has-impact {
+    grid-template-columns: 1fr;
+  }
+
+  .impact-panel-docked {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .impact-controls .primary-button {
+    margin-left: 0;
+  }
+
+  .impact-panel-head h2 {
+    font-size: 20px;
+  }
+}
+
 /* --- Overdue commitments ------------------------------------------------ */
 
 .due-overdue {
@@ -3367,7 +3679,9 @@ html[lang="zh-CN"] .conflict-type,
 html[lang="zh-CN"] .link-field > span,
 html[lang="zh-CN"] .link-connector,
 html[lang="zh-CN"] .diff-summary-title,
-html[lang="zh-CN"] .diff-group-title {
+html[lang="zh-CN"] .diff-group-title,
+html[lang="zh-CN"] .preview-badge,
+html[lang="zh-CN"] .impact-group-title {
   text-transform: none;
   letter-spacing: 0;
 }
@@ -3379,7 +3693,9 @@ html[lang="zh-CN"] .attention-tag {
 }
 
 html[lang="zh-CN"] .diff-summary-title,
-html[lang="zh-CN"] .diff-group-title {
+html[lang="zh-CN"] .diff-group-title,
+html[lang="zh-CN"] .preview-badge,
+html[lang="zh-CN"] .impact-group-title {
   font-size: 11.5px;
 }
 

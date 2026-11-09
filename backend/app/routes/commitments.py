@@ -14,8 +14,10 @@ from app.schemas.commitment import (
     CommitmentResponse,
     CommitmentStatusUpdate,
     CommitmentImpactResponse,
+    CommitmentWhatIfResponse,
 )
 from app.services.graph import transitive_impact
+from app.services.impact import simulate_impact
 from app.services.pagination import PageParams, page_response, paginate
 
 
@@ -214,7 +216,66 @@ def get_commitment_impact(
         "has_impact": has_impact,
         "affected_commitments": affected_commitments
     }
-    
+
+
+@router.get(
+    "/{commitment_id}/what-if",
+    response_model=CommitmentWhatIfResponse
+)
+def get_commitment_what_if(
+    commitment_id: int,
+    status: str = "DELAYED",
+    db: Session = Depends(get_db)
+):
+    """Preview the downstream effect of a hypothetical source status.
+
+    This is deliberately read-only: it never writes a history row and
+    never changes ``commitment.status``. The source's current status is
+    ignored for the preview, so an OPEN commitment can be tested as
+    DELAYED.
+    """
+    commitment = db.query(Commitment).filter(
+        Commitment.id == commitment_id
+    ).first()
+
+    if not commitment:
+        raise HTTPException(
+            status_code=404,
+            detail="Commitment not found"
+        )
+
+    hypothetical_status = status.upper()
+
+    if hypothetical_status not in {"DELAYED", "BLOCKED"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid hypothetical status"
+        )
+
+    project_commitments = db.query(Commitment).filter(
+        Commitment.project_id == commitment.project_id
+    ).all()
+
+    project_dependencies = db.query(Dependency).filter(
+        Dependency.project_id == commitment.project_id
+    ).all()
+
+    result = simulate_impact(
+        commitment.id,
+        hypothetical_status,
+        project_commitments,
+        project_dependencies,
+    )
+
+    return {
+        "commitment_id": commitment.id,
+        "current_status": commitment.status,
+        "hypothetical_status": hypothetical_status,
+        "preview": True,
+        **result,
+    }
+
+
 @router.get(
     "/{commitment_id}/history",
     response_model=Page[CommitmentHistoryResponse]
