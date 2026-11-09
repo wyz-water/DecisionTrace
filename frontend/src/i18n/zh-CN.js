@@ -206,6 +206,7 @@ export default {
   "decisions.historyLabel": "决策变更历史",
   "decisions.noHistory": "尚未记录变更。",
   "decisions.titleRequired": "标题不能为空",
+  "decisions.rationaleRequired": "决策目标（理由）不能为空。",
   "decisions.noChanges": "没有需要保存的变更",
   "decisions.failedUpdate": "更新决策失败",
 
