@@ -115,9 +115,12 @@ record points back to.
 A decision with its rationale — the recorded *decision goal* (UC04).
 `source_discussion_id` is nullable: a decision can be created directly,
 not only extracted. If its source discussion is deleted, the pointer is
-cleared and the decision stays. Rationale is optional on creation but is
-displayed wherever the decision appears; revisions write the old and the
-new rationale to `decision_history`, so the goal's evolution is preserved.
+cleared and the decision stays. The rationale is required for manually
+created decisions (API and form) and may be changed but never erased by
+revision; decisions confirmed from a candidate may lack one, because
+their goal context is the source discussion they point back to. Every
+revision writes the old and the new rationale to `decision_history`, so
+the goal's evolution is preserved.
 
 **Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
 
