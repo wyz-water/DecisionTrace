@@ -65,6 +65,14 @@ graph TD
 6. **Empty states are routes, not walls.** A fresh database shows the
    dashboard with a banner and a working project switcher, so the first
    project can always be created from the UI.
+7. **Manual entry.** Decisions and Plan & commitments each offer an
+   expandable creation form. A decision requires a title and can include
+   rationale and a source discussion number. A commitment requires an
+   owner and description and can include a due date and linked decision.
+   Successful creation clears the form and selects the new record after
+   refreshing project data. Failed submissions retain the draft. Switching
+   projects resets the form and prevents late creation responses from
+   changing the selection in another project.
 
 ## 4. Component Inventory
 
@@ -72,6 +80,8 @@ graph TD
 |---|---|
 | `Sidebar` | View registry rendered as grouped navigation |
 | `ProjectSwitcher` | Create/switch/delete projects, top bar |
+| `DecisionCreateForm` | Manual decision creation with rationale and optional source discussion |
+| `CommitmentCreateForm` | Manual commitment creation with optional due date and linked decision |
 | `DiscussionsPanel` | Paste or upload discussion, trigger extraction |
 | `CandidatesPanel` | Pending/reviewed candidate lists; confirm/edit/reject; prerequisite panel |
 | `SearchPanel` | UC08 search form, ranked results, cross-view navigation |
