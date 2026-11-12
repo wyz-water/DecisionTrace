@@ -12,14 +12,17 @@ from app.models.dependency import Dependency
 from app.models.discussion import Discussion
 from app.models.snapshot import Snapshot
 from app.models.argument import Argument
+from app.models.decision_history import DecisionHistory
 from app.schemas.project import ProjectCreate, ProjectResponse
 from app.schemas.graph import ProjectGraphResponse
 from app.schemas.conflict import ProjectConflictsResponse
+from app.schemas.health import ProjectHealthResponse
 from app.services.graph import (
     build_graph_payload,
     detect_cycles,
 )
 from app.services.consistency import date_inversion
+from app.services.retrospective import build_health_payload
 
 
 router = APIRouter(
@@ -253,6 +256,49 @@ def get_project_conflicts(
         "conflict_count": len(conflicts),
         "conflicts": conflicts,
     }
+@router.get(
+    "/{project_id}/health",
+    response_model=ProjectHealthResponse
+)
+def get_project_health(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """Computed decision health metrics (the "reflect" step)."""
+    project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    decisions = db.query(Decision).filter(
+        Decision.project_id == project_id
+    ).all()
+
+    decision_ids = [decision.id for decision in decisions]
+
+    histories = (
+        db.query(DecisionHistory)
+        .filter(DecisionHistory.decision_id.in_(decision_ids))
+        .all()
+        if decision_ids
+        else []
+    )
+
+    arguments = db.query(Argument).filter(
+        Argument.project_id == project_id
+    ).all()
+
+    return {
+        "project_id": project_id,
+        **build_health_payload(decisions, histories, arguments),
+    }
+
+
 @router.delete(
     "/{project_id}",
     response_model=ProjectResponse

@@ -40,6 +40,10 @@ function names(ids, byId) {
   return ids.map((id) => byId[id]?.owner ?? `#${id}`).join(", ");
 }
 
+function pct(rate) {
+  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
+}
+
 function stateNote(analysis, byId, t) {
   switch (analysis.state) {
     case "DONE":
@@ -315,6 +319,8 @@ function App() {
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [decisionDeliberation, setDecisionDeliberation] = useState(null);
   const [deliberationError, setDeliberationError] = useState("");
+  const [projectHealth, setProjectHealth] = useState(null);
+  const [healthError, setHealthError] = useState("");
   const [graph, setGraph] = useState({
     nodes: [],
     edges: [],
@@ -1287,6 +1293,41 @@ function App() {
   }, [decisionId, refreshTick, te]);
 
   useEffect(() => {
+    if (projectId == null) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadHealth() {
+      try {
+        const response = await fetch(
+          `${API_URL}/projects/${projectId}/health`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load decision health");
+        }
+
+        if (!cancelled) {
+          setProjectHealth(await response.json());
+          setHealthError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHealthError(te(err.message));
+        }
+      }
+    }
+
+    loadHealth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshTick, te]);
+
+  useEffect(() => {
     if (decisionId == null) {
       return undefined;
     }
@@ -1941,6 +1982,98 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+
+            <section className="card attention-card">
+              <p className="eyebrow">{t("retrospective.eyebrow")}</p>
+              <p className="retro-sub">{t("retrospective.subtitle")}</p>
+
+              {healthError && (
+                <p className="pipeline-error">{te(healthError)}</p>
+              )}
+
+              {projectHealth && projectHealth.decisions_total > 0 ? (
+                <div className="retro-grid">
+                  <div className="retro-tile">
+                    <p className="retro-value">
+                      {projectHealth.overturned_count}/
+                      {projectHealth.decisions_total}
+                    </p>
+                    <p className="retro-label">
+                      {t("retrospective.overturned")}
+                    </p>
+                    <p className="retro-hint">
+                      {t("retrospective.rateOf", {
+                        value: pct(projectHealth.overturn_rate),
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="retro-tile">
+                    <p className="retro-value">
+                      {projectHealth.avg_overturn_lifespan_days == null
+                        ? "—"
+                        : t("retrospective.daysValue", {
+                            value: projectHealth.avg_overturn_lifespan_days,
+                          })}
+                    </p>
+                    <p className="retro-label">
+                      {t("retrospective.lifespan")}
+                    </p>
+                    <p className="retro-hint">
+                      {t("retrospective.lifespanHint")}
+                    </p>
+                  </div>
+
+                  <div className="retro-tile">
+                    <p className="retro-value">
+                      {projectHealth.contested_count}
+                    </p>
+                    <p className="retro-label">
+                      {t("retrospective.contested")}
+                    </p>
+                    <p className="retro-hint">
+                      {t("retrospective.rateOf", {
+                        value: pct(projectHealth.contested_rate),
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="retro-tile">
+                    <p className="retro-value">
+                      {projectHealth.resolved_objections}/
+                      {projectHealth.resolved_objections +
+                        projectHealth.open_objections}
+                    </p>
+                    <p className="retro-label">
+                      {t("retrospective.objections")}
+                    </p>
+                    <p className="retro-hint">
+                      {t("retrospective.objectionsHint", {
+                        value: pct(
+                          projectHealth.objection_resolution_rate
+                        ),
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="retro-tile">
+                    <p className="retro-value">
+                      {projectHealth.revised_count}
+                    </p>
+                    <p className="retro-label">
+                      {t("retrospective.revised")}
+                    </p>
+                    <p className="retro-hint">
+                      {t("retrospective.rateOf", {
+                        value: pct(projectHealth.revision_rate),
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="muted">{t("retrospective.empty")}</p>
               )}
             </section>
           </>

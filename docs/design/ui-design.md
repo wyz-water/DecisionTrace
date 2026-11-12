@@ -26,7 +26,7 @@ graph TD
 
 | View | Job (one job per view) | Backs use case |
 |---|---|---|
-| Overview | Dashboard: KPIs, graph preview, "needs attention" list | — |
+| Overview | Dashboard: KPIs, graph preview, "needs attention" list, retrospective card (computed decision health) | — |
 | Decisions | Create/revise decisions; see rationale, history, impact, and the deliberation (arguments, contested badge) | UC04, UC07 |
 | Deliberation | Every argument in the project — targeted and free-standing; filters (all / open objections / resolved); resolve with reason | Part III PoC, backs §6 |
 | Intake & review | Paste/upload discussions → automatic extraction → batch review of AI candidates (confirm/edit/reject) | UC01–UC03 |

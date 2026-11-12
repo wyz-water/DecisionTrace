@@ -52,6 +52,7 @@ erDiagram
         string title
         text rationale
         string status
+        datetime created_at
     }
     COMMITMENT {
         int id PK
@@ -191,6 +192,7 @@ value, and a human `reason`. Audit-trail views read these newest-first.
 | Impact set | transitive closure over `BLOCKS` edges starting at a commitment/decision | `services/graph.py` |
 | Consistency conflicts | order violations (e.g. completed before its predecessor) and duplicates | `services/consistency.py` |
 | Contested set | decisions with ≥ 1 `OPEN` `AGAINST` argument | `services/deliberation.py` |
+| Decision health | overturn rate, avg lifespan of overturned decisions, revision rate, contested rate, objection resolution rate — from history + arguments, never stored | `services/retrospective.py` |
 
 They are computed on read (decision A8) so there is no cache to
 invalidate when a dependency changes.

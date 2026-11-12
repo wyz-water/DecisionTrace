@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
-from app.database import Base
+from app.database import Base, UTCDateTime
 
 
 class Decision(Base):
@@ -33,4 +35,12 @@ class Decision(Base):
         String(50),
         nullable=False,
         default="CONFIRMED"
+    )
+
+    # When the decision was recorded. Feeds the retrospective metrics
+    # (lifespan of overturned decisions) and future staleness checks.
+    created_at = Column(
+        UTCDateTime(),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
     )

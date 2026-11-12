@@ -55,6 +55,7 @@ list endpoint is automatically UI-ready.
 | GET | `/projects/{id}` | One project |
 | GET | `/projects/{id}/graph` | Nodes, edges, topological order, cycles, per-node analysis (blocked-by, depth) |
 | GET | `/projects/{id}/conflicts` | Consistency conflicts (order violations, duplicates) |
+| GET | `/projects/{id}/health` | Computed decision health: overturn rate, avg lifespan of overturned decisions, revision rate, contested rate, objection resolution rate (never stored) |
 | DELETE | `/projects/{id}` | Delete project and all its records |
 
 ### Discussions — `/discussions`

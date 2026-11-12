@@ -177,7 +177,10 @@ of: making intake cheaper (Rule 1), making the system compute more
   cannot trigger API calls. One click saves the current graph as the
   meeting snapshot.
 - Derived views recompute themselves: overdue highlighting, topological
-  order, impact, what-if previews — nobody updates these by hand.
+  order, impact, what-if previews, **decision health metrics** (overturn
+  rate, average lifespan of overturned decisions, revision rate,
+  contested rate, objection resolution rate — the "reflect" step of the
+  agent loop) — nobody updates these by hand.
 - Meeting summary = graph snapshot: saving one captures the whole state.
 
 **Planned (Part III PoC items, in priority order)**
@@ -204,6 +207,10 @@ of: making intake cheaper (Rule 1), making the system compute more
 7. **Argument map view** — a per-decision deliberation panel showing
    supporting and opposing arguments with their source spans, so a
    decision reads as a resolved debate instead of a verdict.
+8. **Critical path & bottleneck analysis** — earliest/latest scheduling
+   over the dependency graph with due dates, so the commitments actually
+   on the critical path surface instead of every overdue one shouting at
+   once.
 
 The end-to-end bar is explicit and measured: turning a raw discussion
 into the weekly graph snapshot must take less time than writing minutes
@@ -387,3 +394,4 @@ not preference.
 | R5 | Dependency editing: edges can be created and removed but not edited (change type/endpoints) | Add PATCH for edges with the same cycle/duplicate checks |
 | R6 | Argument history: resolving an argument updates the row in place (status + reason); there is no append-only `argument_history` yet, so A5 does not cover arguments | Part III: history table + resolution semantics; then resolutions join the audit trail |
 | R7 | Deliberation state in snapshots: a graph snapshot captures commitments and dependencies, not the arguments of that meeting | Part III: include argument state in snapshots, or document explicitly why the execution layer alone is the snapshot unit |
+| R8 | Argument-layer extraction quality: stance and target linking are rule heuristics today and unmeasured | A false contested badge erodes trust in the only state the system computes by itself | §10 protocol 4: stance accuracy ≥ 80%, target-linking accuracy ≥ 80%, contested precision/recall against the gold annotation |
