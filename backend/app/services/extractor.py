@@ -70,7 +70,161 @@ DEPENDENCY_PATTERNS = [
     ),
 ]
 
-SENTENCE_SPLIT = re.compile(r"[.;!?\n]+")
+# Chinese full-width punctuation ends sentences too (。;); the team's
+# discussions are mixed-language. The full-width comma splits clauses —
+# "但是风险很大,我们不同意这周上线" is two arguments, not one. ASCII
+# commas do NOT split, so English extraction behavior is unchanged.
+SENTENCE_SPLIT = re.compile(r"[.;!?\n。；，]+")
+
+# Claims too thin to be worth a human's review.
+CLAIM_NOISE = {"it", "this", "that"}
+
+# Chinese words that look like a person but are not one.
+AUTHOR_NOISE_CN = {
+    "我们", "他们", "你们", "大家", "这个", "这些", "那个", "那些",
+    "因为", "但是", "不过", "如果", "所以", "而且",
+}
+
+# (stance, pattern) pairs. Order matters: the first match wins.
+# Target is captured only when the pattern also names the reason, so
+# "Bob disagrees with using Redis because it is complex" links the
+# argument to the Redis decision while "I disagree" stays free-standing.
+ARGUMENT_PATTERNS = [
+    # "Bob disagrees with using Redis because it is complex"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?P<author>[A-Z][a-z]+)\s+"
+            r"(?:disagrees?\s+with|objects?\s+to|opposes?)\s+"
+            r"(?P<target>[^.,;!?]+?)\s+because\s+"
+            r"(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "Bob disagrees with using Redis" (bare, no reason given)
+    (
+        "AGAINST",
+        re.compile(
+            r"(?P<author>[A-Z][a-z]+)\s+"
+            r"(?:disagrees?\s+with|objects?\s+to|opposes?)\s+"
+            r"(?P<target>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "I disagree with using Redis" / "we are not convinced about the plan"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?P<who>I|we)\s+"
+            r"(?:disagree|object|am\s+not\s+convinced|are\s+not\s+convinced)"
+            r"\s+(?:with|to|about)?\s*(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "I worry that Redis adds complexity" / "we are concerned about the
+    # migration"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?P<who>I|we)\s+"
+            r"(?:worry|am\s+worried|are\s+worried|"
+            r"am\s+concerned|are\s+concerned)\s+"
+            r"(?:that|about)?\s*(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "the risk is the cost" / "the problem is ..."
+    (
+        "AGAINST",
+        re.compile(
+            r"the\s+(?:risk|problem|concern)\s+is\s+"
+            r"(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "but ... risk/concern/problem/slow/complex/expensive ..."
+    # Conservative: the claim must carry a doubt keyword, so plain
+    # "but we also fixed the docs" does not become an argument.
+    (
+        "AGAINST",
+        re.compile(
+            r"\bbut\s+(?P<claim>[^.,;!?]*"
+            r"(?:risk|concern|worr|problem|slow|complex|expensive|"
+            r"doubt|danger|fail)[^.,;!?]*)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "Bob agrees with using Redis because it scales"
+    (
+        "FOR",
+        re.compile(
+            r"(?P<author>[A-Z][a-z]+)\s+"
+            r"(?:agrees?\s+with|supports?|endorses?)\s+"
+            r"(?P<target>[^.,;!?]+?)\s+because\s+"
+            r"(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "Bob agrees with using Redis" (bare, no reason given)
+    (
+        "FOR",
+        re.compile(
+            r"(?P<author>[A-Z][a-z]+)\s+"
+            r"(?:agrees?\s+with|supports?|endorses?)\s+"
+            r"(?P<target>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # "I agree that we should use Redis" / "we prefer the first option"
+    (
+        "FOR",
+        re.compile(
+            r"(?P<who>I|we)\s+"
+            r"(?:agree|support|prefer)\s+"
+            r"(?:that|with|to)?\s*(?P<claim>[^.,;!?]+)",
+            re.IGNORECASE,
+        ),
+    ),
+    # 中文:"王芳反对这个方案" / "我不同意使用 Redis"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
+            r"(?:我|我们)?\s*(?:不同意|反对|不赞成)\s*"
+            r"(?:采用|使用|这个|该|这样)?\s*"
+            r"(?P<claim>[^,，。;；!！?？]+)"
+        ),
+    ),
+    # 中文:"王芳担心迁移风险太大" / "我顾虑成本太高"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
+            r"(?:我|我们)?\s*(?:担心|担忧|顾虑)\s*"
+            r"(?P<claim>[^,，。;；!！?？]+)"
+        ),
+    ),
+    # 中文:"但是迁移风险太大" / "不过成本太高"
+    (
+        "AGAINST",
+        re.compile(
+            r"(?:但是|不过|然而)\s*"
+            r"(?P<claim>[^,，。;；!！?？]*"
+            r"(?:风险|担心|问题|不可行|困难|太慢|复杂|太贵)"
+            r"[^,，。;；!！?？]*)"
+        ),
+    ),
+    # 中文:"王芳支持用 Redis" / "我同意先迁移数据"
+    (
+        "FOR",
+        re.compile(
+            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
+            r"(?:我|我们)?\s*(?:同意|支持|赞成)\s*"
+            r"(?:采用|使用)?\s*"
+            r"(?P<claim>[^,，。;；!！?？了]+)"
+        ),
+    ),
+]
 
 
 def _clean_title(value):
@@ -172,6 +326,54 @@ def rule_based_extract(text):
 
             break
 
+        for stance, pattern in ARGUMENT_PATTERNS:
+            match = pattern.search(sentence)
+
+            if not match:
+                continue
+
+            # Not every pattern defines every group: read them through
+            # groupdict so a missing group is None, not an IndexError.
+            groups = match.groupdict()
+
+            # The claim is the reason when the pattern names one;
+            # otherwise the object of agreement/disagreement is the claim.
+            claim = groups.get("claim") or groups.get("target")
+            claim = (claim or "").strip()
+
+            # One-character claims and pronoun claims are pattern noise
+            # ("了", "no", "it"), not arguments worth a human's review.
+            if len(claim) < 2 or claim.lower() in CLAIM_NOISE:
+                continue
+
+            author = groups.get("author")
+
+            if author and author.title() in NOT_OWNERS:
+                author = None
+
+            if author and author in AUTHOR_NOISE_CN:
+                author = None
+
+            # The target only counts when the sentence also gave the
+            # reason: "disagrees with X because Y" links to X, a bare
+            # "disagrees with X" stays free-standing.
+            target = None
+            if groups.get("claim") and groups.get("target"):
+                target = groups["target"].strip()
+
+            candidates.append({
+                "candidate_type": "ARGUMENT",
+                "payload": {
+                    "stance": stance,
+                    "claim": claim,
+                    "author": author,
+                    "target_title": target,
+                },
+                "source_text": sentence,
+            })
+
+            break
+
     return candidates
 
 
@@ -181,7 +383,8 @@ SYSTEM_PROMPT = (
     "You extract structured project records from a team discussion. "
     'Return ONLY a JSON object with this exact shape: '
     '{"candidates": [{"candidate_type": "DECISION" | "COMMITMENT" | '
-    '"DEPENDENCY", "payload": { ... }, "source_text": "..."}]}. '
+    '"DEPENDENCY" | "ARGUMENT", "payload": { ... }, '
+    '"source_text": "..."}]}. '
     "Payload shapes: "
     'DECISION: {"title": str, "rationale": str | null, '
     '"status": "CONFIRMED"}. '
@@ -190,6 +393,8 @@ SYSTEM_PROMPT = (
     '"decision_title": str | null}. '
     'DEPENDENCY: {"predecessor_owner": str, "successor_owner": str, '
     '"dependency_type": "BLOCKS"}. '
+    'ARGUMENT: {"stance": "FOR" | "AGAINST", "claim": str, '
+    '"author": str | null, "target_title": str | null}. '
     "Only extract facts explicitly stated in the text. Do not invent. "
     "source_text must be the exact sentence the candidate came from."
 )
@@ -208,6 +413,7 @@ def summarize_discussion(text):
     decisions = []
     commitments = []
     dependencies = []
+    arguments = []
 
     for item in items:
         payload = item.get("payload") or {}
@@ -224,12 +430,21 @@ def summarize_discussion(text):
             )
             if all(pair):
                 dependencies.append(f"{pair[0]} → {pair[1]}")
+        elif candidate_type == "ARGUMENT" and payload.get("claim"):
+            stance = str(payload.get("stance") or "")
+            arguments.append(f"{stance} {payload['claim']}")
 
     return {
         "decisions": decisions,
         "commitments": commitments,
         "dependencies": dependencies,
-        "total": len(decisions) + len(commitments) + len(dependencies),
+        "arguments": arguments,
+        "total": (
+            len(decisions)
+            + len(commitments)
+            + len(dependencies)
+            + len(arguments)
+        ),
     }
 
 
@@ -282,7 +497,7 @@ def extract_candidates(text):
 
 def _normalize(candidates):
     """Keep only well-formed candidates from the LLM response."""
-    allowed_types = {"DECISION", "COMMITMENT", "DEPENDENCY"}
+    allowed_types = {"DECISION", "COMMITMENT", "DEPENDENCY", "ARGUMENT"}
 
     cleaned = []
 

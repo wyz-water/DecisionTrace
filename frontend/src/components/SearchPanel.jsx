@@ -95,6 +95,9 @@ export default function SearchPanel({
         onOpenCommitment(item.commitment_id);
         onNavigate("audit");
         break;
+      case "argument":
+        onNavigate("deliberation");
+        break;
       case "discussion":
       default:
         onNavigate("intake");

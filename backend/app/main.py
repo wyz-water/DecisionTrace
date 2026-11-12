@@ -12,6 +12,7 @@ from app.models.dependency import Dependency
 from app.models.commitment_history import CommitmentHistory
 from app.models.candidate import Candidate
 from app.models.snapshot import Snapshot
+from app.models.argument import Argument
 
 from app.routes.projects import router as projects_router
 from app.routes.discussions import router as discussions_router
@@ -21,6 +22,7 @@ from app.routes.dependencies import router as dependencies_router
 from app.routes.candidates import router as candidates_router
 from app.routes.search import router as search_router
 from app.routes.snapshots import router as snapshots_router
+from app.routes.arguments import router as arguments_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -51,6 +53,7 @@ app.include_router(dependencies_router)
 app.include_router(candidates_router)
 app.include_router(search_router)
 app.include_router(snapshots_router)
+app.include_router(arguments_router)
 
 
 @app.get("/")

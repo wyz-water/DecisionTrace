@@ -74,6 +74,7 @@ list endpoint is automatically UI-ready.
 | PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty) |
 | GET | `/decisions/{id}/history` | Change log, newest first |
 | GET | `/decisions/{id}/impact` | Downstream commitments affected through `BLOCKS` closure |
+| GET | `/decisions/{id}/deliberation` | Arguments targeting the decision + `contested` (computed: ≥ 1 open AGAINST) |
 
 ### Commitments — `/commitments`
 
@@ -94,6 +95,14 @@ list endpoint is automatically UI-ready.
 | POST | `/dependencies` | Create an edge (UC06); rejects cycles with structured detail |
 | GET | `/dependencies?project_id=` | List, paginated |
 | DELETE | `/dependencies/{id}` | Remove an edge |
+
+### Arguments — `/arguments`
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/arguments?project_id=&decision_id=` | List, paginated; filter by decision for its deliberation panel |
+| PATCH | `/arguments/{id}` | Resolve an argument (status `RESOLVED`, reason required) |
+| DELETE | `/arguments/{id}` | Delete one argument |
 
 ### Candidates — `/candidates`
 
@@ -120,7 +129,7 @@ list endpoint is automatically UI-ready.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/search?q=&project_id=` | UC08. AND-of-terms across discussions, decisions, commitments, both history tables. Ranked by matched-field count; snippet window with first-term highlight; paginated |
+| GET | `/search?q=&project_id=` | UC08. AND-of-terms across discussions, decisions, commitments, arguments (claim/author/stance/resolution reason), and both history tables. Ranked by matched-field count; snippet window with first-term highlight; paginated |
 
 ## 3. Status Vocabularies
 
@@ -129,6 +138,8 @@ list endpoint is automatically UI-ready.
 | Decision | `CONFIRMED` `SUPERSEDED` `REVOKED` |
 | Commitment | `OPEN` `IN_PROGRESS` `COMPLETED` `DELAYED` `BLOCKED` |
 | Candidate | `PENDING` `CONFIRMED` `REJECTED` |
+| Argument | `OPEN` `RESOLVED` |
+| Argument stance | `FOR` `AGAINST` |
 | Dependency type | `BLOCKS` (default) |
 
 ## 4. AI Handoff Points

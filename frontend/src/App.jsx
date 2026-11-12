@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
+import ArgumentRow from "./components/ArgumentRow.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
+import DeliberationPanel from "./components/DeliberationPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import ImpactPanel from "./components/ImpactPanel.jsx";
@@ -311,6 +313,8 @@ function App() {
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
+  const [decisionDeliberation, setDecisionDeliberation] = useState(null);
+  const [deliberationError, setDeliberationError] = useState("");
   const [graph, setGraph] = useState({
     nodes: [],
     edges: [],
@@ -411,6 +415,15 @@ function App() {
     refreshTick
   );
 
+  // One shared list feeds the overview attention, the decision-card
+  // markers and the deliberation view — the whole layer reads from the
+  // same data, so the three surfaces can never disagree.
+  const argumentsList = usePagedList(
+    projectId ? `${API_URL}/arguments?project_id=${projectId}` : null,
+    100,
+    refreshTick
+  );
+
   const commitmentHistory = usePagedList(
     selectedId != null
       ? `${API_URL}/commitments/${selectedId}/history`
@@ -450,6 +463,11 @@ function App() {
   const currentDecisionImpact =
     decisionImpact && decisionImpact.decision_id === decisionId
       ? decisionImpact
+      : null;
+
+  const currentDeliberation =
+    decisionDeliberation && decisionDeliberation.decision_id === decisionId
+      ? decisionDeliberation
       : null;
 
   async function loadDashboard(keepSelected = null, preferProjectId = null) {
@@ -1268,6 +1286,41 @@ function App() {
     };
   }, [decisionId, refreshTick, te]);
 
+  useEffect(() => {
+    if (decisionId == null) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadDeliberation() {
+      try {
+        const response = await fetch(
+          `${API_URL}/decisions/${decisionId}/deliberation`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load deliberation");
+        }
+
+        if (!cancelled) {
+          setDecisionDeliberation(await response.json());
+          setDeliberationError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDeliberationError(te(err.message));
+        }
+      }
+    }
+
+    loadDeliberation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionId, refreshTick, te]);
+
   function startDecisionEdit() {
     setDecisionDraft({
       title: decision.title,
@@ -1683,6 +1736,24 @@ function App() {
     node.due_date && node.due_date < today && node.status !== "COMPLETED";
   const overdueCommitments = graph.nodes.filter(isOverdue);
 
+  // Contested is computed from the arguments (A13): a decision with at
+  // least one open AGAINST argument. The same set marks the decision
+  // dropdown, so the surfaces agree by construction, not by luck.
+  const contestedIds = new Set(
+    (argumentsList.items ?? [])
+      .filter(
+        (item) =>
+          item.status === "OPEN" &&
+          item.stance === "AGAINST" &&
+          item.decision_id != null
+      )
+      .map((item) => item.decision_id)
+  );
+
+  const contestedDecisions = decisions.filter((item) =>
+    contestedIds.has(item.id)
+  );
+
   // Everything the user could act on, ordered by what unblocks the most:
   // a cycle breaks the plan, a conflict undermines the record, and
   // unreviewed candidates are simply work in the queue.
@@ -1708,6 +1779,23 @@ function App() {
       }),
       action: t("overview.actionReview"),
       view: "consistency",
+    });
+  }
+
+  if (contestedDecisions.length > 0) {
+    attention.push({
+      key: "contested",
+      tag: t("overview.tagDecisions"),
+      message: tp(
+        "overview.attentionContested",
+        contestedDecisions.length,
+        {
+          count: contestedDecisions.length,
+          title: contestedDecisions[0].title,
+        }
+      ),
+      action: t("overview.actionReview"),
+      view: "deliberation",
     });
   }
 
@@ -1875,6 +1963,14 @@ function App() {
           />
         )}
 
+        {view === "deliberation" && (
+          <DeliberationPanel
+            list={argumentsList}
+            decisions={decisions}
+            onResolved={() => setRefreshTick((tick) => tick + 1)}
+          />
+        )}
+
         {view === "decisions" && (
           <div className="dashboard-grid">
             <section className="card decision-card">
@@ -1897,6 +1993,7 @@ function App() {
                         {decisions.map((item) => (
                           <option key={item.id} value={item.id}>
                             #{item.id} {item.title}
+                            {contestedIds.has(item.id) ? " ⚠" : ""}
                           </option>
                         ))}
                       </select>
@@ -1906,6 +2003,12 @@ function App() {
 
                 <div className="decision-header-actions">
                   {decision && <StatusBadge status={decision.status} />}
+
+                  {currentDeliberation?.contested && (
+                    <span className="contested-badge">
+                      {t("decisions.contested")}
+                    </span>
+                  )}
 
                   {decision && !editingDecision && (
                     <button
@@ -2024,6 +2127,38 @@ function App() {
 
               {decision && (
                 <>
+                  <div className="decision-subsection">
+                    <div className="decision-subheading">
+                      <span>{t("decisions.deliberationEyebrow")}</span>
+
+                      {currentDeliberation &&
+                        currentDeliberation.arguments.length > 0 && (
+                          <span className="subheading-note">
+                            {currentDeliberation.arguments.length}
+                          </span>
+                        )}
+                    </div>
+
+                    {deliberationError && (
+                      <p className="pipeline-error">{te(deliberationError)}</p>
+                    )}
+
+                    {currentDeliberation &&
+                    currentDeliberation.arguments.length > 0 ? (
+                      currentDeliberation.arguments.map((argument) => (
+                        <ArgumentRow
+                          key={argument.id}
+                          argument={argument}
+                          onResolved={() =>
+                            setRefreshTick((tick) => tick + 1)
+                          }
+                        />
+                      ))
+                    ) : (
+                      <p className="muted">{t("decisions.noArguments")}</p>
+                    )}
+                  </div>
+
                   <div className="decision-subsection">
                     <div className="decision-subheading">
                       <span>{t("decisions.impactEyebrow")}</span>

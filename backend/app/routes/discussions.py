@@ -15,6 +15,7 @@ from app.models.project import Project
 from app.models.candidate import Candidate
 from app.models.decision import Decision
 from app.models.discussion import Discussion
+from app.models.argument import Argument
 from app.schemas.discussion import (
     DiscussionCreate,
     DiscussionImportResponse,
@@ -215,6 +216,12 @@ def delete_discussion(
     db.query(Decision).filter(
         Decision.source_discussion_id == discussion.id
     ).update({"source_discussion_id": None}, synchronize_session=False)
+
+    # Confirmed arguments stay authoritative, same as decisions; only the
+    # pointer back to the deleted discussion is cleared.
+    db.query(Argument).filter(
+        Argument.discussion_id == discussion.id
+    ).update({"discussion_id": None}, synchronize_session=False)
 
     summary = summarize_discussion(discussion.content)
 

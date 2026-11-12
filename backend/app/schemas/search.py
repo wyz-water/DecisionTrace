@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 class SearchResult(BaseModel):
     id: int
-    kind: str  # discussion | decision | commitment | decision_history | commitment_history
+    kind: str  # discussion | decision | commitment | argument | decision_history | commitment_history
     project_id: int
 
     title: str

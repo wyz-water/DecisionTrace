@@ -11,6 +11,7 @@ from app.models.decision import Decision
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
 from app.models.candidate import Candidate
+from app.models.argument import Argument
 from app.schemas.candidate import (
     CandidateResponse,
     CandidateUpdate,
@@ -30,7 +31,11 @@ from app.services.extractor import (
 )
 from app.services.graph import find_cycle_with_edge
 from app.services.pagination import PageParams, page_response, paginate
-from app.statuses import COMMITMENT_STATUSES, DECISION_STATUSES
+from app.statuses import (
+    ARGUMENT_STANCES,
+    COMMITMENT_STATUSES,
+    DECISION_STATUSES,
+)
 
 
 router = APIRouter(
@@ -43,6 +48,7 @@ _IDENTITY_FIELDS = {
     "DECISION": ("title",),
     "COMMITMENT": ("owner", "description"),
     "DEPENDENCY": ("predecessor_owner", "successor_owner"),
+    "ARGUMENT": ("stance", "claim"),
 }
 
 
@@ -296,28 +302,12 @@ def _duplicate_of(db, candidate):
     if candidate.candidate_type == "DECISION":
         title = _field(payload, "title")
         if title:
-            existing = _find_decision_by_title(
+            # Tolerance for the extractor's title cleaning: manual entry
+            # says "Use Redis" while extraction cleans the leading verb
+            # and yields "Redis". Both name the same decision.
+            existing = _find_decision_by_title_tolerant(
                 db, candidate.project_id, title
             )
-            if not existing:
-                # Tolerance for the extractor's title cleaning: manual
-                # entry says "Use Redis" while extraction cleans the
-                # leading verb and yields "Redis". Both name the same
-                # decision.
-                for row in db.query(Decision).filter(
-                    Decision.project_id == candidate.project_id
-                ).all():
-                    a = row.title.strip().lower()
-                    b = title.lower()
-                    for prefix in ("use ", "using ", "to "):
-                        if (
-                            (a.startswith(prefix) and b == a[len(prefix):])
-                            or (b.startswith(prefix) and a == b[len(prefix):])
-                        ):
-                            existing = row
-                            break
-                    if existing:
-                        break
             if existing:
                 return f"Decision #{existing.id}"
 
@@ -352,6 +342,36 @@ def _duplicate_of(db, candidate):
                 if edge:
                     return f"Dependency #{edge.id}"
 
+    elif candidate.candidate_type == "ARGUMENT":
+        stance = _field(payload, "stance")
+        claim = _field(payload, "claim")
+        if not stance or not claim:
+            return None
+
+        target_title = _field(payload, "target_title")
+
+        decision_id = None
+        if target_title:
+            decision = _find_decision_by_title_tolerant(
+                db, candidate.project_id, target_title
+            )
+            if decision:
+                decision_id = decision.id
+            else:
+                # Cannot tell yet whether it repeats an existing argument
+                # until the target resolves.
+                return None
+
+        match = db.query(Argument).filter(
+            Argument.project_id == candidate.project_id,
+            Argument.decision_id == decision_id,
+            func.lower(Argument.stance) == stance.lower(),
+            func.lower(Argument.claim) == claim.lower(),
+        ).first()
+
+        if match:
+            return f"Argument #{match.id}"
+
     return None
 
 
@@ -381,6 +401,37 @@ def _find_decision_by_title(db, project_id, title):
         Decision.project_id == project_id,
         func.lower(Decision.title) == title.lower()
     ).first()
+
+
+def _find_decision_by_title_tolerant(db, project_id, title):
+    """Exact title match first, then prefix-tolerant both ways.
+
+    "Use Redis" ≡ "using Redis" ≡ "Redis" — the extractor cleans leading
+    verbs off decision titles, and argument targets carry them ("disagrees
+    with using Redis"), so the link needs the same tolerance the decision
+    duplicate check has.
+    """
+    existing = _find_decision_by_title(db, project_id, title)
+
+    if existing:
+        return existing
+
+    def strip_prefix(value):
+        lowered = value.strip().lower()
+        for prefix in ("use ", "using ", "to "):
+            if lowered.startswith(prefix):
+                return lowered[len(prefix):]
+        return lowered
+
+    needle = strip_prefix(title)
+
+    for row in db.query(Decision).filter(
+        Decision.project_id == project_id
+    ).all():
+        if strip_prefix(row.title) == needle:
+            return row
+
+    return None
 
 
 def _normalize_status(value, allowed, default):
@@ -630,6 +681,54 @@ def _confirm_pending(db, candidate_id):
             predecessor_commitment_id=predecessor.id,
             successor_commitment_id=successor.id,
             dependency_type=dependency_type
+        )
+
+    elif candidate.candidate_type == "ARGUMENT":
+        stance = _field(payload, "stance")
+        claim = _field(payload, "claim")
+
+        if not stance or not claim:
+            raise HTTPException(
+                status_code=400,
+                detail="Argument candidate is missing stance or claim"
+            )
+
+        stance = stance.upper()
+
+        if stance not in ARGUMENT_STANCES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid argument stance '{stance}'"
+            )
+
+        decision_id = None
+
+        target_title = _field(payload, "target_title")
+        if target_title:
+            decision = _find_decision_by_title_tolerant(
+                db, candidate.project_id, target_title
+            )
+
+            if not decision:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Decision '{target_title}' not found in this "
+                        "project — fix or clear the target"
+                    )
+                )
+
+            decision_id = decision.id
+
+        record = Argument(
+            project_id=candidate.project_id,
+            discussion_id=candidate.discussion_id,
+            decision_id=decision_id,
+            stance=stance,
+            claim=claim,
+            author=_field(payload, "author"),
+            source_text=candidate.source_text,
+            status="OPEN"
         )
 
     else:
