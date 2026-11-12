@@ -39,6 +39,15 @@ function candidateFields(candidate) {
     ];
   }
 
+  if (candidate.candidate_type === "ARGUMENT") {
+    return [
+      { key: "stance", labelKey: "candidates.field.stance" },
+      { key: "claim", labelKey: "candidates.field.claim" },
+      { key: "author", labelKey: "candidates.field.author" },
+      { key: "target_title", labelKey: "candidates.field.targetTitle" },
+    ];
+  }
+
   return [
     { key: "predecessor_owner", labelKey: "candidates.field.predecessor" },
     { key: "successor_owner", labelKey: "candidates.field.successor" },

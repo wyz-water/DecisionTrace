@@ -14,24 +14,28 @@ graph TD
     ROOT["Dashboard"]
     ROOT --> O["Overview<br/>WORKSPACE"]
     ROOT --> D["Decisions<br/>DECIDE"]
+    ROOT --> DL["Deliberation<br/>DECIDE"]
     ROOT --> I["Intake &amp; review<br/>DECIDE"]
     ROOT --> P["Plan &amp; commitments<br/>EXECUTE"]
     ROOT --> G["Dependencies<br/>EXECUTE"]
     ROOT --> S["Search<br/>TRACE"]
     ROOT --> C["Consistency<br/>TRACE"]
     ROOT --> A["Audit trail<br/>TRACE"]
+    ROOT --> ASK["Ask (planned)<br/>TRACE"]
 ```
 
 | View | Job (one job per view) | Backs use case |
 |---|---|---|
 | Overview | Dashboard: KPIs, graph preview, "needs attention" list | — |
-| Decisions | Create/revise decisions; see rationale, history, impact | UC04, UC07 |
+| Decisions | Create/revise decisions; see rationale, history, impact, and the deliberation (arguments, contested badge) | UC04, UC07 |
+| Deliberation | Every argument in the project — targeted and free-standing; filters (all / open objections / resolved); resolve with reason | Part III PoC, backs §6 |
 | Intake & review | Paste/upload discussions → automatic extraction → batch review of AI candidates (confirm/edit/reject) | UC01–UC03 |
 | Plan & commitments | Assign and track commitments; update status with a reason | UC05 |
 | Dependencies | The graph: topological layout, blocked-by, cycles, add/remove edges | UC06, UC07 |
 | Search | Keyword search across records and history; hit links to its home view | UC08 |
 | Consistency | Conflicts the trace cannot reconcile (order violations, duplicates) | UC07 |
 | Audit trail | Status-change history per commitment, newest first | change tracking |
+| Ask (planned) | Ask the trace a question in plain language ("What is blocking the migration?"); every answer cites its source spans | Part III PoC |
 
 ## 2. Shared Elements
 
@@ -65,15 +69,30 @@ graph TD
 6. **Empty states are routes, not walls.** A fresh database shows the
    dashboard with a banner and a working project switcher, so the first
    project can always be created from the UI.
-7. **Automation-first intake.** Dropping a discussion into the intake
-   view triggers extraction automatically; the review list is built for
-   batch confirmation (paged, one click per candidate, source text always
-   visible). The human's job is *verifying*, never *transcribing*.
-   Part III upgrades: one-click batch confirm above a confidence
+7. **The discussion is the input; the graph is derived.** Dropping a
+   discussion into the intake view triggers extraction automatically; the
+   review list is built for batch confirmation (paged, one click per
+   candidate, source text always visible). The human's job is
+   *verifying*, never *transcribing*, and the graph is never maintained
+   by hand — every node and edge links back to the sentence it came
+   from. Part III upgrades: one-click batch confirm above a confidence
    threshold, an auto-generated meeting summary with a suggested graph
-   snapshot, duplicate detection, and owner suggestions (see the
-   architecture document, §5).
-8. **Manual entry is the fallback.** Decisions and Plan & commitments each
+   snapshot, duplicate detection, owner suggestions, an ask view that
+   answers questions with citations, proactive alerts on the overview,
+   and corrections feeding back into the extractor (see the architecture
+   document, §5).
+8. **Deliberation is visible next to the verdict.** Decisions with an
+   open objection render a contested badge (and a marker in the decision
+   selector); the decision card shows its arguments (stance, author,
+   claim, source span) in a deliberation panel with inline resolve. The
+   deliberation view lists every argument in the project — free-standing
+   concerns stay visible instead of vanishing after confirmation — with
+   filters and resolve-with-reason. `ARGUMENT` candidates appear in the
+   intake queue with a stance badge and are confirmed like every other
+   record. The overview raises a needs-attention entry while any
+   decision is contested, and search covers claims, authors and stances.
+   Part III: a dedicated argument-map view.
+9. **Manual entry is the fallback.** Decisions and Plan & commitments each
    offer an expandable creation form for missed extractions and decisions
    that never appear in a meeting — not as the primary path. A decision
    requires a title and a rationale (the decision goal — the API enforces
@@ -94,7 +113,9 @@ graph TD
 | `DecisionCreateForm` | Manual decision creation with rationale and optional source discussion |
 | `CommitmentCreateForm` | Manual commitment creation with optional due date and linked decision |
 | `DiscussionsPanel` | Paste or upload discussion, trigger extraction |
-| `CandidatesPanel` | Pending/reviewed candidate lists; confirm/edit/reject; prerequisite panel |
+| `CandidatesPanel` | Pending/reviewed candidate lists; confirm/edit/reject; prerequisite panel; argument candidates with stance badge |
+| `DeliberationPanel` | Project-wide deliberation view: all arguments with filters; free-standing concerns stay visible |
+| `ArgumentRow` | One argument (stance, claim, author, source span, resolve-with-reason); shared by the decision card and the deliberation view so the flow cannot drift |
 | `SearchPanel` | UC08 search form, ranked results, cross-view navigation |
 | `CycleDialog` | Renders a rejected cycle (hops, removals) when adding an edge |
 | `StatusBadge` | Shared status pill |

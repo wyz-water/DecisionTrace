@@ -13,3 +13,13 @@ COMMITMENT_STATUSES = {
     "DELAYED",
     "BLOCKED",
 }
+
+ARGUMENT_STATUSES = {
+    "OPEN",
+    "RESOLVED",
+}
+
+ARGUMENT_STANCES = {
+    "FOR",
+    "AGAINST",
+}

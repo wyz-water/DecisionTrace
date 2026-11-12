@@ -24,7 +24,7 @@ SRS 路线图（§4）的 M3/M4/M5 核心功能已提前实现并合并进 main�
 | B | 全文搜索（UC08） | 中 | 全栈 | 无 | ✅ 已实现（PR #18） |
 | C | 讨论文件导入（UC01 扩展） | 小 | 前端为主 | 无 | ✅ 已实现（PR #20，.txt/.md/.docx/.pdf） |
 | D | 自动化测试 | 中 | 测试 | 无 | ✅ 已实现（pytest，26 项；Playwright E2E 每功能合入前必跑） |
-| E | AI 提取评估与优化 | 中 | 分析 | 无 | 📋 Part III（评估方案见 docs/design/architecture.md §9） |
+| E | AI 提取评估与优化 | 中 | 分析 | 无 | 📋 Part III（评估方案见 docs/design/architecture.md §10） |
 | F | 可用性测试与试运行 | 小 | 沟通 | 建议在 B/C 之后 | 📋 Part III（M6） |
 
 ---

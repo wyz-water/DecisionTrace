@@ -1483,6 +1483,149 @@ body {
   color: #9a6700;
 }
 
+.type-argument {
+  background: #f5eeff;
+  color: #6941c6;
+}
+
+/* ---- Deliberation layer ------------------------------------------- */
+
+.contested-badge {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid #fda29b;
+  border-radius: 999px;
+  background: #fff1f0;
+  color: #b42318;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.stance-badge {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.stance-for {
+  background: #eaf8ef;
+  color: #267447;
+}
+
+.stance-against {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.argument-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid #eceef2;
+}
+
+.argument-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.argument-claim {
+  margin: 0;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.argument-author {
+  color: #667085;
+  font-weight: 500;
+}
+
+.argument-source {
+  margin: 3px 0 0;
+  color: #667085;
+  font-size: 11.5px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.argument-resolved {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f8f9fc;
+  color: #475467;
+  font-size: 11.5px;
+}
+
+.argument-resolve {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  max-width: 380px;
+}
+
+.argument-resolve input {
+  min-width: 200px;
+}
+
+.deliberation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.filter-chip {
+  padding: 5px 12px;
+  border: 1px solid #d8dce4;
+  border-radius: 999px;
+  background: #fff;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-chip.active {
+  border-color: #315ca8;
+  background: #eef4ff;
+  color: #315ca8;
+}
+
+.deliberation-note {
+  margin: 4px 0 8px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.argument-target {
+  display: inline-block;
+  margin-top: 4px;
+  color: #315ca8;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.argument-target:hover {
+  text-decoration: underline;
+}
+
+.argument-target.dim {
+  color: #98a2b3;
+  font-weight: 500;
+  cursor: default;
+}
+
 .status-pending {
   background: #fff6e6;
   color: #9a6700;

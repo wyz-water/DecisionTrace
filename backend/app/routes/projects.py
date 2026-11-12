@@ -11,6 +11,7 @@ from app.models.decision_history import DecisionHistory
 from app.models.dependency import Dependency
 from app.models.discussion import Discussion
 from app.models.snapshot import Snapshot
+from app.models.argument import Argument
 from app.schemas.project import ProjectCreate, ProjectResponse
 from app.schemas.graph import ProjectGraphResponse
 from app.schemas.conflict import ProjectConflictsResponse
@@ -298,6 +299,12 @@ def delete_project(
 
     db.query(Dependency).filter(
         Dependency.project_id == project.id
+    ).delete(synchronize_session=False)
+
+    # Arguments reference both the project and (optionally) a decision;
+    # they go before the decisions they target.
+    db.query(Argument).filter(
+        Argument.project_id == project.id
     ).delete(synchronize_session=False)
 
     db.query(Commitment).filter(

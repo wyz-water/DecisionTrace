@@ -8,6 +8,8 @@ from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
+from app.models.argument import Argument
+from app.schemas.argument import DeliberationResponse
 from app.schemas.decision import (
     DecisionCreate,
     DecisionResponse,
@@ -229,6 +231,47 @@ def get_decision_history(
     rows, total = paginate(query, page)
 
     return page_response(rows, total, page)
+
+
+@router.get(
+    "/{decision_id}/deliberation",
+    response_model=DeliberationResponse
+)
+def get_decision_deliberation(
+    decision_id: int,
+    db: Session = Depends(get_db)
+):
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
+
+    if not decision:
+        raise HTTPException(
+            status_code=404,
+            detail="Decision not found"
+        )
+
+    arguments = db.query(Argument).filter(
+        Argument.decision_id == decision_id
+    ).order_by(
+        Argument.created_at.asc(),
+        Argument.id.asc()
+    ).all()
+
+    # Contested is computed (A13), never stored: nobody can mark a
+    # decision contested by hand, and the badge cannot drift from the
+    # arguments that justify it.
+    contested = any(
+        argument.status == "OPEN" and argument.stance == "AGAINST"
+        for argument in arguments
+    )
+
+    return {
+        "decision_id": decision.id,
+        "title": decision.title,
+        "arguments": arguments,
+        "contested": contested,
+    }
 
 
 @router.get(

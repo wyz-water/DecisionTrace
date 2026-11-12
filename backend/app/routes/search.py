@@ -18,6 +18,7 @@ from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
 from app.models.commitment import Commitment
 from app.models.commitment_history import CommitmentHistory
+from app.models.argument import Argument
 from app.schemas.page import Page
 from app.schemas.search import SearchResult
 from app.services.pagination import PageParams, page_response
@@ -41,9 +42,10 @@ SEARCH_CAP = 200
 KIND_ORDER = {
     "decision": 0,
     "commitment": 1,
-    "discussion": 2,
-    "decision_history": 3,
-    "commitment_history": 4,
+    "argument": 2,
+    "discussion": 3,
+    "decision_history": 4,
+    "commitment_history": 5,
 }
 
 
@@ -140,6 +142,38 @@ def search(
                 owner=row.owner,
                 decision_id=row.decision_id,
                 commitment_id=row.id,
+            )))
+
+    # --- Arguments: stance + claim + author + resolution reason -----
+    # The deliberation layer is part of the trace: "why did Bob object?"
+    # must be one query, same as every other "why" (UC08).
+    for row in db.query(Argument).all():
+        if project_id is not None and row.project_id != project_id:
+            continue
+
+        score, fields = match_fields(terms, [
+            ("claim", row.claim),
+            ("author", row.author),
+            ("stance", row.stance),
+            ("resolved_reason", row.resolved_reason),
+        ])
+
+        if score:
+            title = f"{row.stance}: {row.claim}"
+            if row.author:
+                title = f"{row.author} ({title})"
+
+            ranked.append((score, SearchResult(
+                id=row.id,
+                kind="argument",
+                project_id=row.project_id,
+                title=title,
+                snippet=make_snippet(row.claim, terms),
+                matched_field=fields[0],
+                status=row.status,
+                owner=row.author,
+                decision_id=row.decision_id,
+                source_discussion_id=row.discussion_id,
             )))
 
     # --- Decision history: old/new title, rationale, reason ---------

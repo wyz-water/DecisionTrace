@@ -6,8 +6,10 @@ Part II design document — DecisionTrace
 
 The core idea is four concepts — **Decision, Commitment, Dependency,
 Change** — plus the intake pipeline around them (Discussion → Candidate).
-History tables make change a first-class citizen: nothing is edited in
-place, every modification appends a row.
+This revision adds a fifth concept, **Argument**: the pros and cons
+behind each decision, so a decision keeps the deliberation that produced
+it, not just its conclusion. History tables make change a first-class
+citizen: nothing is edited in place, every modification appends a row.
 
 ## 1. Entity-Relationship Diagram
 
@@ -18,12 +20,15 @@ erDiagram
     Project ||--o{ Commitment : has
     Project ||--o{ Dependency : has
     Project ||--o{ Candidate : has
+    Project ||--o{ Argument : has
 
     Discussion ||--o{ Decision : "source of"
     Discussion ||--o{ Candidate : "extracted from"
+    Discussion ||--o{ Argument : "source of"
 
     Decision ||--o{ Commitment : "drives"
     Decision ||--o{ DecisionHistory : "change log"
+    Decision ||--o{ Argument : "deliberated by"
 
     Commitment ||--o{ CommitmentHistory : "change log"
     Commitment ||--o{ Dependency : "predecessor of"
@@ -75,6 +80,19 @@ erDiagram
         string review_comment
         datetime created_at
     }
+    ARGUMENT {
+        int id PK
+        int project_id FK
+        int discussion_id FK
+        int decision_id FK
+        string stance
+        text claim
+        string author
+        text source_text
+        string status
+        text resolved_reason
+        datetime created_at
+    }
     DECISION_HISTORY {
         int id PK
         int decision_id FK
@@ -124,9 +142,24 @@ the goal's evolution is preserved.
 
 **Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
 
+### Argument
+A point made during the deliberation of a decision (the *deliberation
+layer*): `stance` is `FOR` or `AGAINST`, `claim` is what was said,
+`author` who said it, and `decision_id` which decision it targets (null
+when the extraction could not link it — a free-standing concern).
+`source_text` keeps the original sentence, so every argument can be
+traced back to the discussion it came from. Arguments pass through the
+same candidate gate as every other record (A2).
+
+**Status:** `OPEN` | `RESOLVED` — resolving requires a reason, stored in
+`resolved_reason`; append-only argument history is a Part III item.
+
+A decision with at least one `OPEN` `AGAINST` argument is **contested** —
+computed on read, never a manual status (A13).
+
 ### Commitment
-Who promised what, by when (UC05). `due_date` is informational; overdue
-highlighting is a future feature.
+Who promised what, by when (UC05). `due_date` feeds overdue highlighting
+in the overview and plan views.
 
 **Status:** `OPEN` | `IN_PROGRESS` | `COMPLETED` | `DELAYED` | `BLOCKED`
 
@@ -137,9 +170,10 @@ column leaves room for other relations.
 
 ### Candidate
 The AI intake pipeline (UC02/UC03). `payload` is JSON holding the
-extraction result (decision fields, commitment fields, or the two
-commitment owners of a dependency candidate). A candidate is the only
-route to an authoritative record from text.
+extraction result (decision fields, commitment fields, the two
+commitment owners of a dependency candidate, or an argument's
+stance/claim/author/target). A candidate is the only route to an
+authoritative record from text.
 
 **Status:** `PENDING` | `CONFIRMED` | `REJECTED`
 
@@ -156,6 +190,7 @@ value, and a human `reason`. Audit-trail views read these newest-first.
 | Cycles | nodes that cannot be ordered | `services/graph.py` |
 | Impact set | transitive closure over `BLOCKS` edges starting at a commitment/decision | `services/graph.py` |
 | Consistency conflicts | order violations (e.g. completed before its predecessor) and duplicates | `services/consistency.py` |
+| Contested set | decisions with ≥ 1 `OPEN` `AGAINST` argument | `services/deliberation.py` |
 
 They are computed on read (decision A8) so there is no cache to
 invalidate when a dependency changes.
