@@ -16,14 +16,17 @@ from app.schemas.candidate import (
     CandidateResponse,
     CandidateUpdate,
     CandidateReject,
+    CandidateConfirmRequest,
     CandidateConfirmResponse,
     CandidateBatchConfirmRequest,
     CandidateBatchConfirmResponse,
     ExtractResponse,
+    ChallengesResponse,
 )
 from app.schemas.dependency import DependencyCreate
 from app.schemas.page import Page
 from app.routes.dependencies import cycle_rejection_payload
+from app.services.devils_advocate import draft_challenges, record_resolutions
 from app.services.extractor import (
     extract_candidates,
     serialize_candidate,
@@ -450,7 +453,83 @@ def _normalize_status(value, allowed, default):
     return status
 
 
-def _confirm_pending(db, candidate_id):
+@router.get(
+    "/{candidate_id}/challenges",
+    response_model=ChallengesResponse
+)
+def get_candidate_challenges(
+    candidate_id: int,
+    db: Session = Depends(get_db)
+):
+    """The devil's advocate gate: drafted counter-considerations for a
+    pending decision candidate. Computed on read, nothing stored."""
+    candidate = db.query(Candidate).filter(
+        Candidate.id == candidate_id
+    ).first()
+
+    if not candidate:
+        raise HTTPException(
+            status_code=404,
+            detail="Candidate not found"
+        )
+
+    if candidate.status != "PENDING":
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending candidates can be challenged"
+        )
+
+    payload = json.loads(candidate.payload)
+
+    challenges = draft_challenges(db, candidate)
+
+    return {
+        "candidate_id": candidate.id,
+        "decision_title": (
+            str(payload.get("title") or "")
+            if isinstance(payload, dict)
+            else ""
+        ),
+        "challenges": challenges,
+        "total": len(challenges),
+    }
+
+
+def _require_all_resolved(challenges, resolutions):
+    """Every currently drafted challenge must be resolved with a reason.
+
+    The draft list is recomputed at confirm time, so a challenge that
+    appeared after the UI fetched the list cannot slip through."""
+    missing = []
+
+    for challenge in challenges:
+        resolution = next(
+            (
+                item
+                for item in resolutions
+                if item.challenge_id == challenge["id"]
+            ),
+            None,
+        )
+
+        if not resolution or not (resolution.resolved_reason or "").strip():
+            missing.append(challenge["id"])
+
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "CHALLENGES_UNRESOLVED",
+                "message": (
+                    "Every drafted challenge must be resolved with a "
+                    "reason before the decision can be confirmed."
+                ),
+                "missing": missing,
+            }
+        )
+
+
+def _confirm_pending(db, candidate_id, challenge_resolutions=None):
     """Confirm one pending candidate: validate, create the authoritative
     record, commit. Raises HTTPException on failure."""
     candidate = db.query(Candidate).filter(
@@ -476,6 +555,25 @@ def _confirm_pending(db, candidate_id):
             status_code=400,
             detail="Candidate payload must be a JSON object"
         )
+
+    # The devil's advocate gate: when the caller supplies resolutions,
+    # every challenge drafted *right now* must be resolved with a reason.
+    # Drafts are recomputed here, so a challenge that appeared after the
+    # UI fetched the list fails the confirm instead of slipping through.
+    challenges = None
+
+    if challenge_resolutions is not None:
+        if candidate.candidate_type != "DECISION":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Challenge resolutions apply to decision "
+                    "candidates only"
+                )
+            )
+
+        challenges = draft_challenges(db, candidate)
+        _require_all_resolved(challenges, challenge_resolutions)
 
     if candidate.candidate_type == "DECISION":
         title = _field(payload, "title")
@@ -739,6 +837,20 @@ def _confirm_pending(db, candidate_id):
 
     db.add(record)
 
+    # The record must be flushed first so its id exists for the
+    # challenge arguments to link to.
+    db.flush()
+
+    # Record the human's resolution of each challenge as a resolved
+    # AGAINST argument on the new decision — the audit trail keeps what
+    # was challenged and why it was overruled.
+    challenges_recorded = None
+
+    if challenges is not None:
+        challenges_recorded = record_resolutions(
+            db, record, challenges, challenge_resolutions
+        )
+
     candidate.status = "CONFIRMED"
 
     db.commit()
@@ -748,6 +860,7 @@ def _confirm_pending(db, candidate_id):
     return {
         "candidate_id": candidate.id,
         "created_id": record.id,
+        "challenges_recorded": challenges_recorded,
     }
 
 
@@ -757,10 +870,25 @@ def _confirm_pending(db, candidate_id):
 )
 def confirm_candidate(
     candidate_id: int,
+    request: CandidateConfirmRequest | None = None,
     db: Session = Depends(get_db)
 ):
-    """Single confirmation: the human gate for one candidate."""
-    result = _confirm_pending(db, candidate_id)
+    """Single confirmation: the human gate for one candidate.
+
+    With no body, this is the plain confirm. With challenge_resolutions,
+    the devil's advocate gate applies: every drafted challenge must be
+    resolved with a reason, and the resolutions are recorded on the new
+    decision as resolved arguments.
+    """
+    resolutions = (
+        request.challenge_resolutions
+        if request is not None
+        else None
+    )
+
+    result = _confirm_pending(
+        db, candidate_id, challenge_resolutions=resolutions
+    )
 
     candidate = db.query(Candidate).filter(
         Candidate.id == candidate_id
@@ -769,6 +897,7 @@ def confirm_candidate(
     return {
         "candidate_id": result["candidate_id"],
         "created_id": result["created_id"],
+        "challenges_recorded": result.get("challenges_recorded"),
         "candidate": serialize_candidate(candidate),
     }
 
