@@ -7,6 +7,7 @@ from app.models.discussion import Discussion
 from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
 from app.models.commitment import Commitment
+from app.models.commitment_history import CommitmentHistory
 from app.models.dependency import Dependency
 from app.models.argument import Argument
 from app.schemas.argument import DeliberationResponse
@@ -16,10 +17,12 @@ from app.schemas.decision import (
     DecisionUpdate,
     DecisionHistoryResponse,
     DecisionImpactResponse,
+    ReversalResponse,
 )
 from app.schemas.page import Page
 from app.services.graph import downstream_closure
 from app.services.pagination import PageParams, page_response, paginate
+from app.services.retrospective import _as_utc
 from app.statuses import DECISION_STATUSES
 
 
@@ -168,10 +171,53 @@ def update_decision(
             detail="Rationale is required: a decision must record its goal"
         )
 
+    # Reversal is a first-class relationship: SUPERSEDED may name the
+    # decision that replaced it. Any other status forces the link to
+    # None, so a resurrected decision cannot keep pointing at a
+    # successor it no longer has.
+    new_superseded_by = decision.superseded_by_decision_id
+
+    if new_status != "SUPERSEDED":
+        new_superseded_by = None
+    elif "superseded_by_decision_id" in update.model_fields_set:
+        # Only an explicit value (or explicit null) changes the link: a
+        # title-only edit must not silently drop the successor.
+        new_superseded_by = update.superseded_by_decision_id
+
+        if new_superseded_by is not None:
+            successor = db.query(Decision).filter(
+                Decision.id == new_superseded_by
+            ).first()
+
+            if not successor:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Superseding decision not found"
+                )
+
+            if successor.id == decision.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="A decision cannot supersede itself"
+                )
+
+            if successor.project_id != decision.project_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The superseding decision must be in the same project"
+                )
+
+            if successor.status != "CONFIRMED":
+                raise HTTPException(
+                    status_code=400,
+                    detail="The superseding decision must be CONFIRMED"
+                )
+
     if (
         new_title == old_title
         and new_rationale == old_rationale
         and new_status == old_status
+        and new_superseded_by == decision.superseded_by_decision_id
     ):
         raise HTTPException(
             status_code=400,
@@ -194,6 +240,7 @@ def update_decision(
     decision.title = new_title
     decision.rationale = new_rationale
     decision.status = new_status
+    decision.superseded_by_decision_id = new_superseded_by
 
     db.commit()
     db.refresh(decision)
@@ -338,3 +385,175 @@ def get_decision_impact(
         "has_changes": change_count > 0,
         "affected_commitments": affected,
     }
+
+
+def _reversal_payload(decision, db):
+    """The reversal narrative for an overturned decision.
+
+    Every signal cites a real row — the flip in the history, the
+    successor, the objections that accumulated, the commitments that
+    slipped — so the narrative can never invent a fact the trace does
+    not contain (the same rule as A11 for the ask view).
+    """
+    flip = (
+        db.query(DecisionHistory)
+        .filter(
+            DecisionHistory.decision_id == decision.id,
+            DecisionHistory.new_status.in_(["SUPERSEDED", "REVOKED"]),
+        )
+        .order_by(DecisionHistory.changed_at.asc(), DecisionHistory.id.asc())
+        .first()
+    )
+
+    lifespan = None
+
+    if flip and decision.created_at is not None and flip.changed_at is not None:
+        lifespan = round(
+            (_as_utc(flip.changed_at) - _as_utc(decision.created_at))
+            .total_seconds() / 86400,
+            1,
+        )
+
+    signals = []
+
+    if flip:
+        signals.append({
+            "type": "reversal",
+            "at": flip.changed_at,
+            "summary": flip.reason or "No reason was recorded.",
+            "citation": f"history #{flip.id}",
+            "source_text": None,
+        })
+
+    successor = (
+        db.query(Decision)
+        .filter(Decision.id == decision.superseded_by_decision_id)
+        .first()
+        if decision.superseded_by_decision_id is not None
+        else None
+    )
+
+    if successor:
+        signals.append({
+            "type": "successor",
+            "at": successor.created_at,
+            "summary": (
+                f"Superseded by decision #{successor.id} "
+                f"'{successor.title}'"
+            ),
+            "citation": successor.rationale,
+            "source_text": None,
+        })
+
+    objections = (
+        db.query(Argument)
+        .filter(
+            Argument.decision_id == decision.id,
+            Argument.stance == "AGAINST",
+        )
+        .order_by(Argument.created_at.asc(), Argument.id.asc())
+        .all()
+    )
+
+    for objection in objections:
+        author = objection.author or "A team member"
+
+        state = objection.status.lower()
+
+        if objection.status == "RESOLVED" and objection.resolved_reason:
+            state = f"{state}: {objection.resolved_reason}"
+
+        signals.append({
+            "type": "objection",
+            "at": objection.created_at,
+            "summary": f"{author} objected: '{objection.claim}'",
+            "citation": f"argument #{objection.id} ({state})",
+            "source_text": objection.source_text,
+        })
+
+    slipped = (
+        db.query(Commitment)
+        .filter(
+            Commitment.decision_id == decision.id,
+            Commitment.status.in_(["DELAYED", "BLOCKED"]),
+        )
+        .all()
+    )
+
+    for commitment in slipped:
+        transition = (
+            db.query(CommitmentHistory)
+            .filter(
+                CommitmentHistory.commitment_id == commitment.id,
+                CommitmentHistory.new_status.in_(["DELAYED", "BLOCKED"]),
+            )
+            .order_by(
+                CommitmentHistory.changed_at.asc(),
+                CommitmentHistory.id.asc(),
+            )
+            .first()
+        )
+
+        signals.append({
+            "type": "slip",
+            "at": transition.changed_at if transition else None,
+            "summary": (
+                f"'{commitment.description}' ({commitment.owner}) "
+                f"is {commitment.status.lower()}"
+            ),
+            "citation": f"commitment #{commitment.id}",
+            "source_text": None,
+        })
+
+    return {
+        "decision_id": decision.id,
+        "title": decision.title,
+        "status": decision.status,
+        "reversed": True,
+        "reversed_at": flip.changed_at if flip else None,
+        "lifespan_days": lifespan,
+        "reason": flip.reason if flip else None,
+        "superseded_by": successor,
+        "signals": signals,
+    }
+
+
+@router.get(
+    "/{decision_id}/reversal",
+    response_model=ReversalResponse
+)
+def get_decision_reversal(
+    decision_id: int,
+    db: Session = Depends(get_db)
+):
+    """The reversal trace: why this decision did not hold.
+
+    For SUPERSEDED/REVOKED decisions, the narrative is assembled from
+    the trace — the flip, the successor, the objections, the slips. For
+    live decisions, `reversed` is False and the signal list is empty;
+    the UI hides the panel instead of asking.
+    """
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
+
+    if not decision:
+        raise HTTPException(
+            status_code=404,
+            detail="Decision not found"
+        )
+
+    if decision.status not in {"SUPERSEDED", "REVOKED"}:
+        return {
+            "decision_id": decision.id,
+            "title": decision.title,
+            "status": decision.status,
+            "reversed": False,
+            "reversed_at": None,
+            "lifespan_days": None,
+            "reason": None,
+            "superseded_by": None,
+            "signals": [],
+        }
+
+    return _reversal_payload(decision, db)
