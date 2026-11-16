@@ -319,6 +319,8 @@ function App() {
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [decisionDeliberation, setDecisionDeliberation] = useState(null);
   const [deliberationError, setDeliberationError] = useState("");
+  const [decisionReversal, setDecisionReversal] = useState(null);
+  const [reversalError, setReversalError] = useState("");
   const [projectHealth, setProjectHealth] = useState(null);
   const [healthError, setHealthError] = useState("");
   const [graph, setGraph] = useState({
@@ -1362,12 +1364,48 @@ function App() {
     };
   }, [decisionId, refreshTick, te]);
 
+  useEffect(() => {
+    if (decisionId == null) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadReversal() {
+      try {
+        const response = await fetch(
+          `${API_URL}/decisions/${decisionId}/reversal`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load the reversal trace");
+        }
+
+        if (!cancelled) {
+          setDecisionReversal(await response.json());
+          setReversalError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setReversalError(te(err.message));
+        }
+      }
+    }
+
+    loadReversal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionId, refreshTick, te]);
+
   function startDecisionEdit() {
     setDecisionDraft({
       title: decision.title,
       rationale: decision.rationale ?? "",
       status: decision.status,
       reason: "",
+      supersededBy: decision.superseded_by_decision_id ?? "",
     });
     setDecisionError("");
     setEditingDecision(true);
@@ -1380,8 +1418,18 @@ function App() {
     }
 
     // A decision keeps its recorded goal: the rationale may change, but
-    // it cannot be erased (mirrors the backend rule on PATCH).
-    if (!(decisionDraft.rationale ?? "").trim()) {
+    // it cannot be erased (mirrors the backend rule on PATCH). A
+    // decision extracted without a rationale stays editable — the
+    // backend rejects only an explicit erasure, not an empty rationale
+    // left untouched (extraction candidates are exempt from the
+    // rationale requirement, and they must still be supersedable).
+    const draftRationale = decisionDraft.rationale ?? "";
+    const currentRationale = decision.rationale ?? "";
+
+    if (
+      draftRationale !== currentRationale &&
+      !draftRationale.trim()
+    ) {
       setDecisionError(t("decisions.rationaleRequired"));
       return;
     }
@@ -1393,13 +1441,24 @@ function App() {
       body.title = decisionDraft.title;
     }
 
-    const draftRationale = decisionDraft.rationale ?? "";
-    if (draftRationale !== (decision.rationale ?? "")) {
+    if (draftRationale !== currentRationale) {
       body.rationale = draftRationale;
     }
 
     if (decisionDraft.status !== decision.status) {
       body.status = decisionDraft.status;
+    }
+
+    // The successor link only matters when the decision ends up
+    // SUPERSEDED; an empty value is an explicit clear.
+    if (decisionDraft.status === "SUPERSEDED") {
+      const draftLink =
+        decisionDraft.supersededBy === "" ? null : decisionDraft.supersededBy;
+      const currentLink = decision.superseded_by_decision_id ?? null;
+
+      if (draftLink !== currentLink) {
+        body.superseded_by_decision_id = draftLink;
+      }
     }
 
     if (decisionDraft.reason?.trim()) {
@@ -2200,6 +2259,35 @@ function App() {
                     </option>
                   </select>
 
+                  {decisionDraft.status === "SUPERSEDED" && (
+                    <select
+                      value={decisionDraft.supersededBy ?? ""}
+                      aria-label={t("decisions.supersededByLabel")}
+                      onChange={(event) =>
+                        setDecisionDraft({
+                          ...decisionDraft,
+                          supersededBy: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="">
+                        {t("decisions.supersededByPlaceholder")}
+                      </option>
+
+                      {decisions
+                        .filter(
+                          (item) =>
+                            item.id !== decision.id &&
+                            item.status === "CONFIRMED"
+                        )
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            #{item.id} {item.title}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+
                   <input
                     type="text"
                     placeholder={t("decisions.reasonPlaceholder")}
@@ -2260,6 +2348,74 @@ function App() {
 
               {decision && (
                 <>
+                  {decisionReversal?.reversed && (
+                    <div className="decision-subsection reversal-panel">
+                      <div className="decision-subheading">
+                        <span>{t("decisions.reversalEyebrow")}</span>
+
+                        {decisionReversal.lifespan_days != null && (
+                          <span className="subheading-note">
+                            {t("decisions.reversalLifespan", {
+                              days: decisionReversal.lifespan_days,
+                            })}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="reversal-title">
+                        {t("decisions.reversalTitle")}
+                      </h3>
+
+                      {reversalError && (
+                        <p className="pipeline-error">{te(reversalError)}</p>
+                      )}
+
+                      {decisionReversal.signals.length > 0 ? (
+                        <ul className="reversal-timeline">
+                          {decisionReversal.signals.map((signal, index) => (
+                            <li className="reversal-signal" key={index}>
+                              <div className="reversal-signal-head">
+                                <span className="reversal-kind">
+                                  {t(
+                                    `decisions.reversal.kind.${signal.type}`,
+                                    {},
+                                    signal.type
+                                  )}
+                                </span>
+
+                                {signal.at && (
+                                  <span className="reversal-time">
+                                    {formatDateTime(signal.at)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="reversal-summary">
+                                {signal.summary}
+                              </p>
+
+                              {signal.source_text && (
+                                <p className="argument-source">
+                                  “{signal.source_text}”
+                                </p>
+                              )}
+
+                              {signal.citation && (
+                                <span className="reversal-citation">
+                                  {signal.citation}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="muted">
+                          {t("decisions.reversalNoSignals")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="decision-subsection">
                     <div className="decision-subheading">
                       <span>{t("decisions.deliberationEyebrow")}</span>
