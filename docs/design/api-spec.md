@@ -85,7 +85,7 @@ list endpoint is automatically UI-ready.
 | POST | `/commitments` | Create a commitment (UC05) |
 | GET | `/commitments?project_id=` | List, paginated |
 | PATCH | `/commitments/{id}/status` | Update status (validated set); appends `commitment_history` |
-| GET | `/commitments/{id}/what-if` | Read-only preview: hypothetical DELAYED/BLOCKED downstream impact, split into newly vs already affected; never writes history |
+| GET | `/commitments/{id}/what-if` | Read-only preview: hypothetical DELAYED/BLOCKED downstream impact, split into newly vs already affected; never writes history. Severity-weighted (A16): each affected item carries `baseline_severity`/`severity` (BLOCKED > DELAYED > none, propagated along `BLOCKS` edges; COMPLETED commitments isolate their downstream); the response adds `escalated` ids and blocked/delayed `severity_counts` + `baseline_severity_counts` over the affected set |
 | GET | `/commitments/{id}/impact` | Transitive downstream impact |
 | GET | `/commitments/{id}/history` | Audit trail, newest first |
 | DELETE | `/commitments/{id}` | Delete; audit rows and touching edges go with it |
