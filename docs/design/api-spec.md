@@ -72,10 +72,11 @@ list endpoint is automatically UI-ready.
 |---|---|---|
 | POST | `/decisions` | Create a decision (UC04). **Rationale (the decision goal) is required** — `400` otherwise |
 | GET | `/decisions?project_id=` | List, paginated |
-| PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty) |
+| PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty). `superseded_by_decision_id` names the successor — only when the resulting status is `SUPERSEDED` (validated: exists, same project, not self, `CONFIRMED`); any other status forces the link to `None` |
 | GET | `/decisions/{id}/history` | Change log, newest first |
 | GET | `/decisions/{id}/impact` | Downstream commitments affected through `BLOCKS` closure |
 | GET | `/decisions/{id}/deliberation` | Arguments targeting the decision + `contested` (computed: ≥ 1 open AGAINST) |
+| GET | `/decisions/{id}/reversal` | The reversal trace for `SUPERSEDED`/`REVOKED` decisions: `reversed`, `reversed_at`, `lifespan_days`, the successor, and a `signals` timeline (reversal / successor / objection / slip), each citing the row it came from. Live decisions answer `reversed: false` with an empty list |
 
 ### Commitments — `/commitments`
 
@@ -112,7 +113,8 @@ list endpoint is automatically UI-ready.
 | POST | `/candidates/extract/{discussion_id}` | Run extraction (rules or DeepSeek); idempotent per discussion (UC02). Returns created candidates and a rule-based `summary` |
 | GET | `/candidates?project_id=&status=` | List; `status` accepts a comma list (UC03). Pending rows carry `duplicate_of` against authoritative records |
 | PATCH | `/candidates/{id}` | Edit the candidate payload before confirming |
-| POST | `/candidates/{id}/confirm` | Promote to an authoritative record; cycle/duplicate checks apply here too. Single confirm is allowed even for duplicates |
+| GET | `/candidates/{id}/challenges` | The devil's advocate gate (A14): drafted challenges for a pending decision candidate — pending objections targeting it, uncaptured concern sentences, overturned precedents, missing rationale. Computed on read, nothing stored |
+| POST | `/candidates/{id}/confirm` | Promote to an authoritative record; cycle/duplicate checks apply here too. Single confirm is allowed even for duplicates. Optional body `{challenge_resolutions}`: every currently drafted challenge must be resolved with a reason (`400` with the missing ids otherwise); the resolutions are recorded as resolved `AGAINST` arguments on the new decision |
 | POST | `/candidates/confirm-batch` | Body `{candidate_ids}`. Confirms each; per-item failures reported; duplicates skipped by default |
 | POST | `/candidates/{id}/reject` | Reject with an optional comment |
 

@@ -16,6 +16,9 @@ class DecisionUpdate(BaseModel):
     rationale: str | None = None
     status: str | None = None
     reason: str | None = None
+    # Names the decision that replaced this one. Meaningful only when the
+    # resulting status is SUPERSEDED; otherwise it is forced to None.
+    superseded_by_decision_id: int | None = None
 
 
 class DecisionResponse(BaseModel):
@@ -25,6 +28,7 @@ class DecisionResponse(BaseModel):
     title: str
     rationale: str | None
     status: str
+    superseded_by_decision_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,3 +63,27 @@ class DecisionImpactResponse(BaseModel):
     change_count: int
     has_changes: bool
     affected_commitments: list[LinkedCommitment]
+
+
+class ReversalSignal(BaseModel):
+    """One piece of the reversal narrative, each with its own citation.
+
+    The frontend renders the timeline; the backend only reports facts it
+    can point at (a history row, an argument, a commitment)."""
+    type: str  # "reversal" | "successor" | "objection" | "slip"
+    at: datetime | None
+    summary: str
+    citation: str | None
+    source_text: str | None
+
+
+class ReversalResponse(BaseModel):
+    decision_id: int
+    title: str
+    status: str
+    reversed: bool
+    reversed_at: datetime | None
+    lifespan_days: float | None
+    reason: str | None
+    superseded_by: DecisionResponse | None
+    signals: list[ReversalSignal]

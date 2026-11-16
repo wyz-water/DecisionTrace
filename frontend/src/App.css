@@ -4033,3 +4033,144 @@ html[lang="zh-CN"] .severity-badge {
     padding: 0 6px;
   }
 }
+
+/* ---- Devil's advocate (challenge gate) ------------------------------ */
+
+.challenge-panel {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #d6bbfb;
+  border-radius: 10px;
+  background: #faf7ff;
+}
+
+.challenge-panel .eyebrow {
+  margin: 0 0 4px;
+  color: #6941c6;
+}
+
+.challenge-intro {
+  margin: 0 0 10px;
+  color: #525d73;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.challenge-item {
+  padding: 10px 0;
+  border-top: 1px solid #ece6fb;
+}
+
+.challenge-kind {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f5eeff;
+  color: #6941c6;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.challenge-claim {
+  margin: 6px 0 0;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.challenge-citation {
+  display: inline-block;
+  margin-top: 4px;
+  color: #7a869c;
+  font-size: 11.5px;
+}
+
+.challenge-item input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.challenge-remaining {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.challenge-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ---- Reversal trace -------------------------------------------------- */
+
+.reversal-panel {
+  padding: 12px 14px;
+  border: 1px solid #fda29b;
+  border-radius: 10px;
+  background: #fffbfa;
+}
+
+.reversal-title {
+  margin: 6px 0 10px;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.reversal-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reversal-signal {
+  padding: 10px 0;
+  border-top: 1px solid #fbe5e2;
+}
+
+.reversal-signal-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.reversal-kind {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff1f0;
+  color: #b42318;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.reversal-time {
+  color: #7a869c;
+  font-size: 11.5px;
+}
+
+.reversal-summary {
+  margin: 6px 0 0;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.reversal-citation {
+  display: inline-block;
+  margin-top: 4px;
+  color: #7a869c;
+  font-size: 11.5px;
+}

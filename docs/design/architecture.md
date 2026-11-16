@@ -124,6 +124,8 @@ state (contested). The layer is specified in §6.
 | A11 | Natural-language questions are answered from the derived graph, with citations (planned, Part III) | The ask view composes answers from authoritative records and shows the source spans behind each claim; the LLM, if used, only phrases answers — it never invents facts the trace does not contain. |
 | A12 | Arguments are first-class; a decision carries its deliberation | Extracted pros, cons and objections become `Argument` records through the same candidate gate (A2), each pointing back to its source sentence. Recording the conclusion alone throws away the reasoning — the part that makes decision-making a high-level activity. |
 | A13 | "Contested" is computed, never a manual status | A decision with ≥ 1 open `AGAINST` argument renders contested everywhere (badge, overview). Computed on read like cycles and impact (A8), so the state cannot drift from the arguments that justify it. |
+| A14 | The devil's advocate drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
+| A15 | Reversal is a first-class relationship, and it leaves a trace | `SUPERSEDED` may name the successor (`superseded_by_decision_id`); the reversal trace endpoint assembles the narrative — the flip row, the successor, the objections that accumulated, the slipped commitments — each signal citing the row it came from, so the narrative can never invent a fact the trace does not contain (same rule as A11). |
 
 ## 5. Automation: Reducing Manual Effort
 
@@ -182,6 +184,13 @@ of: making intake cheaper (Rule 1), making the system compute more
   contested rate, objection resolution rate — the "reflect" step of the
   agent loop) — nobody updates these by hand.
 - Meeting summary = graph snapshot: saving one captures the whole state.
+- **Devil's advocate gate** — confirming a decision candidate drafts
+  challenges first (pending objections, uncaptured concern sentences,
+  overturned precedents, missing rationale); each needs a resolution
+  reason, recorded as resolved arguments on the decision (A14).
+- **Reversal trace** — `SUPERSEDED` decisions can name their successor;
+  the decision card narrates why the decision did not hold from the
+  flip, the successor, the objections and the slips (A15).
 
 **Planned (Part III PoC items, in priority order)**
 
@@ -251,6 +260,22 @@ their decision until a human resolves them — and resolving requires a
 reason, recorded on the argument. Free-standing arguments (no decision
 yet) stay visible in the deliberation view instead of vanishing after
 confirmation.
+
+**The analyst speaks first (A14).** Confirming a decision candidate runs
+the devil's advocate gate first: drafted challenges — pending objections
+targeting the decision, concern sentences the extractor missed, an
+overturned precedent with a similar title, a missing rationale — each
+must be resolved with a reason before the decision lands. The
+resolutions become resolved `AGAINST` arguments on the new decision, so
+the audit trail keeps what was challenged and why it was overruled.
+Batch confirmation stays the mechanical path; single confirm is the
+deliberate one.
+
+**Reversals leave a trace (A15).** `SUPERSEDED` can name the decision
+that replaced it. The decision card then shows the reversal trace: the
+flip (when, why), the successor, the objections that accumulated, and
+the linked commitments that slipped — assembled from rows the trace
+already contains, never guessed.
 
 **Lifecycle.** discussion text → extraction proposes `ARGUMENT`
 candidates (rules EN+ZH; DeepSeek when configured, same A3 fallback) →
