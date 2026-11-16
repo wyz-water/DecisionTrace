@@ -52,6 +52,7 @@ erDiagram
         string title
         text rationale
         string status
+        int superseded_by_decision_id FK
         datetime created_at
     }
     COMMITMENT {
@@ -142,6 +143,14 @@ revision writes the old and the new rationale to `decision_history`, so
 the goal's evolution is preserved.
 
 **Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
+
+`superseded_by_decision_id` names the decision that replaced this one
+(A15). Meaningful only when the status is `SUPERSEDED`; any other status
+forces it to `None`, so a resurrected decision cannot keep pointing at a
+successor it no longer has. The link feeds the reversal trace: the flip
+row in `decision_history`, the successor, the objections and the slipped
+commitments are assembled into the "why did this decision not hold"
+narrative.
 
 ### Argument
 A point made during the deliberation of a decision (the *deliberation
