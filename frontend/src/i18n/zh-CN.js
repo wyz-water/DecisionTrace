@@ -275,6 +275,11 @@ export default {
   "impact.previewHint": "预演延期或受阻，不会修改任何数据。",
   "impact.cycleWarning": "图中存在循环，预演只展示可达节点。",
   "impact.previewNote": "仅预演——未修改任何数据。",
+  "impact.severity.BLOCKED": "阻断",
+  "impact.severity.DELAYED": "延期",
+  "impact.tierCurrent": "当前",
+  "impact.tierPreview": "若{status}",
+  "impact.escalated": "{count} 项严重度升级",
   "impact.failedPreview": "预演影响失败。",
 
   "plan.eyebrow": "执行",

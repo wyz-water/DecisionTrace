@@ -278,6 +278,11 @@ export default {
   "impact.previewHint": "Preview a delay or block without changing any data.",
   "impact.cycleWarning": "The graph contains a cycle; this preview follows reachable nodes only.",
   "impact.previewNote": "Preview only — no data was changed.",
+  "impact.severity.BLOCKED": "BLOCKED",
+  "impact.severity.DELAYED": "DELAYED",
+  "impact.tierCurrent": "Now",
+  "impact.tierPreview": "If {status}",
+  "impact.escalated": "{count} escalated",
   "impact.failedPreview": "Failed to preview impact.",
 
   "plan.eyebrow": "EXECUTE",

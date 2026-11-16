@@ -23,6 +23,15 @@ function ImpactItem({ item, byId, muted = false }) {
       <div className="impact-item-head">
         <strong>{item.owner}</strong>
         <span className="impact-item-id">#{item.id}</span>
+
+        {item.severity && (
+          <span
+            className={`severity-badge severity-${item.severity.toLowerCase()}`}
+          >
+            {t(`impact.severity.${item.severity}`, {}, item.severity)}
+          </span>
+        )}
+
         <StatusBadge status={item.status} />
       </div>
 
@@ -63,11 +72,24 @@ function ImpactPanel({
   const [alreadyOffset, setAlreadyOffset] = useState(0);
   const preview = previewOpen ? whatIf : null;
   const currentItems = currentImpact?.affected_commitments ?? [];
+
+  // The cascade ranks by severity first (BLOCKED outranks DELAYED), then
+  // by distance from the source — the worst and nearest problems lead.
+  const severityRank = (severity) =>
+    severity === "BLOCKED" ? 2 : severity === "DELAYED" ? 1 : 0;
+  const bySeverityThenDepth = (first, second) =>
+    severityRank(second.severity) - severityRank(first.severity) ||
+    first.depth - second.depth;
+
   const newlyAffected = preview
-    ? preview.affected.filter((item) => item.newly_affected)
+    ? preview.affected
+        .filter((item) => item.newly_affected)
+        .sort(bySeverityThenDepth)
     : [];
   const alreadyAffected = preview
-    ? preview.affected.filter((item) => !item.newly_affected)
+    ? preview.affected
+        .filter((item) => !item.newly_affected)
+        .sort(bySeverityThenDepth)
     : [];
   const currentSafeOffset = pageOffset(currentOffset, currentItems.length);
   const newlySafeOffset = pageOffset(newlyOffset, newlyAffected.length);
@@ -251,6 +273,55 @@ function ImpactPanel({
                     <strong>{preview.already_affected.length}</strong>
                     <span>{t("impact.alreadyAffected")}</span>
                   </div>
+                </div>
+
+                <div className="severity-tiers" role="group">
+                  <div className="severity-tier">
+                    <span className="tier-label">
+                      {t("impact.tierCurrent")}
+                    </span>
+
+                    <span className="severity-count is-blocked">
+                      {preview.baseline_severity_counts.blocked}
+                    </span>
+
+                    <span className="severity-count is-delayed">
+                      {preview.baseline_severity_counts.delayed}
+                    </span>
+                  </div>
+
+                  <span className="tier-arrow" aria-hidden="true">
+                    →
+                  </span>
+
+                  <div className="severity-tier">
+                    <span className="tier-label">
+                      {t("impact.tierPreview", { status: statusLabel })}
+                    </span>
+
+                    <span className="severity-count is-blocked">
+                      {preview.severity_counts.blocked}
+                    </span>
+
+                    <span className="severity-count is-delayed">
+                      {preview.severity_counts.delayed}
+                    </span>
+                  </div>
+
+                  <span className="severity-legend">
+                    <span className="legend-dot is-blocked" />
+                    {t("impact.severity.BLOCKED")}
+                    <span className="legend-dot is-delayed" />
+                    {t("impact.severity.DELAYED")}
+                  </span>
+
+                  {preview.escalated.length > 0 && (
+                    <span className="escalated-note">
+                      {t("impact.escalated", {
+                        count: preview.escalated.length,
+                      })}
+                    </span>
+                  )}
                 </div>
 
                 {preview.has_cycle && (

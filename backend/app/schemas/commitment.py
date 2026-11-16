@@ -48,9 +48,16 @@ class CommitmentImpactResponse(BaseModel):
 
 
 class WhatIfAffectedCommitment(AffectedCommitment):
-    """One downstream commitment, with whether this preview is new risk."""
+    """One downstream commitment, with whether this preview is new risk.
+
+    ``severity`` is the effective severity under the hypothetical
+    (BLOCKED > DELAYED > None, propagated along BLOCKS edges);
+    ``baseline_severity`` is the same without the hypothetical, so the
+    UI can show what got worse, not just what is affected."""
 
     newly_affected: bool
+    baseline_severity: str | None
+    severity: str | None
 
 
 class CommitmentWhatIfResponse(BaseModel):
@@ -63,4 +70,9 @@ class CommitmentWhatIfResponse(BaseModel):
     current_total: int
     newly_affected: list[int]
     already_affected: list[int]
+    # Ids whose severity strictly increased under the hypothetical.
+    escalated: list[int]
+    # Blocked/delayed counts over the affected set, before and after.
+    severity_counts: dict
+    baseline_severity_counts: dict
     affected: list[WhatIfAffectedCommitment]

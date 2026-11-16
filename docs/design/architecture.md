@@ -126,6 +126,7 @@ state (contested). The layer is specified in §6.
 | A13 | "Contested" is computed, never a manual status | A decision with ≥ 1 open `AGAINST` argument renders contested everywhere (badge, overview). Computed on read like cycles and impact (A8), so the state cannot drift from the arguments that justify it. |
 | A14 | The devil's advocate drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
 | A15 | Reversal is a first-class relationship, and it leaves a trace | `SUPERSEDED` may name the successor (`superseded_by_decision_id`); the reversal trace endpoint assembles the narrative — the flip row, the successor, the objections that accumulated, the slipped commitments — each signal citing the row it came from, so the narrative can never invent a fact the trace does not contain (same rule as A11). |
+| A16 | Cascade severity is computed, and completed work isolates | Effective severity (BLOCKED > DELAYED > none) propagates along `BLOCKS` edges in topological order — a node's severity is the worst of its own status and its predecessors'. A COMPLETED commitment is severity 0 and passes nothing through: finished work shields its downstream. The what-if response carries per-item baseline and simulated severity, blocked/delayed tier counts over the affected set, and the escalated ids — computed on read like cycles and contested (A8), never stored. |
 
 ## 5. Automation: Reducing Manual Effort
 
@@ -191,6 +192,11 @@ of: making intake cheaper (Rule 1), making the system compute more
 - **Reversal trace** — `SUPERSEDED` decisions can name their successor;
   the decision card narrates why the decision did not hold from the
   flip, the successor, the objections and the slips (A15).
+- **Severity-weighted what-if** — the impact preview no longer reports a
+  flat "affected" list: BLOCKED outranks DELAYED, severity propagates
+  along `BLOCKS` edges, completed work isolates its downstream, and the
+  panel ranks the cascade by severity then depth with Now-vs-If tier
+  counts and escalation (A16).
 
 **Planned (Part III PoC items, in priority order)**
 
