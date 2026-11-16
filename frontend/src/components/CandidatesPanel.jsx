@@ -67,6 +67,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
   const [prereqData, setPrereqData] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [batchBusy, setBatchBusy] = useState(false);
+  const [challengeState, setChallengeState] = useState(null);
 
   function startEdit(candidate) {
     setEditingId(candidate.id);
@@ -166,7 +167,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
     loadPrerequisites(dependency);
   }
 
-  async function confirm(candidate) {
+  async function confirmPlain(candidate) {
     setBusyId(candidate.id);
     setError("");
 
@@ -213,6 +214,127 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
       }
     } finally {
       setBusyId(null);
+    }
+  }
+
+  /**
+   * The devil's advocate gate: confirming a decision first drafts the
+   * counter-considerations nobody addressed. Each one needs a reason;
+   * the resolutions travel with the confirm and become the decision's
+   * deliberation record. Candidates of other types confirm directly.
+   */
+  async function confirm(candidate) {
+    if (candidate.candidate_type !== "DECISION") {
+      await confirmPlain(candidate);
+      return;
+    }
+
+    setError("");
+    setChallengeState({
+      candidateId: candidate.id,
+      challenges: [],
+      reasons: {},
+      loading: true,
+      busy: false,
+    });
+
+    try {
+      const response = await fetch(
+        `${API_URL}/candidates/${candidate.id}/challenges`
+      );
+
+      if (!response.ok) {
+        throw new Error(t("challenges.failedLoad"));
+      }
+
+      const data = await response.json();
+
+      if (data.total === 0) {
+        setChallengeState(null);
+        await confirmPlain(candidate);
+        return;
+      }
+
+      setChallengeState({
+        candidateId: candidate.id,
+        challenges: data.challenges,
+        reasons: {},
+        loading: false,
+        busy: false,
+      });
+    } catch (err) {
+      setError(te(err.message) || t("challenges.failedLoad"));
+      setChallengeState(null);
+    }
+  }
+
+  function setChallengeReason(challengeId, value) {
+    setChallengeState((current) =>
+      current
+        ? {
+            ...current,
+            reasons: { ...current.reasons, [challengeId]: value },
+          }
+        : current
+    );
+  }
+
+  async function confirmWithResolutions(candidate) {
+    setChallengeState((current) => current && { ...current, busy: true });
+    setError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/candidates/${candidate.id}/confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            challenge_resolutions: challengeState.challenges.map(
+              (challenge) => ({
+                challenge_id: challenge.id,
+                resolved_reason:
+                  challengeState.reasons[challenge.id]?.trim() ?? "",
+              })
+            ),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+
+        // The drafts are recomputed at confirm time: if the list moved
+        // under us (e.g. a new objection landed), show the fresh list
+        // and let the human resolve it.
+        if (data.detail?.code === "CHALLENGES_UNRESOLVED") {
+          const freshResponse = await fetch(
+            `${API_URL}/candidates/${candidate.id}/challenges`
+          );
+
+          if (freshResponse.ok) {
+            const fresh = await freshResponse.json();
+            setChallengeState({
+              candidateId: candidate.id,
+              challenges: fresh.challenges,
+              reasons: {},
+              loading: false,
+              busy: false,
+            });
+          }
+
+          throw new Error(t("challenges.stale"));
+        }
+
+        throw new Error(
+          te(backendDetail(data)) || t("challenges.failedConfirm")
+        );
+      }
+
+      setChallengeState(null);
+      await reload();
+    } catch (err) {
+      setError(te(err.message) || t("challenges.failedConfirm"));
     }
   }
 
@@ -388,6 +510,94 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
           </p>
         )}
 
+        {challengeState?.candidateId === candidate.id && (
+          <div className="challenge-panel">
+            <p className="eyebrow">{t("challenges.eyebrow")}</p>
+            <p className="challenge-intro">{t("challenges.intro")}</p>
+
+            {challengeState.loading && (
+              <p className="muted">{t("common.loading")}</p>
+            )}
+
+            {challengeState.challenges.map((challenge) => (
+              <div className="challenge-item" key={challenge.id}>
+                <span className="challenge-kind">
+                  {t(
+                    `challenges.kind.${challenge.kind}`,
+                    {},
+                    challenge.kind
+                  )}
+                </span>
+
+                <p className="challenge-claim">{challenge.claim}</p>
+
+                {challenge.source_text && (
+                  <p className="argument-source">
+                    “{challenge.source_text}”
+                  </p>
+                )}
+
+                {challenge.citation && (
+                  <span className="challenge-citation">
+                    {challenge.citation}
+                  </span>
+                )}
+
+                <input
+                  type="text"
+                  placeholder={t("challenges.reasonPlaceholder")}
+                  value={challengeState.reasons[challenge.id] ?? ""}
+                  disabled={challengeState.busy}
+                  onChange={(event) =>
+                    setChallengeReason(challenge.id, event.target.value)
+                  }
+                />
+              </div>
+            ))}
+
+            {(() => {
+              const missing = challengeState.challenges.filter(
+                (challenge) =>
+                  !(challengeState.reasons[challenge.id] ?? "").trim()
+              ).length;
+
+              return (
+                <>
+                  {missing > 0 && (
+                    <p className="challenge-remaining">
+                      {t("challenges.remaining", { count: missing })}
+                    </p>
+                  )}
+
+                  <div className="challenge-actions">
+                    <button
+                      className="primary-button"
+                      disabled={
+                        missing > 0 ||
+                        challengeState.loading ||
+                        challengeState.busy
+                      }
+                      onClick={() => confirmWithResolutions(candidate)}
+                    >
+                      {challengeState.busy
+                        ? t("common.working")
+                        : t("challenges.confirm")}
+                    </button>
+
+                    <button
+                      className="secondary-button"
+                      disabled={challengeState.busy}
+                      onClick={() => setChallengeState(null)}
+                    >
+                      {t("challenges.cancel")}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
         {candidate.status === "PENDING" && (
           <div className="candidate-actions">
             {editing ? (
@@ -418,7 +628,11 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
             <button
               className="primary-button confirm-button"
-              disabled={busyId === candidate.id || editing}
+              disabled={
+                busyId === candidate.id ||
+                editing ||
+                challengeState?.candidateId === candidate.id
+              }
               onClick={() => confirm(candidate)}
             >
               {busyId === candidate.id
