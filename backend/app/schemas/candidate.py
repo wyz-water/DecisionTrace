@@ -19,6 +19,11 @@ class CandidateResponse(BaseModel):
     # record ("Decision #3"); None otherwise. Computed on read, never
     # stored — there is no cache to go stale.
     duplicate_of: str | None = None
+    # Evidence-based extraction confidence in [0, 1], computed on read
+    # from the payload (backend-independent). A review aid: the UI
+    # pre-selects high-confidence candidates for batch review, never
+    # auto-confirms them (A2).
+    confidence: float | None = None
 
 
 class CandidateUpdate(BaseModel):
