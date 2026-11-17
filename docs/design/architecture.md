@@ -127,6 +127,7 @@ state (contested). The layer is specified in §6.
 | A14 | The devil's advocate drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
 | A15 | Reversal is a first-class relationship, and it leaves a trace | `SUPERSEDED` may name the successor (`superseded_by_decision_id`); the reversal trace endpoint assembles the narrative — the flip row, the successor, the objections that accumulated, the slipped commitments — each signal citing the row it came from, so the narrative can never invent a fact the trace does not contain (same rule as A11). |
 | A16 | Cascade severity is computed, and completed work isolates | Effective severity (BLOCKED > DELAYED > none) propagates along `BLOCKS` edges in topological order — a node's severity is the worst of its own status and its predecessors'. A COMPLETED commitment is severity 0 and passes nothing through: finished work shields its downstream. The what-if response carries per-item baseline and simulated severity, blocked/delayed tier counts over the affected set, and the escalated ids — computed on read like cycles and contested (A8), never stored. |
+| A17 | Extraction sharpening: confidence is computed, context links, and due phrases are never dropped | Each candidate carries an evidence-based confidence score (rationale, dates, authors, targets) computed on read from the payload — backend-independent, deterministic; the review UI pre-selects high-confidence candidates for batch review but **never auto-confirms** (A2). A commitment sentence following a decision sentence links to that decision by proximity (human can still change it). Natural-language due phrases ("by Friday") resolve to concrete dates against today, and the original phrase is kept on the candidate even when unresolvable — the reviewer sees "due as said", nothing is silently dropped. |
 
 ## 5. Automation: Reducing Manual Effort
 
@@ -197,6 +198,12 @@ of: making intake cheaper (Rule 1), making the system compute more
   along `BLOCKS` edges, completed work isolates its downstream, and the
   panel ranks the cascade by severity then depth with Now-vs-If tier
   counts and escalation (A16).
+- **Extraction sharpening (A17)** — every candidate carries an
+  evidence-based confidence score with a badge in the queue; the batch
+  bar pre-selects high-confidence candidates (never auto-confirms).
+  Commitments link to their context decision by proximity. Due phrases
+  resolve to dates ("by Friday") and are never silently dropped — the
+  original wording stays on the card.
 
 **Planned (Part III PoC items, in priority order)**
 
