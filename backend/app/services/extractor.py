@@ -10,12 +10,19 @@ Extraction output is always a *candidate*, never an authoritative
 record. Humans review and confirm it.
 """
 
+import calendar
 import json
 import os
 import re
 import urllib.request
+from datetime import date, timedelta
 
 from app.schemas.candidate import CandidateResponse
+
+WEEKDAYS_EN = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
 
 
 # Owner names that are pronouns / noise, not people.
@@ -236,21 +243,76 @@ def _clean_title(value):
     return value.strip()
 
 
-def _parse_due_date(value):
-    """Keep only ISO dates; natural-language dates need human review."""
+def _resolve_due_date(value):
+    """Resolve a due phrase to an ISO date, keeping the original text.
+
+    ISO dates pass through. A small, conservative set of
+    natural-language phrases ("by Friday", "by next Monday", "by
+    tomorrow", "by end of the week/month") resolves against today. The
+    original phrase is returned even when it cannot be resolved, so the
+    review UI can show "due as said: <phrase>" instead of silently
+    dropping it — the resolved date is a candidate suggestion, the
+    human is still the gate.
+    """
+    value = (value or "").strip()
+
     if not value:
-        return None
+        return None, None
 
-    value = value.strip()
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        return value
+        return value, None
 
-    return None
+    today = date.today()
+    lowered = value.lower()
+
+    match = re.fullmatch(
+        r"(?:(next|this)\s+)?"
+        r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+        lowered,
+    )
+
+    if match:
+        target = WEEKDAYS_EN[match.group(2)]
+        days_ahead = (target - today.weekday()) % 7
+
+        if match.group(1) == "next":
+            days_ahead += 7
+
+        return (today + timedelta(days=days_ahead)).isoformat(), value
+
+    if lowered == "tomorrow":
+        return (today + timedelta(days=1)).isoformat(), value
+
+    if lowered in ("end of the week", "end of week"):
+        days_ahead = (6 - today.weekday()) % 7
+        return (today + timedelta(days=days_ahead)).isoformat(), value
+
+    if lowered == "weekend":
+        days_ahead = (5 - today.weekday()) % 7
+        return (today + timedelta(days=days_ahead)).isoformat(), value
+
+    if lowered in ("end of the month", "end of month", "month end"):
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        return date(today.year, today.month, last_day).isoformat(), value
+
+    return None, value
 
 
 def rule_based_extract(text):
-    """Apply sentence-level patterns and return candidate dicts."""
+    """Apply sentence-level patterns and return candidate dicts.
+
+    Two cross-sentence rules on top of the per-sentence patterns:
+
+    - *proximity linking*: a commitment following a decision sentence
+      in the same discussion links to that decision (the extractor's
+      `decision_title`), until another decision sentence takes over.
+      Meetings talk in context — "We decided to use Redis. Dora will
+      set up the cache." — and the link saves the reviewer an edit;
+      the human can still clear or change it.
+    - *natural-language due dates*: see `_resolve_due_date`.
+    """
     candidates = []
+    last_decision_title = None
 
     for sentence in SENTENCE_SPLIT.split(text):
         sentence = sentence.strip()
@@ -281,6 +343,8 @@ def rule_based_extract(text):
                     "source_text": sentence,
                 })
 
+                last_decision_title = title
+
             break
 
         match = COMMITMENT_PATTERN.search(sentence)
@@ -288,14 +352,17 @@ def rule_based_extract(text):
         if match:
             owner = match.group("owner")
             if owner not in NOT_OWNERS:
+                due_date, due_text = _resolve_due_date(match.group("due"))
+
                 candidates.append({
                     "candidate_type": "COMMITMENT",
                     "payload": {
                         "owner": owner,
                         "description": match.group("description").strip(),
-                        "due_date": _parse_due_date(match.group("due")),
+                        "due_date": due_date,
+                        "due_text": due_text,
                         "status": "OPEN",
-                        "decision_title": None,
+                        "decision_title": last_decision_title,
                     },
                     "source_text": sentence,
                 })
@@ -520,16 +587,81 @@ def _normalize(candidates):
     return cleaned
 
 
+def score_confidence(candidate_type, payload):
+    """Evidence-based confidence in [0, 1], from the payload alone.
+
+    Deterministic and backend-independent: the same evidence scores the
+    same whether the candidate came from rules or the LLM. It is a
+    *review aid*, not a decision — confirmation stays the human's job
+    (A2); a high score only gets the candidate pre-selected for batch
+    review, never auto-confirmed.
+    """
+    payload = payload or {}
+
+    if candidate_type == "DECISION":
+        score = 0.5
+
+        if str(payload.get("rationale") or "").strip():
+            score += 0.2
+
+        title = str(payload.get("title") or "").strip()
+
+        if len(title) >= 8:
+            score += 0.2
+        elif len(title) >= 3:
+            score += 0.1
+    elif candidate_type == "COMMITMENT":
+        score = 0.5
+
+        if payload.get("due_date"):
+            score += 0.2
+
+        if len(str(payload.get("description") or "").strip()) >= 8:
+            score += 0.1
+
+        if payload.get("decision_title"):
+            score += 0.1
+    elif candidate_type == "DEPENDENCY":
+        # The pattern is strong and both owners are validated again at
+        # confirm time; the residual risk is owner ambiguity.
+        score = 0.7
+    elif candidate_type == "ARGUMENT":
+        score = 0.5
+
+        if payload.get("author"):
+            score += 0.2
+
+        if payload.get("target_title"):
+            score += 0.2
+
+        if len(str(payload.get("claim") or "").strip()) >= 10:
+            score += 0.1
+    else:
+        score = 0.5
+
+    return round(min(score, 1.0), 2)
+
+
+# The review UI pre-selects candidates at or above this score.
+HIGH_CONFIDENCE = 0.7
+
+
 def serialize_candidate(candidate):
     """Build a CandidateResponse from the model row."""
+    payload = json.loads(candidate.payload)
+
+    if not isinstance(payload, dict):
+        payload = {}
+
     return CandidateResponse(
         id=candidate.id,
         project_id=candidate.project_id,
         discussion_id=candidate.discussion_id,
         candidate_type=candidate.candidate_type,
-        payload=json.loads(candidate.payload),
+        payload=payload,
         source_text=candidate.source_text,
         status=candidate.status,
         review_comment=candidate.review_comment,
         created_at=candidate.created_at,
+        confidence=score_confidence(candidate.candidate_type, payload),
     )
