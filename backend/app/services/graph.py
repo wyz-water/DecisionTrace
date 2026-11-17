@@ -11,6 +11,23 @@ dependencies are edges (predecessor -> successor). This module provides:
 from collections import defaultdict, deque
 
 
+def _edge_endpoints(edge):
+    """The (predecessor, successor) ids of an edge.
+
+    Commitment edges carry `*_commitment_id`; decision-level
+    dependencies carry `*_decision_id`. Each graph is built from a
+    homogeneous edge list, so the fallback never mixes entity kinds.
+    """
+    predecessor = getattr(edge, "predecessor_commitment_id", None)
+    successor = getattr(edge, "successor_commitment_id", None)
+
+    if predecessor is None:
+        predecessor = getattr(edge, "predecessor_decision_id", None)
+        successor = getattr(edge, "successor_decision_id", None)
+
+    return predecessor, successor
+
+
 def build_adjacency(edges):
     """Return (successors, predecessors) maps of node_id -> list of
     (neighbor_id, dependency_type)."""
@@ -18,11 +35,13 @@ def build_adjacency(edges):
     predecessors = defaultdict(list)
 
     for edge in edges:
-        successors[edge.predecessor_commitment_id].append(
-            (edge.successor_commitment_id, edge.dependency_type)
+        predecessor, successor = _edge_endpoints(edge)
+
+        successors[predecessor].append(
+            (successor, edge.dependency_type)
         )
-        predecessors[edge.successor_commitment_id].append(
-            (edge.predecessor_commitment_id, edge.dependency_type)
+        predecessors[successor].append(
+            (predecessor, edge.dependency_type)
         )
 
     return successors, predecessors

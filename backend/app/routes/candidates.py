@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.discussion import Discussion
 from app.models.decision import Decision
+from app.models.decision_dependency import DecisionDependency
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
 from app.models.candidate import Candidate
@@ -51,6 +52,7 @@ _IDENTITY_FIELDS = {
     "DECISION": ("title",),
     "COMMITMENT": ("owner", "description"),
     "DEPENDENCY": ("predecessor_owner", "successor_owner"),
+    "DECISION_DEPENDENCY": ("predecessor_title", "successor_title"),
     "ARGUMENT": ("stance", "claim"),
 }
 
@@ -345,6 +347,34 @@ def _duplicate_of(db, candidate):
                 if edge:
                     return f"Dependency #{edge.id}"
 
+    elif candidate.candidate_type == "DECISION_DEPENDENCY":
+        predecessor_title = _field(payload, "predecessor_title")
+        successor_title = _field(payload, "successor_title")
+
+        if not predecessor_title or not successor_title:
+            return None
+
+        predecessor = _find_decision_by_title_tolerant(
+            db, candidate.project_id, predecessor_title
+        )
+        successor = _find_decision_by_title_tolerant(
+            db, candidate.project_id, successor_title
+        )
+
+        if not predecessor or not successor:
+            # Cannot tell yet whether it repeats an existing edge until
+            # both titles resolve.
+            return None
+
+        edge = db.query(DecisionDependency).filter(
+            DecisionDependency.project_id == candidate.project_id,
+            DecisionDependency.predecessor_decision_id == predecessor.id,
+            DecisionDependency.successor_decision_id == successor.id,
+        ).first()
+
+        if edge:
+            return f"Decision dependency #{edge.id}"
+
     elif candidate.candidate_type == "ARGUMENT":
         stance = _field(payload, "stance")
         claim = _field(payload, "claim")
@@ -593,6 +623,7 @@ def _confirm_pending(db, candidate_id, challenge_resolutions=None):
             source_discussion_id=candidate.discussion_id,
             title=title,
             rationale=_field(payload, "rationale"),
+            decided_by=_field(payload, "decided_by"),
             status=status
         )
 
@@ -779,6 +810,109 @@ def _confirm_pending(db, candidate_id, challenge_resolutions=None):
             predecessor_commitment_id=predecessor.id,
             successor_commitment_id=successor.id,
             dependency_type=dependency_type
+        )
+
+    elif candidate.candidate_type == "DECISION_DEPENDENCY":
+        predecessor_title = _field(payload, "predecessor_title")
+        successor_title = _field(payload, "successor_title")
+
+        if not predecessor_title or not successor_title:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Decision dependency candidate is missing "
+                    "predecessor_title or successor_title"
+                )
+            )
+
+        predecessor = _find_decision_by_title_tolerant(
+            db, candidate.project_id, predecessor_title
+        )
+
+        if not predecessor:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Decision '{predecessor_title}' not found in this "
+                    "project — confirm it first"
+                )
+            )
+
+        successor = _find_decision_by_title_tolerant(
+            db, candidate.project_id, successor_title
+        )
+
+        if not successor:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Decision '{successor_title}' not found in this "
+                    "project — confirm it first"
+                )
+            )
+
+        if predecessor.id == successor.id:
+            raise HTTPException(
+                status_code=400,
+                detail="A decision cannot depend on itself"
+            )
+
+        existing_edge = db.query(DecisionDependency).filter(
+            DecisionDependency.project_id == candidate.project_id,
+            DecisionDependency.predecessor_decision_id == predecessor.id,
+            DecisionDependency.successor_decision_id == successor.id,
+        ).first()
+
+        if existing_edge:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DUPLICATE_DECISION_DEPENDENCY",
+                    "message": (
+                        f"'{predecessor.title}' already supports "
+                        f"'{successor.title}'."
+                    ),
+                    "dependency_id": existing_edge.id,
+                }
+            )
+
+        # The decision graph must stay acyclic too: a decision resting
+        # on itself (transitively) is a reasoning loop, not a decision.
+        existing_edges = db.query(DecisionDependency).filter(
+            DecisionDependency.project_id == candidate.project_id
+        ).all()
+
+        cycle = find_cycle_with_edge(
+            existing_edges, predecessor.id, successor.id
+        )
+
+        if cycle:
+            titles = {
+                decision.id: decision.title
+                for decision in db.query(Decision).filter(
+                    Decision.project_id == candidate.project_id
+                ).all()
+            }
+            hops = " → ".join(
+                titles.get(node_id, f"#{node_id}") for node_id in cycle
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DECISION_CYCLE",
+                    "message": (
+                        "Confirming this edge would make the decision "
+                        "graph circular: " + hops
+                    ),
+                    "cycle": cycle,
+                }
+            )
+
+        record = DecisionDependency(
+            project_id=candidate.project_id,
+            predecessor_decision_id=predecessor.id,
+            successor_decision_id=successor.id,
+            dependency_type=_field(payload, "dependency_type") or "DEPENDS_ON"
         )
 
     elif candidate.candidate_type == "ARGUMENT":

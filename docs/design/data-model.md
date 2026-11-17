@@ -51,9 +51,17 @@ erDiagram
         int source_discussion_id FK
         string title
         text rationale
+        string decided_by
         string status
         int superseded_by_decision_id FK
         datetime created_at
+    }
+    DECISION_DEPENDENCY {
+        int id PK
+        int project_id FK
+        int predecessor_decision_id FK
+        int successor_decision_id FK
+        string dependency_type
     }
     COMMITMENT {
         int id PK
@@ -144,6 +152,11 @@ the goal's evolution is preserved.
 
 **Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
 
+`decided_by` is who made the decision (A18) — distinct from
+`commitment.owner`, who does the work. Null means a team decision
+("we decided"); the extractor never invents a single maker for a
+collective verb. Settable and clearable via PATCH.
+
 `superseded_by_decision_id` names the decision that replaced this one
 (A15). Meaningful only when the status is `SUPERSEDED`; any other status
 forces it to `None`, so a resurrected decision cannot keep pointing at a
@@ -151,6 +164,14 @@ successor it no longer has. The link feeds the reversal trace: the flip
 row in `decision_history`, the successor, the objections and the slipped
 commitments are assembled into the "why did this decision not hold"
 narrative.
+
+### DecisionDependency
+A decision-level edge: the successor decision rests on the predecessor
+("we chose Redis after we had decided to move to the cloud"). Enters
+through the candidate gate (A2); confirm validates both titles, rejects
+self-dependencies, duplicates and cycles on the decision graph. Feeds
+the decision graph panel, the reversal trace's "resting decisions"
+signal, and the stakeholder view.
 
 ### Argument
 A point made during the deliberation of a decision (the *deliberation
