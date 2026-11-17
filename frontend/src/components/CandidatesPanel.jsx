@@ -224,7 +224,7 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
   }
 
   /**
-   * The devil's advocate gate: confirming a decision first drafts the
+   * The decision pre-check gate: confirming a decision first drafts the
    * counter-considerations nobody addressed. Each one needs a reason;
    * the resolutions travel with the confirm and become the decision's
    * deliberation record. Candidates of other types confirm directly.

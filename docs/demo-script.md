@@ -22,40 +22,40 @@
 cp backend/decisiontrace.pristine.db backend/decisiontrace.db
 ```
 
-3. 语言建议:默认英文界面演示,最后一场展示中英切换。
+3. 界面语言:全程中文界面(演示数据本身为英文会议文本)。
 
 ---
 
 ## 场景 1 · 输入即数据(40 秒)
 
-**操作:** 侧边栏 → *Intake & review* → 标题填 `Sprint 12 sync` → 粘贴:
+**操作:** 侧边栏 → 「收集与审核」 → 标题填 `Sprint 12 sync` → 粘贴:
 
 ```
-We decided to use Redis because it scales well. The ops cost is a real risk though. Dora will set up the cache by 2026-12-15. Eve will write the runbook by 2026-12-20. Eve depends on Dora. Dora depends on Eve for the data model.
+Alice decided to migrate to the cloud because it cuts ops cost. We decided to use Redis because it scales well, after we had decided to migrate to the cloud. The ops cost is a real risk though. Dora will set up the cache by 2026-12-15. Eve will write the runbook by 2026-12-20. Eve depends on Dora. Dora depends on Eve for the data model.
 ```
 
-→ *Save discussion* → *Extract candidates*。
+→ 「保存讨论」 → 「抽取候选」。
 
-**预期:** 6 条候选:1 决策、2 承诺(带截止日期)、2 依赖(注意:这两条互相矛盾,后面有用)、0 论点 —— 「The ops cost is a real risk」这句担忧**故意**没有被抽成论点。
+**预期:** 7 条候选:2 决策(注意第一条带**决策人 Alice**)、1 条**决策依赖**(Redis 依赖「迁移到云」—— 复合句被拆成两个事实)、2 承诺(带截止日期)、2 依赖(互相矛盾,后面有用)——「The ops cost is a real risk」**故意**没有被抽成论点。
 
 **要说:** 「没有任何表单要填。讨论文本就是输入,图自己长出来。注意那句担忧 —— 抽取器没有把它变成论点,因为它不是反对意见;它是**没人回应的隐患**。分析师稍后会把它捡起来。」
 
-## 场景 2 · 魔鬼代言人(60 秒)
+## 场景 2 · 决策层与决策预检(90 秒)
 
-**操作:** 审核队列每页 4 条、最新的在前 —— 点队列底部的 *Next* 翻到第 2 页,找到 `Redis` 决策候选,点 *Confirm*。
+**操作:** 审核队列每页 4 条、最新的在前 —— 点 「下一页」 翻到第 2 页:
 
-**预期:** 不落地,弹出 **DEVIL'S ADVOCATE** 面板:*Unaddressed concern — "The ops cost is a real risk though"*,必须填理由才能继续。
+1. 确认 `migrate to the cloud` 决策 —— 注意卡片上的**决策人 Alice**(「Alice decided…」被抽取;「we decided」不硬造决策人)。挑战门也会弹出,快速填理由通过(它是一视同仁的)。
+2. 确认 `Redis` 决策 —— **完整展示** 决策预检面板:「未回应的担忧 — The ops cost is a real risk though」,理由填 `mitigated: ops budget approved` → 「带着处理意见确认」。
+3. 确认那条 「决策依赖」候选(Redis 依赖「迁移到云」)→ 成功。
 
-**操作:** 理由填 `mitigated: ops budget approved` → *Confirm with resolutions*。
+**预期:** 三个确认全部落地;打开 「决策」 视图,Redis 卡片出现 **决策依赖图** 区:依赖的决策 → migrate to the cloud。
 
-**预期:** 决策落地;打开 *Decisions* 视图,决策卡片的审议区已有 1 条**已解决**的反对意见,写着处理理由。
-
-**要说:** 「确认不是点一下按钮。分析师先起草没人正面回应过的问题 —— 来自讨论文本、待处理反对、被推翻的先例、缺失的目标 —— 每条必须给出处理理由,理由永久留在决策的审议记录里。批量确认依然是一键的,但**深思熟虑的确认走的是这道门**。」
+**要说:** 「决策不是一个孤立的结论。系统抽出了**谁拍的板**(Alice),也抽出了**决策之间的依赖** —— 复合句『用 Redis,是在迁云之后』被拆成两个事实,决策图有自己的环检测。确认仍然不是点一下按钮:分析师先起草没人正面回应过的问题,每条必须给出处理理由,理由永久留在审议记录里。」
 
 ## 场景 3 · 候选审核与前置检查(60 秒)
 
-**操作(回 Intake,点队列底部 *Prev* 翻回第 1 页):**
-1. 指给老师看 `Dora` 承诺卡片的 **Linked decision** 已经自动填了 `Redis` —— 抽取器会**就近关联**:紧跟在决策句后面的承诺自动挂到该决策上(人仍可改)。这为场景 7 埋线。
+**操作(回 Intake,点队列底部 「上一页」 翻回第 1 页):**
+1. 指给老师看 `Dora` 承诺卡片的 **关联决策** 已经自动填了 `Redis` —— 抽取器会**就近关联**:紧跟在决策句后面的承诺自动挂到该决策上(人仍可改)。这为场景 7 埋线。
 2. 不先确认承诺 —— 直接确认依赖 `Eve depends on Dora`。
 
 **预期:** 确认失败,自动展开**前置审查面板**:两个承诺都还是 PENDING,面板里直接逐条确认。
@@ -68,24 +68,24 @@ We decided to use Redis because it scales well. The ops cost is a real risk thou
 
 **操作:** 确认另一条依赖候选 `Dora depends on Eve for the data model`。
 
-**预期:** 红色守卫错误:*(Eve → Dora) would create a circular plan...* —— 拒绝入库。顺手 *Reject* 这条候选(理由填 `cycle rejected`)。
+**预期:** 红色守卫错误:*(Eve → Dora) would create a circular plan...* —— 拒绝入库。顺手 「拒绝」 这条候选(理由填 `cycle rejected`)。
 
 **要说:** 「这两条互相矛盾的依赖是演示文本里故意埋的。图有环就没法做拓扑排序、没法算影响 —— 所以系统**在入库前就拒绝**,而不是事后报错。这是图即真相的第一层。」
 
-**可选加分(有时间再演):** 去 *Dependencies* 视图手动创建同一条边 —— 那里会弹出**可视化环对话框**,把环逐跳画出来并推荐断哪条边。
+**可选加分(有时间再演):** 去 「依赖关系」视图手动创建同一条边 —— 那里会弹出**可视化环对话框**,把环逐跳画出来并推荐断哪条边。
 
 ## 场景 5 · 图、滑坡与严重度级联(90 秒)
 
-**操作:** 侧边栏 → *Plan & commitments*。
+**操作:** 侧边栏 → 「计划与承诺」。
 
 1. 指给老师看:**拓扑顺序**列表(1,2,3 编号 = 可以开工的顺序)、图视图。
-2. 点列表里的 `Dora` → 状态改为 **DELAYED** → 看 *Eve* 被影响(影响面板/高亮)。
+2. 点列表里的 `Dora` → 状态改为 「已延期」 → 看 Eve 被影响(影响面板/高亮)。
 
 **预期:** Eve 显示为受 Dora 延迟影响。
 
-3. 影响面板 → 切换 *Blocked* → *Preview impact*。
+3. 影响面板 → 切换「受阻」 → 「预演影响」。
 
-**预期:** 分层对比:**Now 0 blocked / 1 delayed → If Blocked 1 blocked / 0 delayed**,「1 escalated」;Eve 卡片带深红 BLOCKED 徽章。
+**预期:** 分层对比:**当前 0 受阻 / 1 延期 → 若受阻 1 受阻 / 0 延期**,「1 项升级」;Eve 卡片带深红「受阻」徽章。
 
 4. **(加分项,15 秒)** 点 `Carol` → Preview impact → **0 个受影响**。解释:Carol 已延期,但下游 Bob 是 COMPLETED —— **完成的工作把风险隔离了**,这是严重度传播的语义,不是 bug。
 
@@ -96,43 +96,43 @@ We decided to use Redis because it scales well. The ops cost is a real risk thou
 **操作(回 Intake):** 新建讨论 `Design review` → 粘贴:
 
 ```
-Bob disagrees with using Redis because the ops cost is too high. We are concerned about the migration window.
+Bob disagrees with using Redis because the ops cost is too high. We are concerned about the migration window. Building on our decision to use Redis, we decided to add a cache warm-up layer.
 ```
 
-→ Save → Extract → 确认两条 ARGUMENT 候选。
+→ Save → Extract → 确认两条 ARGUMENT 候选,再确认新决策 `add a cache warm-up layer` 及其依赖边(它是**架在 Redis 之上**的决策 —— 为场景 7 埋线)。
 
 **预期:**
-- `Redis` 决策变 **contested**(决策卡徽章、决策选择器 ⚠、总览「需要关注」)。
-- 审议视图(*Deliberation*)里两条论点:一条指向 Redis,一条是**自由漂浮的担忧**(没链接到任何决策,但不会丢)。
+- `Redis` 决策变 **有争议**(决策卡徽章、决策选择器 ⚠、总览「需要关注」)。
+- 审议视图里两条论点:一条指向 Redis,一条是**自由漂浮的担忧**(没链接到任何决策,但不会丢)。
 
-**操作:** 在决策卡上对 `Bob` 的反对点 *Resolve* → 理由 `migration window extended, cost reviewed`。
+**操作:** 在决策卡上对 `Bob` 的反对点 「解决」 → 理由 `migration window extended, cost reviewed`。
 
-**预期:** contested 徽章消失。
+**预期:** 有争议 徽章消失。
 
-**要说:** 「论点是一等公民:谁反对了什么、基于哪句话,都带引用。有未解决的反对,决策就是 contested —— 这个状态是**算出来的**,没人能手动改。反对不能被悄悄删掉,只能带着理由解决。注意那条『迁移窗口』的担忧还开着 —— 它没有链接到任何决策,但在审议视图里不会丢,任何人的声音都有地方待着。」
+**要说:** 「论点是一等公民:谁反对了什么、基于哪句话,都带引用。有未解决的反对,决策就是 有争议 —— 这个状态是**算出来的**,没人能手动改。反对不能被悄悄删掉,只能带着理由解决。注意那条『迁移窗口』的担忧还开着 —— 它没有链接到任何决策,但在审议视图里不会丢,任何人的声音都有地方待着。」
 
 ## 场景 7 · 翻案追溯(60 秒)
 
 **操作:**
-1. *Decisions* 视图 → *New decision* → Title `Use Memcached`,Rationale `simpler cache, no ops burden` → Create。
-2. 选择器切回 `Redis` → Edit → 状态 **Superseded** → 「Superseded by」选 `#3 Use Memcached` → 理由 `ops cost materialized` → Save。
+1. 「决策」 视图 → 「新建决策」 → Title `Use Memcached`,Rationale `simpler cache, no ops burden` → Create。
+2. 选择器切回 `Redis` → 「编辑」 → 状态 「已被取代」 → 「被谁取代」选 `#3 Use Memcached` → 理由 `ops cost materialized` → 「保存」。
 
-**预期:** 决策卡出现 **REVERSAL TRACE** 时间线:推翻行(时间+理由)→ 继任者(Memcached + 其目标)→ 两条反对意见(含处理理由)→ **滑坡承诺**:Dora 的 `set up the cache` 是 DELAYED(场景 3 埋的线)。
+**预期:** 决策卡出现 **翻案追溯** 时间线:推翻行(时间+理由)→ 继任者(Memcached + 其目标)→ 两条反对意见(含处理理由)→ **滑坡承诺**:Dora 的 `set up the cache` 是 DELAYED(场景 3 埋的线)→ **受波及的决策**:「缓存预热层」依赖此决策(场景 6 埋的线)。
 
-**要说:** 「大多数系统只记决策的结果。我们记的是**决策怎么死的**:被谁取代、反对意见如何累积、关联的承诺何时滑坡 —— 每一条都指向痕迹里真实存在的那一行,不编造。」
+**要说:** 「大多数系统只记决策的结果。我们记的是**决策怎么死的**:被谁取代、反对意见如何累积、关联的承诺何时滑坡、**哪些决策的地基被动摇了** —— 每一条都指向痕迹里真实存在的那一行,不编造。」
 
 ## 场景 8 · 复盘、全景与双语(60 秒)
 
 **操作:** 依次快速展示:
 
 1. **总览 Overview**:决策健康卡实时变化(推翻率、平均寿命、修订率、争议率、反对解决率);「需要关注」条目。
-2. **搜索**:搜 `Redis` → 决策、论点、承诺全命中,论点结果点进去直达审议面板。
-3. **一致性**:冲突记录(Bob 已完成但前置 Carol 已延期)。
-4. **快照**:任选讨论 → *Save snapshot* → 快照对比视图。
-5. **审计**:决策/承诺的 append-only 变更历史。
-6. **语言**:右上角切 `中文` → 界面全量切换,数据不变。
+2. **负责人视角**(新):总览的「选择一个人」下拉 → 先选 `Alice`:她做的决策(migrate to the cloud,带决策人标注),以及**依赖她决策的决策**(Redis、warm-up —— 其中 Redis 已被取代);再选 `Dora`:她工作所依赖的 **Redis 已被推翻**、她的承诺已延期、Eve 在等她 —— 「负责人想看什么」一键回答。
+3. **搜索**:搜 `Redis` → 决策、论点、承诺全命中,论点结果点进去直达审议面板。
+4. **一致性**:冲突记录(Bob 已完成但前置 Carol 已延期)。
+5. **快照**:任选讨论 → 「保存快照」 → 快照对比视图。
+6. **审计**:决策/承诺的 append-only 变更历史。
 
-**要说:** 「决策健康指标是每次读的时候从历史表和论点实时算的 —— 会议纪要能记录话语,记录不了**决策过程的健康度**。」
+**要说:** 「决策健康指标是每次读的时候从历史表和论点实时算的 —— 会议纪要能记录话语,记录不了**决策过程的健康度**。负责人视角回答的则是:我拍板的决策还成立吗、我的工作建立在什么上面、谁在等我 —— 全部从图上实时算出来。」
 
 ## 收尾(30 秒)
 
@@ -145,7 +145,7 @@ Bob disagrees with using Redis because the ops cost is too high. We are concerne
 ## 5 分钟精简版
 
 1. 开场定位(30 秒)
-2. 场景 1+2 合并:粘贴 → 抽取 → 魔鬼代言人 → 带理由确认(90 秒)
+2. 场景 1+2 合并:粘贴 → 抽取 → 决策预检 → 带理由确认(90 秒)
 3. 场景 4 环检测(20 秒)
 4. 场景 5 严重度级联(60 秒)
 5. 场景 6 争议 → 解决(40 秒)
@@ -160,23 +160,25 @@ Bob disagrees with using Redis because the ops cost is too high. We are concerne
 |---|---|
 | 讨论导入(.txt/.md/.docx/.pdf、GBK 回退) | 1(口头提及) |
 | 规则/LLM 双引擎抽取(EN+ZH)+ 候选审核 | 1, 3 |
-| 魔鬼代言人确认门(A14) | 2 |
+| 决策预检确认门(A14) | 2 |
 | 决议目标(rationale)+ 已解决论点的审议记录 | 2, 7 |
 | 批量确认 / 重复检测 | 3(口头提及) |
 | 依赖前置审查面板 | 3 |
 | 环检测拒绝(带可视化) | 4 |
 | 拓扑排序 / 图视图 | 5 |
 | 严重度加权 what-if 级联(A16)+ 完成隔离 | 5 |
-| 论点实体 / contested 计算状态(A13)/ 解决需理由 | 6 |
+| 论点实体 / 有争议 计算状态(A13)/ 解决需理由 | 6 |
 | 自由漂浮论点不丢失 | 6 |
 | 手动创建表单 | 7 |
 | 翻案追溯(A15)+ 继任者链接 | 7 |
+| 决策人 decided_by(EN/ZH 指名抽取) | 1, 2, 8 |
+| 决策依赖图(抽取 + 环检测 + 卡片展示) | 1, 2, 6, 7 |
+| 负责人视角(stakeholder) | 8 |
 | 决策健康指标(复盘) | 8 |
 | 全文搜索(UC08) | 8 |
 | 一致性冲突 | 8 |
 | 快照 + 对比 | 8 |
 | 审计轨迹(append-only) | 8 |
-| 中英双语 i18n | 8 |
 
 ## 数据复位
 
