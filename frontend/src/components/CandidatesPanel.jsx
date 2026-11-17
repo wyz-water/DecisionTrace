@@ -6,6 +6,11 @@ import { useI18n } from "../i18n";
 
 const API_URL = "http://127.0.0.1:8000";
 
+// Extraction confidence at or above this score is pre-selected for
+// batch review (mirrors HIGH_CONFIDENCE on the backend). Selection is
+// still a human act: nothing is ever auto-confirmed (A2).
+const HIGH_CONFIDENCE = 0.7;
+
 function backendDetail(data) {
   return typeof data.detail === "string"
     ? data.detail
@@ -35,6 +40,7 @@ function candidateFields(candidate) {
       { key: "owner", labelKey: "candidates.field.owner" },
       { key: "description", labelKey: "candidates.field.description" },
       { key: "due_date", labelKey: "candidates.field.dueDate" },
+      { key: "due_text", labelKey: "candidates.field.dueText" },
       { key: "decision_title", labelKey: "candidates.field.decisionTitle" },
     ];
   }
@@ -463,6 +469,19 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
 
           <StatusBadge status={candidate.status} />
 
+          {candidate.confidence != null && (
+            <span
+              className={`confidence-badge ${
+                candidate.confidence >= HIGH_CONFIDENCE ? "is-high" : ""
+              }`}
+              title={t("candidates.confidenceTitle", {
+                value: Math.round(candidate.confidence * 100),
+              })}
+            >
+              {Math.round(candidate.confidence * 100)}%
+            </span>
+          )}
+
           {candidate.duplicate_of && (
             <span className="dup-badge">
               {t("candidates.duplicateBadge", {
@@ -820,6 +839,32 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
                   />
                   {t("candidates.selectAll")}
                 </label>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={batchBusy || pending.loading}
+                  onClick={() =>
+                    setSelected((current) => {
+                      const next = new Set(current);
+                      pageIds.forEach((id) => {
+                        const item = pending.items.find(
+                          (entry) => entry.id === id
+                        );
+                        if (
+                          item &&
+                          item.confidence != null &&
+                          item.confidence >= HIGH_CONFIDENCE
+                        ) {
+                          next.add(id);
+                        }
+                      });
+                      return next;
+                    })
+                  }
+                >
+                  {t("candidates.selectHighConfidence")}
+                </button>
 
                 <button
                   type="button"
