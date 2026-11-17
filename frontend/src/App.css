@@ -4292,3 +4292,89 @@ html[lang="zh-CN"] .severity-badge {
   background: #eaf8ef;
   color: #267447;
 }
+
+/* ---- Stakeholder view & decision graph -------------------------------- */
+
+.stakeholder-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.stakeholder-head h2 {
+  margin: 0;
+}
+
+.stakeholder-head select {
+  padding: 7px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.stakeholder-group {
+  margin: 14px 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #eceef2;
+  color: #344054;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.stakeholder-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stakeholder-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid #f4f6f9;
+  font-size: 13px;
+}
+
+.stakeholder-row:first-child {
+  border-top: none;
+}
+
+.stakeholder-note {
+  color: #525d73;
+  font-size: 12px;
+}
+
+.stakeholder-note.risk {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.stakeholder-maker {
+  color: #7a869c;
+  font-size: 12px;
+}
+
+.decided-by {
+  margin-top: 4px;
+  color: #525d73;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.decision-edges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.edge-label {
+  color: #7a869c;
+  font-size: 12px;
+  font-weight: 700;
+}

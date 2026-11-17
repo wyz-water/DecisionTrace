@@ -31,6 +31,15 @@ class Decision(Base):
         nullable=True
     )
 
+    # Who made the decision. Null means a team decision ("we decided"):
+    # the extractor never invents a single maker for a collective verb.
+    # Distinct from commitment.owner — that is who does the work, this
+    # is who decided it.
+    decided_by = Column(
+        String(80),
+        nullable=True
+    )
+
     status = Column(
         String(50),
         nullable=False,

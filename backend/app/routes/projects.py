@@ -8,16 +8,24 @@ from app.models.commitment import Commitment
 from app.models.commitment_history import CommitmentHistory
 from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
+from app.models.decision_dependency import DecisionDependency
 from app.models.dependency import Dependency
 from app.models.discussion import Discussion
 from app.models.snapshot import Snapshot
 from app.models.argument import Argument
-from app.models.decision_history import DecisionHistory
 from app.schemas.project import ProjectCreate, ProjectResponse
 from app.schemas.graph import ProjectGraphResponse
 from app.schemas.conflict import ProjectConflictsResponse
 from app.schemas.health import ProjectHealthResponse
+from app.schemas.stakeholder import (
+    StakeholderCommitment,
+    StakeholderDecision,
+    StakeholderResponse,
+    WaitingOn,
+)
 from app.services.graph import (
+    analyze_node_states,
+    build_adjacency,
     build_graph_payload,
     detect_cycles,
 )
@@ -347,6 +355,12 @@ def delete_project(
         Dependency.project_id == project.id
     ).delete(synchronize_session=False)
 
+    # Decision-level edges reference two decisions; they go before the
+    # decisions they touch, like the commitment edges above.
+    db.query(DecisionDependency).filter(
+        DecisionDependency.project_id == project.id
+    ).delete(synchronize_session=False)
+
     # Arguments reference both the project and (optionally) a decision;
     # they go before the decisions they target.
     db.query(Argument).filter(
@@ -377,3 +391,184 @@ def delete_project(
     db.commit()
 
     return project
+
+
+@router.get(
+    "/{project_id}/stakeholder",
+    response_model=StakeholderResponse
+)
+def get_project_stakeholder(
+    project_id: int,
+    name: str,
+    db: Session = Depends(get_db)
+):
+    """The responsible person's view: what a decision-maker wants to
+    see when they open the system — do my decisions still stand, what
+    do they rest on, where is my work stuck, who is waiting on me, and
+    which decisions rest on mine. All computed on read from the trace.
+    """
+    project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    decisions = db.query(Decision).filter(
+        Decision.project_id == project_id
+    ).all()
+    commitments = db.query(Commitment).filter(
+        Commitment.project_id == project_id
+    ).all()
+    dependencies = db.query(Dependency).filter(
+        Dependency.project_id == project_id
+    ).all()
+    decision_edges = db.query(DecisionDependency).filter(
+        DecisionDependency.project_id == project_id
+    ).all()
+    arguments = db.query(Argument).filter(
+        Argument.project_id == project_id
+    ).all()
+
+    key = (name or "").strip().lower()
+
+    contested_ids = {
+        argument.decision_id
+        for argument in arguments
+        if (
+            argument.stance == "AGAINST"
+            and argument.status == "OPEN"
+            and argument.decision_id is not None
+        )
+    }
+
+    def decision_view(decision):
+        return StakeholderDecision(
+            id=decision.id,
+            title=decision.title,
+            rationale=decision.rationale,
+            status=decision.status,
+            decided_by=decision.decided_by,
+            contested=decision.id in contested_ids,
+        )
+
+    decisions_made = [
+        decision_view(decision)
+        for decision in decisions
+        if (decision.decided_by or "").strip().lower() == key
+    ]
+
+    my_commitments = [
+        commitment
+        for commitment in commitments
+        if (commitment.owner or "").strip().lower() == key
+    ]
+
+    affecting_ids = {
+        commitment.decision_id
+        for commitment in my_commitments
+        if commitment.decision_id is not None
+    }
+
+    decisions_affecting_me = [
+        decision_view(decision)
+        for decision in decisions
+        if decision.id in affecting_ids
+    ]
+
+    commitments_by_id = {
+        commitment.id: commitment
+        for commitment in commitments
+    }
+
+    analysis_by_id = {
+        item["commitment_id"]: item
+        for item in analyze_node_states(commitments_by_id, dependencies)
+    }
+
+    commitments_view = []
+
+    for commitment in my_commitments:
+        analysis = analysis_by_id.get(commitment.id, {})
+
+        commitments_view.append(StakeholderCommitment(
+            id=commitment.id,
+            owner=commitment.owner,
+            description=commitment.description,
+            due_date=commitment.due_date,
+            status=commitment.status,
+            state=analysis.get("state", ""),
+            blocked_by=[
+                commitments_by_id[node_id].owner
+                for node_id in analysis.get("blocked_by", [])
+                if node_id in commitments_by_id
+            ],
+            waiting_on=[
+                commitments_by_id[node_id].owner
+                for node_id in analysis.get("waiting_on", [])
+                if node_id in commitments_by_id
+            ],
+        ))
+
+    successors, _ = build_adjacency(dependencies)
+
+    waiting_on_me = []
+    seen = set()
+
+    for commitment in my_commitments:
+        for neighbor, _dependency_type in successors.get(
+            commitment.id, []
+        ):
+            if neighbor in seen:
+                continue
+
+            seen.add(neighbor)
+
+            downstream = commitments_by_id.get(neighbor)
+
+            if downstream is None:
+                continue
+
+            waiting_on_me.append(WaitingOn(
+                commitment_id=downstream.id,
+                owner=downstream.owner,
+                description=downstream.description,
+                status=downstream.status,
+            ))
+
+    my_decision_ids = {
+        decision.id
+        for decision in decisions
+        if (decision.decided_by or "").strip().lower() == key
+    }
+
+    decisions_resting_on_mine = []
+
+    for edge in decision_edges:
+        if edge.predecessor_decision_id not in my_decision_ids:
+            continue
+
+        successor = next(
+            (
+                decision
+                for decision in decisions
+                if decision.id == edge.successor_decision_id
+            ),
+            None,
+        )
+
+        if successor is not None:
+            decisions_resting_on_mine.append(decision_view(successor))
+
+    return {
+        "project_id": project.id,
+        "name": name,
+        "decisions_made": decisions_made,
+        "decisions_affecting_me": decisions_affecting_me,
+        "commitments": commitments_view,
+        "waiting_on_me": waiting_on_me,
+        "decisions_resting_on_mine": decisions_resting_on_mine,
+    }

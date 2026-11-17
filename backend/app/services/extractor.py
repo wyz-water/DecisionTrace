@@ -32,6 +32,16 @@ NOT_OWNERS = {
 }
 
 DECISION_PATTERNS = [
+    # "Alice decided to use Redis because it scales well" — a named
+    # maker, captured as decided_by. Collective verbs ("we decided")
+    # never invent a single maker; they stay team decisions.
+    re.compile(
+        r"(?P<author>[A-Z][a-z]+)\s+"
+        r"(?:decided|chose|agreed)\s+"
+        r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
+        r"(?:\s+because\s+(?P<rationale>[^.,;!?]+?))?[.,;!?]?\s*$",
+        re.IGNORECASE,
+    ),
     re.compile(
         r"(?:we|the team|our team)\s+(?:decided|agreed|chose)\s+"
         r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
@@ -41,6 +51,39 @@ DECISION_PATTERNS = [
     re.compile(
         r"(?:we|the team|our team)\s+(?:will|are going to|plan to)\s+"
         r"use\s+(?P<title>[^.,;!?]+?)"
+        r"(?:\s+because\s+(?P<rationale>[^.,;!?]+?))?[.,;!?]?\s*$",
+        re.IGNORECASE,
+    ),
+    # 中文:"王芳决定采用 Redis" / "我们决定迁移到云"。Title cleaning
+    # strips separable verb prefixes (采用/使用/选择) but keeps verbs
+    # that are part of the decision ("迁移到云" stays whole).
+    re.compile(
+        r"(?:(?P<author>[一-龥]{2,3})\s*)?"
+        r"(?:我们|团队)?\s*(?:决定|确定)\s*"
+        r"(?P<title>[^,，。;；!！?？]+)",
+    ),
+]
+
+# "We decided to use Redis (because it scales well,) after we had
+# decided to migrate to the cloud" — one sentence, two facts: the
+# decision itself and the decision it rests on. Checked before the
+# plain decision patterns so the compound sentence does not get eaten
+# by them with the "after" clause stuck inside the title.
+DECISION_DEPENDENCY_PATTERNS = [
+    re.compile(
+        r"(?:we|the team|our team)\s+(?:decided|agreed|chose)\s+"
+        r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
+        r"(?:\s+because\s+(?P<rationale>[^,]+?))?,?\s+"
+        r"after\s+(?:we|the team|our team)?\s*(?:had\s+)?(?:already\s+)?"
+        r"(?:decided|agreed)\s+(?:to\s+|on\s+)?"
+        r"(?P<predecessor>[^.,;!?]+?)[.,;!?]?\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"building\s+on\s+(?:our|the team's)?\s*decision\s+"
+        r"(?:to\s+)?(?P<predecessor>[^.,;!?]+?),\s*"
+        r"(?:we|the team|our team)\s+(?:decided|agreed|chose)\s+"
+        r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
         r"(?:\s+because\s+(?P<rationale>[^.,;!?]+?))?[.,;!?]?\s*$",
         re.IGNORECASE,
     ),
@@ -240,6 +283,10 @@ def _clean_title(value):
         if value.lower().startswith(prefix):
             value = value[len(prefix):]
             break
+    for prefix in ("采用", "使用", "选择", "换用"):
+        if value.startswith(prefix):
+            value = value[len(prefix):]
+            break
     return value.strip()
 
 
@@ -319,20 +366,28 @@ def rule_based_extract(text):
         if not sentence:
             continue
 
-        for pattern in DECISION_PATTERNS:
+        # Compound sentences first: "we decided to use X (because …)
+        # after we had decided to Y" emits the decision AND the
+        # decision-dependency edge it rests on. Checked before the plain
+        # decision patterns so the "after" clause cannot end up inside
+        # the title.
+        decision_emitted = False
+
+        for pattern in DECISION_DEPENDENCY_PATTERNS:
             match = pattern.search(sentence)
 
             if not match:
                 continue
 
             title = _clean_title(match.group("title"))
+            predecessor = _clean_title(match.group("predecessor"))
             rationale = (
                 match.group("rationale").strip()
                 if match.group("rationale")
                 else None
             )
 
-            if title:
+            if title and predecessor:
                 candidates.append({
                     "candidate_type": "DECISION",
                     "payload": {
@@ -342,10 +397,61 @@ def rule_based_extract(text):
                     },
                     "source_text": sentence,
                 })
+                candidates.append({
+                    "candidate_type": "DECISION_DEPENDENCY",
+                    "payload": {
+                        "predecessor_title": predecessor,
+                        "successor_title": title,
+                        "dependency_type": "DEPENDS_ON",
+                    },
+                    "source_text": sentence,
+                })
 
                 last_decision_title = title
+                decision_emitted = True
 
             break
+
+        if not decision_emitted:
+            for pattern in DECISION_PATTERNS:
+                match = pattern.search(sentence)
+
+                if not match:
+                    continue
+
+                title = _clean_title(match.group("title"))
+
+                groups = match.groupdict()
+                rationale = (
+                    groups["rationale"].strip()
+                    if groups.get("rationale")
+                    else None
+                )
+
+                author = groups.get("author")
+
+                if (
+                    author
+                    and (author.title() in NOT_OWNERS
+                         or author in AUTHOR_NOISE_CN)
+                ):
+                    author = None
+
+                if title:
+                    candidates.append({
+                        "candidate_type": "DECISION",
+                        "payload": {
+                            "title": title,
+                            "rationale": rationale,
+                            "decided_by": author,
+                            "status": "CONFIRMED",
+                        },
+                        "source_text": sentence,
+                    })
+
+                    last_decision_title = title
+
+                break
 
         match = COMMITMENT_PATTERN.search(sentence)
 
@@ -450,16 +556,21 @@ SYSTEM_PROMPT = (
     "You extract structured project records from a team discussion. "
     'Return ONLY a JSON object with this exact shape: '
     '{"candidates": [{"candidate_type": "DECISION" | "COMMITMENT" | '
-    '"DEPENDENCY" | "ARGUMENT", "payload": { ... }, '
+    '"DEPENDENCY" | "DECISION_DEPENDENCY" | "ARGUMENT", "payload": { ... }, '
     '"source_text": "..."}]}. '
     "Payload shapes: "
     'DECISION: {"title": str, "rationale": str | null, '
-    '"status": "CONFIRMED"}. '
+    '"decided_by": str | null, "status": "CONFIRMED"} — decided_by is '
+    "the named person who made the decision; null for a collective "
+    '"we decided". '
     'COMMITMENT: {"owner": str, "description": str, '
     '"due_date": "YYYY-MM-DD" | null, "status": "OPEN", '
     '"decision_title": str | null}. '
     'DEPENDENCY: {"predecessor_owner": str, "successor_owner": str, '
     '"dependency_type": "BLOCKS"}. '
+    'DECISION_DEPENDENCY: {"predecessor_title": str, '
+    '"successor_title": str, "dependency_type": "DEPENDS_ON"} — the '
+    "successor decision rests on the predecessor decision. "
     'ARGUMENT: {"stance": "FOR" | "AGAINST", "claim": str, '
     '"author": str | null, "target_title": str | null}. '
     "Only extract facts explicitly stated in the text. Do not invent. "
@@ -564,7 +675,10 @@ def extract_candidates(text):
 
 def _normalize(candidates):
     """Keep only well-formed candidates from the LLM response."""
-    allowed_types = {"DECISION", "COMMITMENT", "DEPENDENCY", "ARGUMENT"}
+    allowed_types = {
+        "DECISION", "COMMITMENT", "DEPENDENCY",
+        "DECISION_DEPENDENCY", "ARGUMENT",
+    }
 
     cleaned = []
 

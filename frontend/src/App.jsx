@@ -5,6 +5,7 @@ import ArgumentRow from "./components/ArgumentRow.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
 import DeliberationPanel from "./components/DeliberationPanel.jsx";
+import StakeholderPanel from "./components/StakeholderPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import ImpactPanel from "./components/ImpactPanel.jsx";
@@ -321,6 +322,8 @@ function App() {
   const [deliberationError, setDeliberationError] = useState("");
   const [decisionReversal, setDecisionReversal] = useState(null);
   const [reversalError, setReversalError] = useState("");
+  const [decisionDependencies, setDecisionDependencies] = useState(null);
+  const [dependenciesError, setDependenciesError] = useState("");
   const [projectHealth, setProjectHealth] = useState(null);
   const [healthError, setHealthError] = useState("");
   const [graph, setGraph] = useState({
@@ -1399,12 +1402,48 @@ function App() {
     };
   }, [decisionId, refreshTick, te]);
 
+  useEffect(() => {
+    if (decisionId == null) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadDecisionDependencies() {
+      try {
+        const response = await fetch(
+          `${API_URL}/decisions/${decisionId}/dependencies`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load decision dependencies");
+        }
+
+        if (!cancelled) {
+          setDecisionDependencies(await response.json());
+          setDependenciesError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDependenciesError(te(err.message));
+        }
+      }
+    }
+
+    loadDecisionDependencies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionId, refreshTick, te]);
+
   function startDecisionEdit() {
     setDecisionDraft({
       title: decision.title,
       rationale: decision.rationale ?? "",
       status: decision.status,
       reason: "",
+      decidedBy: decision.decided_by ?? "",
       supersededBy: decision.superseded_by_decision_id ?? "",
     });
     setDecisionError("");
@@ -1447,6 +1486,14 @@ function App() {
 
     if (decisionDraft.status !== decision.status) {
       body.status = decisionDraft.status;
+    }
+
+    // The decision maker may be set, changed, or cleared explicitly.
+    if (
+      (decisionDraft.decidedBy ?? "").trim() !==
+      (decision.decided_by ?? "")
+    ) {
+      body.decided_by = decisionDraft.decidedBy.trim() || null;
     }
 
     // The successor link only matters when the decision ends up
@@ -2044,6 +2091,17 @@ function App() {
               )}
             </section>
 
+            <StakeholderPanel
+              projectId={projectId}
+              decisions={decisions}
+              commitments={graph.nodes}
+              argumentsList={argumentsList}
+              onOpenDecision={(id) => {
+                setView("decisions");
+                setDecisionId(id);
+              }}
+            />
+
             <section className="card attention-card">
               <p className="eyebrow">{t("retrospective.eyebrow")}</p>
               <p className="retro-sub">{t("retrospective.subtitle")}</p>
@@ -2227,6 +2285,18 @@ function App() {
                     }
                   />
 
+                  <input
+                    type="text"
+                    placeholder={t("decisions.decidedByPlaceholder")}
+                    value={decisionDraft.decidedBy ?? ""}
+                    onChange={(event) =>
+                      setDecisionDraft({
+                        ...decisionDraft,
+                        decidedBy: event.target.value,
+                      })
+                    }
+                  />
+
                   <textarea
                     rows={2}
                     placeholder={t("decisions.rationalePlaceholder")}
@@ -2337,6 +2407,14 @@ function App() {
                       id: decision?.source_discussion_id ?? "—",
                     })}
                   </div>
+
+                  <div className="decided-by">
+                    {decision?.decided_by
+                      ? t("decisions.decidedBy", {
+                          name: decision.decided_by,
+                        })
+                      : t("decisions.decidedByTeam")}
+                  </div>
                 </>
               )}
 
@@ -2415,6 +2493,66 @@ function App() {
                       )}
                     </div>
                   )}
+
+                  <div className="decision-subsection">
+                    <div className="decision-subheading">
+                      <span>{t("decisions.decisionGraphEyebrow")}</span>
+                    </div>
+
+                    {dependenciesError && (
+                      <p className="pipeline-error">{te(dependenciesError)}</p>
+                    )}
+
+                    {decisionDependencies &&
+                    decisionDependencies.upstream.length === 0 &&
+                    decisionDependencies.downstream.length === 0 ? (
+                      <p className="muted">
+                        {t("decisions.noDecisionEdges")}
+                      </p>
+                    ) : (
+                      <>
+                        {decisionDependencies &&
+                          decisionDependencies.upstream.length > 0 && (
+                            <div className="decision-edges">
+                              <span className="edge-label">
+                                {t("decisions.restsOn")}
+                              </span>
+
+                              {decisionDependencies.upstream.map((item) => (
+                                <a
+                                  key={item.id}
+                                  className="text-link"
+                                  href="#decisions"
+                                  onClick={() => setDecisionId(item.id)}
+                                >
+                                  #{item.id} {item.title}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                        {decisionDependencies &&
+                          decisionDependencies.downstream.length > 0 && (
+                            <div className="decision-edges">
+                              <span className="edge-label">
+                                {t("decisions.restedOnBy")}
+                              </span>
+
+                              {decisionDependencies.downstream.map((item) => (
+                                <a
+                                  key={item.id}
+                                  className="text-link"
+                                  href="#decisions"
+                                  onClick={() => setDecisionId(item.id)}
+                                >
+                                  #{item.id} {item.title}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                      </>
+                    )}
+                  </div>
 
                   <div className="decision-subsection">
                     <div className="decision-subheading">

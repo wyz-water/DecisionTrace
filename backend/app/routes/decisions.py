@@ -6,6 +6,7 @@ from app.models.project import Project
 from app.models.discussion import Discussion
 from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
+from app.models.decision_dependency import DecisionDependency
 from app.models.commitment import Commitment
 from app.models.commitment_history import CommitmentHistory
 from app.models.dependency import Dependency
@@ -17,6 +18,7 @@ from app.schemas.decision import (
     DecisionUpdate,
     DecisionHistoryResponse,
     DecisionImpactResponse,
+    DecisionDependenciesResponse,
     ReversalResponse,
 )
 from app.schemas.page import Page
@@ -89,6 +91,7 @@ def create_decision(
         source_discussion_id=decision.source_discussion_id,
         title=decision.title,
         rationale=decision.rationale,
+        decided_by=(decision.decided_by or "").strip() or None,
         status=status
     )
 
@@ -137,6 +140,13 @@ def update_decision(
     old_title = decision.title
     old_rationale = decision.rationale
     old_status = decision.status
+    old_decided_by = decision.decided_by
+
+    new_decided_by = old_decided_by
+
+    if "decided_by" in update.model_fields_set:
+        value = (update.decided_by or "").strip()
+        new_decided_by = value or None
 
     new_title = update.title if update.title is not None else old_title
     new_rationale = (
@@ -217,6 +227,7 @@ def update_decision(
         new_title == old_title
         and new_rationale == old_rationale
         and new_status == old_status
+        and new_decided_by == old_decided_by
         and new_superseded_by == decision.superseded_by_decision_id
     ):
         raise HTTPException(
@@ -240,6 +251,7 @@ def update_decision(
     decision.title = new_title
     decision.rationale = new_rationale
     decision.status = new_status
+    decision.decided_by = new_decided_by
     decision.superseded_by_decision_id = new_superseded_by
 
     db.commit()
@@ -505,6 +517,46 @@ def _reversal_payload(decision, db):
             "source_text": None,
         })
 
+    # Decisions resting on this one lose their foundation when it is
+    # overturned — the reasoning layer's own impact.
+    resting_edges = (
+        db.query(DecisionDependency)
+        .filter(
+            DecisionDependency.project_id == decision.project_id,
+            DecisionDependency.predecessor_decision_id == decision.id,
+        )
+        .all()
+    )
+
+    if resting_edges:
+        resting_ids = [
+            edge.successor_decision_id for edge in resting_edges
+        ]
+
+        resting_decisions = {
+            row.id: row
+            for row in db.query(Decision).filter(
+                Decision.id.in_(resting_ids)
+            ).all()
+        }
+
+        for edge in resting_edges:
+            resting = resting_decisions.get(edge.successor_decision_id)
+
+            if resting is None:
+                continue
+
+            signals.append({
+                "type": "decision_risk",
+                "at": resting.created_at,
+                "summary": (
+                    f"Decision #{resting.id} '{resting.title}' "
+                    "rests on this one"
+                ),
+                "citation": f"decision dependency #{edge.id}",
+                "source_text": None,
+            })
+
     return {
         "decision_id": decision.id,
         "title": decision.title,
@@ -516,6 +568,79 @@ def _reversal_payload(decision, db):
         "superseded_by": successor,
         "signals": signals,
     }
+
+
+@router.get(
+    "/{decision_id}/dependencies",
+    response_model=DecisionDependenciesResponse
+)
+def get_decision_dependencies(
+    decision_id: int,
+    db: Session = Depends(get_db)
+):
+    """The decision graph around one decision: what it rests on
+    (upstream) and what rests on it (downstream)."""
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
+
+    if not decision:
+        raise HTTPException(
+            status_code=404,
+            detail="Decision not found"
+        )
+
+    edges = db.query(DecisionDependency).filter(
+        DecisionDependency.project_id == decision.project_id
+    ).all()
+
+    upstream_ids = {
+        edge.predecessor_decision_id
+        for edge in edges
+        if edge.successor_decision_id == decision.id
+    }
+    downstream_ids = {
+        edge.successor_decision_id
+        for edge in edges
+        if edge.predecessor_decision_id == decision.id
+    }
+
+    decisions = db.query(Decision).filter(
+        Decision.project_id == decision.project_id
+    ).all()
+
+    return {
+        "decision_id": decision.id,
+        "upstream": [
+            row for row in decisions if row.id in upstream_ids
+        ],
+        "downstream": [
+            row for row in decisions if row.id in downstream_ids
+        ],
+    }
+
+
+@router.delete("/dependencies/{dependency_id}")
+def delete_decision_dependency(
+    dependency_id: int,
+    db: Session = Depends(get_db)
+):
+    """Remove a decision-level dependency edge (a correction path for
+    the candidate gate)."""
+    edge = db.query(DecisionDependency).filter(
+        DecisionDependency.id == dependency_id
+    ).first()
+
+    if not edge:
+        raise HTTPException(
+            status_code=404,
+            detail="Decision dependency not found"
+        )
+
+    db.delete(edge)
+    db.commit()
+
+    return {"deleted": dependency_id}
 
 
 @router.get(

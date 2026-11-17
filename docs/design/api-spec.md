@@ -72,11 +72,14 @@ list endpoint is automatically UI-ready.
 |---|---|---|
 | POST | `/decisions` | Create a decision (UC04). **Rationale (the decision goal) is required** — `400` otherwise |
 | GET | `/decisions?project_id=` | List, paginated |
-| PATCH | `/decisions/{id}` | Revise title/rationale/status; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty). `superseded_by_decision_id` names the successor — only when the resulting status is `SUPERSEDED` (validated: exists, same project, not self, `CONFIRMED`); any other status forces the link to `None` |
+| PATCH | `/decisions/{id}` | Revise title/rationale/status/`decided_by`; appends `decision_history`. Rationale may change but **never be erased** (`400` on empty). `decided_by` is explicitly settable and clearable. `superseded_by_decision_id` names the successor — only when the resulting status is `SUPERSEDED` (validated: exists, same project, not self, `CONFIRMED`); any other status forces the link to `None` |
 | GET | `/decisions/{id}/history` | Change log, newest first |
 | GET | `/decisions/{id}/impact` | Downstream commitments affected through `BLOCKS` closure |
 | GET | `/decisions/{id}/deliberation` | Arguments targeting the decision + `contested` (computed: ≥ 1 open AGAINST) |
-| GET | `/decisions/{id}/reversal` | The reversal trace for `SUPERSEDED`/`REVOKED` decisions: `reversed`, `reversed_at`, `lifespan_days`, the successor, and a `signals` timeline (reversal / successor / objection / slip), each citing the row it came from. Live decisions answer `reversed: false` with an empty list |
+| GET | `/decisions/{id}/reversal` | The reversal trace for `SUPERSEDED`/`REVOKED` decisions: `reversed`, `reversed_at`, `lifespan_days`, the successor, and a `signals` timeline (reversal / successor / objection / slip / decision_risk — decisions resting on this one), each citing the row it came from. Live decisions answer `reversed: false` with an empty list |
+| GET | `/decisions/{id}/dependencies` | The decision graph around one decision: `upstream` (what it rests on) and `downstream` (what rests on it) |
+| DELETE | `/decisions/dependencies/{id}` | Remove a decision-level edge (a correction path for the candidate gate) |
+| GET | `/projects/{id}/stakeholder?name=` | The responsible person's view, computed on read: `decisions_made` (with status + contested), `decisions_affecting_me`, `commitments` (with state, blocked_by, waiting_on), `waiting_on_me`, `decisions_resting_on_mine` |
 
 ### Commitments — `/commitments`
 
