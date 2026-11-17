@@ -1,4 +1,6 @@
-"""The devil's advocate: drafted challenges before a decision lands.
+"""The decision pre-check ("devil's advocate"): drafted challenges
+before a decision lands. The internal module/function names keep the
+original term for history; the product name is "decision pre-check".
 
 A ledger records what the team said; an analyst also surfaces what the
 team did *not* address. Before a decision candidate is confirmed, the
@@ -173,7 +175,7 @@ def _overturned_precedents(db, project_id, title):
 
 
 def draft_challenges(db, candidate):
-    """Draft the devil's advocate list for a pending DECISION candidate.
+    """Draft the decision pre-check list for a pending DECISION candidate.
 
     Returns a list of challenge dicts; each has a stable id (kind plus
     index within this computation), the human-facing claim, the source

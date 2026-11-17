@@ -491,7 +491,7 @@ def get_candidate_challenges(
     candidate_id: int,
     db: Session = Depends(get_db)
 ):
-    """The devil's advocate gate: drafted counter-considerations for a
+    """The decision pre-check gate: drafted counter-considerations for a
     pending decision candidate. Computed on read, nothing stored."""
     candidate = db.query(Candidate).filter(
         Candidate.id == candidate_id
@@ -586,7 +586,7 @@ def _confirm_pending(db, candidate_id, challenge_resolutions=None):
             detail="Candidate payload must be a JSON object"
         )
 
-    # The devil's advocate gate: when the caller supplies resolutions,
+    # The decision pre-check gate: when the caller supplies resolutions,
     # every challenge drafted *right now* must be resolved with a reason.
     # Drafts are recomputed here, so a challenge that appeared after the
     # UI fetched the list fails the confirm instead of slipping through.
@@ -1010,7 +1010,7 @@ def confirm_candidate(
     """Single confirmation: the human gate for one candidate.
 
     With no body, this is the plain confirm. With challenge_resolutions,
-    the devil's advocate gate applies: every drafted challenge must be
+    the decision pre-check gate applies: every drafted challenge must be
     resolved with a reason, and the resolutions are recorded on the new
     decision as resolved arguments.
     """

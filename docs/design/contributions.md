@@ -24,7 +24,7 @@ Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 | Meeting snapshots | Graph snapshots, snapshot diff, i18n (EN/ZH) | PRs #21, #22 |
 | Presentation-feedback round | Decision goals (rationale required), batch confirm, duplicate detection, summaries, consistency sweep | PRs #26, #27 |
 | Deliberation layer | Argument entity, EN+ZH argument extraction, contested state, deliberation view, search coverage, cascade rules, decision health metrics | PRs #28, #29 |
-| Analyst layer | Devil's advocate gate before confirmation, reversal trace for overturned decisions, severity-weighted impact cascade | PRs #30, #31 |
+| Analyst layer | Decision pre-check gate before confirmation, reversal trace for overturned decisions, severity-weighted impact cascade | PRs #30, #31 |
 | Design documents (Part II) | Architecture, data model, UI design, API spec, change log, summary, models, issues, references — AI-drafted, team-reviewed | `docs/design/` |
 | Presentation | Week 9 deck + script | `Desktop/DecisionTrace_设计展示.pptx` |
 

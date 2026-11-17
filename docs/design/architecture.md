@@ -124,7 +124,7 @@ state (contested). The layer is specified in §6.
 | A11 | Natural-language questions are answered from the derived graph, with citations (planned, Part III) | The ask view composes answers from authoritative records and shows the source spans behind each claim; the LLM, if used, only phrases answers — it never invents facts the trace does not contain. |
 | A12 | Arguments are first-class; a decision carries its deliberation | Extracted pros, cons and objections become `Argument` records through the same candidate gate (A2), each pointing back to its source sentence. Recording the conclusion alone throws away the reasoning — the part that makes decision-making a high-level activity. |
 | A13 | "Contested" is computed, never a manual status | A decision with ≥ 1 open `AGAINST` argument renders contested everywhere (badge, overview). Computed on read like cycles and impact (A8), so the state cannot drift from the arguments that justify it. |
-| A14 | The devil's advocate drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
+| A14 | Decision pre-check drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
 | A15 | Reversal is a first-class relationship, and it leaves a trace | `SUPERSEDED` may name the successor (`superseded_by_decision_id`); the reversal trace endpoint assembles the narrative — the flip row, the successor, the objections that accumulated, the slipped commitments — each signal citing the row it came from, so the narrative can never invent a fact the trace does not contain (same rule as A11). |
 | A16 | Cascade severity is computed, and completed work isolates | Effective severity (BLOCKED > DELAYED > none) propagates along `BLOCKS` edges in topological order — a node's severity is the worst of its own status and its predecessors'. A COMPLETED commitment is severity 0 and passes nothing through: finished work shields its downstream. The what-if response carries per-item baseline and simulated severity, blocked/delayed tier counts over the affected set, and the escalated ids — computed on read like cycles and contested (A8), never stored. |
 | A17 | Extraction sharpening: confidence is computed, context links, and due phrases are never dropped | Each candidate carries an evidence-based confidence score (rationale, dates, authors, targets) computed on read from the payload — backend-independent, deterministic; the review UI pre-selects high-confidence candidates for batch review but **never auto-confirms** (A2). A commitment sentence following a decision sentence links to that decision by proximity (human can still change it). Natural-language due phrases ("by Friday") resolve to concrete dates against today, and the original phrase is kept on the candidate even when unresolvable — the reviewer sees "due as said", nothing is silently dropped. |
@@ -187,7 +187,7 @@ of: making intake cheaper (Rule 1), making the system compute more
   contested rate, objection resolution rate — the "reflect" step of the
   agent loop) — nobody updates these by hand.
 - Meeting summary = graph snapshot: saving one captures the whole state.
-- **Devil's advocate gate** — confirming a decision candidate drafts
+- **Decision pre-check gate** — confirming a decision candidate drafts
   challenges first (pending objections, uncaptured concern sentences,
   overturned precedents, missing rationale); each needs a resolution
   reason, recorded as resolved arguments on the decision (A14).
@@ -282,7 +282,7 @@ yet) stay visible in the deliberation view instead of vanishing after
 confirmation.
 
 **The analyst speaks first (A14).** Confirming a decision candidate runs
-the devil's advocate gate first: drafted challenges — pending objections
+the decision pre-check gate first: drafted challenges — pending objections
 targeting the decision, concern sentences the extractor missed, an
 overturned precedent with a similar title, a missing rationale — each
 must be resolved with a reason before the decision lands. The

@@ -542,7 +542,7 @@ export default {
   "candidates.type.DEPENDENCY": "依赖",
   "candidates.type.ARGUMENT": "论点",
 
-  "challenges.eyebrow": "魔鬼代言人",
+  "challenges.eyebrow": "决策预检",
   "challenges.intro": "在决策落地之前，系统先起草没人正面回应过的问题。请为每一条给出处理理由 —— 处理记录会作为这条决策的审议记录保留。",
   "challenges.kind.unresolved_objection": "待处理的反对意见",
   "challenges.kind.silent_concern": "未被回应的担忧",

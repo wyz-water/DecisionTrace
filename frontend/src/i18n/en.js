@@ -545,7 +545,7 @@ export default {
   "candidates.type.DEPENDENCY": "DEPENDENCY",
   "candidates.type.ARGUMENT": "ARGUMENT",
 
-  "challenges.eyebrow": "DEVIL'S ADVOCATE",
+  "challenges.eyebrow": "DECISION PRE-CHECK",
   "challenges.intro": "Before this decision lands, the analyst drafts what nobody addressed. Resolve each point with a reason — the resolutions stay on the decision as its deliberation record.",
   "challenges.kind.unresolved_objection": "Pending objection",
   "challenges.kind.silent_concern": "Unaddressed concern",
