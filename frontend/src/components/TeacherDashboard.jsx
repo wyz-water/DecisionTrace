@@ -415,32 +415,6 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                         </div>
                       )}
                     </div>
-
-                    <div className="decision-subsection">
-                      <div className="decision-subheading">
-                        <span>{t("teacher.inProgress")}</span>
-                        <span className="subheading-note">
-                          {approved.length}
-                        </span>
-                      </div>
-
-                      {approved.length === 0 ? (
-                        <p className="muted">{t("teacher.noInProgress")}</p>
-                      ) : (
-                        approved.map((chain) => (
-                          <div className="teacher-approved" key={chain.id}>
-                            <div className="teacher-group-head">
-                              <h3>#{chain.id} {chain.title}</h3>
-                            </div>
-
-                            <ExecutionBoard
-                              chainId={chain.id}
-                              readOnly
-                            />
-                          </div>
-                        ))
-                      )}
-                    </div>
                   </>
                 );
               })()}
