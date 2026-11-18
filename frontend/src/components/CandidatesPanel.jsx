@@ -529,11 +529,25 @@ export default function CandidatesPanel({
     const values = editing ? draft : candidate.payload;
     const fields = candidateFields(candidate);
 
+    const makerColor =
+      candidate.candidate_type === "DECISION" &&
+      candidate.payload?.decided_by
+        ? personColor(candidate.payload.decided_by)
+        : null;
+
     return (
       <div
         className="candidate-card"
         id={`candidate-${candidate.id}`}
         key={candidate.id}
+        style={
+          makerColor
+            ? {
+                borderLeft: `4px solid ${makerColor}`,
+                background: `${makerColor}0a`,
+              }
+            : undefined
+        }
       >
         <div className="candidate-top">
           {candidate.status === "PENDING" && !editing && (

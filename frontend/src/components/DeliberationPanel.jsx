@@ -1,57 +1,139 @@
 import { useState } from "react";
 
 import ArgumentRow from "./ArgumentRow";
-import Pagination from "./Pagination";
 import { useI18n } from "../i18n";
 
 /**
- * The project-wide deliberation view: every argument in the trace,
- * including free-standing ones that no decision points to yet.
- *
- * The decision card shows the arguments of one decision; this view shows
- * the whole debate. Rows render through the shared ArgumentRow, so the
- * resolve flow is the same here and on the decision card.
+ * The project-wide deliberation view, in the same selectable form as
+ * the chains view: a list of cards (one per decision with arguments,
+ * plus one for free-standing concerns), click one to open its detail
+ * with the shared ArgumentRow resolve flow.
  */
 
-const FILTERS = {
-  ALL: "all",
-  OPEN: "open",
-  RESOLVED: "resolved",
-};
-
-function matchesFilter(argument, filter) {
-  if (filter === FILTERS.OPEN) {
-    return argument.status === "OPEN";
-  }
-  if (filter === FILTERS.RESOLVED) {
-    return argument.status === "RESOLVED";
-  }
-  return true;
-}
+// A sentinel id for the free-standing concerns card.
+const FREE_STANDING = 0;
 
 export default function DeliberationPanel({ list, decisions, onResolved }) {
   const { t, te } = useI18n();
-  const [filter, setFilter] = useState(FILTERS.ALL);
+  const [selected, setSelected] = useState(null);
 
   const decisionsById = Object.fromEntries(
     (decisions ?? []).map((item) => [item.id, item])
   );
 
-  const openObjections = (list?.items ?? []).filter(
-    (item) => item.status === "OPEN" && item.stance === "AGAINST"
-  );
+  const items = list?.items ?? [];
 
-  const freeStanding = (list?.items ?? []).filter(
-    (item) => item.decision_id == null
-  );
+  const byDecision = new Map();
+  const freeStanding = [];
 
-  const resolvedCount = (list?.items ?? []).filter(
-    (item) => item.status === "RESOLVED"
-  ).length;
+  for (const argument of items) {
+    if (argument.decision_id == null) {
+      freeStanding.push(argument);
+    } else {
+      if (!byDecision.has(argument.decision_id)) {
+        byDecision.set(argument.decision_id, []);
+      }
+      byDecision.get(argument.decision_id).push(argument);
+    }
+  }
 
-  const visible = (list?.items ?? []).filter((item) =>
-    matchesFilter(item, filter)
-  );
+  if (selected !== null) {
+    const isFree = selected === FREE_STANDING;
+    const decision = isFree ? null : decisionsById[selected];
+    const arguments_ = isFree ? freeStanding : byDecision.get(selected) ?? [];
+
+    const heading = isFree
+      ? t("deliberation.freeStandingCard")
+      : `#${decision?.id ?? "?"} ${decision?.title ?? ""}`;
+
+    return (
+      <section className="card pipeline-card">
+        <div className="chain-detail-head">
+          <div>
+            <p className="eyebrow">{t("deliberation.eyebrow")}</p>
+            <h2>{heading}</h2>
+          </div>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSelected(null)}
+          >
+            {t("deliberation.back")}
+          </button>
+        </div>
+
+        {arguments_.length === 0 ? (
+          <p className="muted">{t("deliberation.none")}</p>
+        ) : (
+          arguments_.map((argument) => (
+            <ArgumentRow
+              key={argument.id}
+              argument={argument}
+              target={
+                argument.decision_id != null
+                  ? decisionsById[argument.decision_id]
+                  : null
+              }
+              showTarget={isFree}
+              onResolved={onResolved}
+            />
+          ))
+        )}
+      </section>
+    );
+  }
+
+  const cards = [
+    ...[...byDecision.entries()].map(([decisionId, args]) => {
+      const decision = decisionsById[decisionId];
+      const openObjections = args.filter(
+        (item) => item.status === "OPEN" && item.stance === "AGAINST"
+      );
+
+      return (
+        <article
+          className="chain-card"
+          key={decisionId}
+          onClick={() => setSelected(decisionId)}
+        >
+          <div className="chain-card-head">
+            <h3>
+              #{decisionId} {decision?.title ?? "?"}
+            </h3>
+
+            {openObjections.length > 0 && (
+              <span className="contested-badge">
+                {t("decisions.contested")}
+              </span>
+            )}
+          </div>
+
+          <p className="chain-card-meta">
+            {t("deliberation.argumentCount", { count: args.length })}
+          </p>
+        </article>
+      );
+    }),
+  ];
+
+  if (freeStanding.length > 0) {
+    cards.push(
+      <article
+        className="chain-card"
+        key="free-standing"
+        onClick={() => setSelected(FREE_STANDING)}
+      >
+        <div className="chain-card-head">
+          <h3>{t("deliberation.freeStandingCard")}</h3>
+        </div>
+
+        <p className="chain-card-meta">
+          {t("deliberation.argumentCount", { count: freeStanding.length })}
+        </p>
+      </article>
+    );
+  }
 
   return (
     <section className="card pipeline-card">
@@ -59,60 +141,13 @@ export default function DeliberationPanel({ list, decisions, onResolved }) {
       <h2>{t("deliberation.title")}</h2>
       <p>{t("deliberation.subtitle")}</p>
 
-      <div className="deliberation-toolbar">
-        {[
-          [FILTERS.ALL, "deliberation.filterAll", list?.total ?? 0],
-          [FILTERS.OPEN, "deliberation.filterOpen", openObjections.length],
-          [FILTERS.RESOLVED, "deliberation.filterResolved", resolvedCount],
-        ].map(([value, labelKey, count]) => (
-          <button
-            key={value}
-            type="button"
-            className={`filter-chip ${filter === value ? "active" : ""}`}
-            onClick={() => setFilter(value)}
-          >
-            {t(labelKey)} ({count})
-          </button>
-        ))}
-      </div>
-
-      {freeStanding.length > 0 && (
-        <p className="deliberation-note">
-          {t("deliberation.freeStandingNote", {
-            count: freeStanding.length,
-          })}
-        </p>
-      )}
-
       {list?.loading && <p className="muted">{t("common.loading")}</p>}
 
-      {!list?.loading && visible.length === 0 && (
+      {!list?.loading && cards.length === 0 && (
         <p className="muted">{t("deliberation.none")}</p>
       )}
 
-      {!list?.loading &&
-        visible.map((argument) => (
-          <ArgumentRow
-            key={argument.id}
-            argument={argument}
-            target={
-              argument.decision_id != null
-                ? decisionsById[argument.decision_id]
-                : null
-            }
-            showTarget
-            onResolved={onResolved}
-          />
-        ))}
-
-      <Pagination
-        total={list?.total ?? 0}
-        limit={list?.limit ?? 20}
-        offset={list?.offset ?? 0}
-        onChange={list?.setOffset}
-        label={t("deliberation.paginationLabel")}
-        busy={list?.loading}
-      />
+      {!list?.loading && <div className="chain-grid">{cards}</div>}
 
       {list?.error && <p className="pipeline-error">{te(list.error)}</p>}
     </section>

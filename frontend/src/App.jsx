@@ -2596,57 +2596,6 @@ function App() {
 
                   <div className="decision-subsection">
                     <div className="decision-subheading">
-                      <span>{t("decisions.impactEyebrow")}</span>
-
-                      {currentDecisionImpact?.has_changes && (
-                        <span className="change-warning">
-                          {t("decisions.changed", {
-                            count: currentDecisionImpact.change_count,
-                          })}
-                        </span>
-                      )}
-                    </div>
-
-                    {currentDecisionImpact &&
-                    currentDecisionImpact.affected_commitments.length > 0 ? (
-                      currentDecisionImpact.affected_commitments.map((item) => (
-                        <div
-                          className="linked-commitment"
-                          key={item.id}
-                          onClick={() =>
-                            openImpact(item.id, "DELAYED")
-                          }
-                        >
-                          <strong>{item.owner}</strong>
-                          <span>
-                            #{item.id} ·{" "}
-                            {t(
-                              `status.${item.status}`,
-                              {},
-                              item.status.replace("_", " ")
-                            )}
-                          </span>
-
-                          {item.downstream.length > 0 ? (
-                            <span className="downstream-note">
-                              {t("decisions.affects", {
-                                names: names(item.downstream, byId),
-                              })}
-                            </span>
-                          ) : (
-                            <span className="downstream-note dim">
-                              {t("decisions.noDownstream")}
-                            </span>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="muted">{t("decisions.noLinked")}</p>
-                    )}
-                  </div>
-
-                  <div className="decision-subsection">
-                    <div className="decision-subheading">
                       <span>{t("decisions.historyEyebrow")}</span>
 
                       {decisionHistory.total > 0 && (

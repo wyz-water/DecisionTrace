@@ -591,6 +591,9 @@ export default {
   "challenges.stale": "The challenge list changed — review the updated points and try again.",
 
   "deliberation.eyebrow": "DECIDE",
+  "deliberation.back": "Back",
+  "deliberation.argumentCount": "{count} argument(s)",
+  "deliberation.freeStandingCard": "Free-standing concerns",
   "deliberation.title": "Deliberation",
   "deliberation.subtitle": "Every argument in the trace — who supported what, who objected, and which objections still stand. Free-standing concerns (not yet linked to a decision) stay visible here instead of getting lost.",
   "deliberation.filterAll": "All",

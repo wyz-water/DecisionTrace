@@ -588,6 +588,9 @@ export default {
   "challenges.stale": "挑战列表已变化 —— 请复核更新后的条目再试。",
 
   "deliberation.eyebrow": "决策",
+  "deliberation.back": "返回",
+  "deliberation.argumentCount": "{count} 条论点",
+  "deliberation.freeStandingCard": "未关联的担忧",
   "deliberation.title": "审议",
   "deliberation.subtitle": "追踪中的全部论点——谁支持什么、谁反对什么、哪些反对意见仍然成立。尚未关联到决策的自由论点也保留在这里，不会丢失。",
   "deliberation.filterAll": "全部",
