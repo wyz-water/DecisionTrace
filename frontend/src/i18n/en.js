@@ -260,6 +260,12 @@ export default {
   "decisions.noDecisionEdges": "No decision-level dependencies recorded yet.",
 
   "nav.chains": "Decision chains",
+  "nav.execute": "Execution",
+
+  "execute.eyebrow": "EXECUTE",
+  "execute.title": "Execution",
+  "execute.subtitle": "Approved chains and their tasks, in execution order — with AI checks on cycles, blockers and ordering.",
+  "execute.none": "No approved chains yet — the supervisor approves a chain first, then tasks appear here.",
   "nav.group.teacher": "SUPERVISOR",
   "nav.teacher": "Teacher dashboard",
 

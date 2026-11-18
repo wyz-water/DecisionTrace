@@ -3,6 +3,7 @@ import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import ChainPanel from "./components/ChainPanel.jsx";
+import ExecutePanel from "./components/ExecutePanel.jsx";
 import TeacherDashboard from "./components/TeacherDashboard.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import LanguageToggle from "./components/LanguageToggle.jsx";
@@ -1958,6 +1959,10 @@ function App() {
         )}
 
         {view === "teacher" && <TeacherDashboard />}
+
+        {view === "execute" && (
+          <ExecutePanel projectId={projectId} />
+        )}
 
         {view === "decisions" && (
           <div className="dashboard-grid">
