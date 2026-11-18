@@ -22,6 +22,7 @@ from app.schemas.chain import (
     TeacherAction,
 )
 from app.schemas.execution import (
+    ExecutionEdge,
     ExecutionResponse,
     ExecutionTask,
     ExecutionTaskCreate,
@@ -505,5 +506,13 @@ def get_chain_execution(
         "teacher_status": chain.teacher_status,
         "has_cycles": has_cycles,
         "tasks": task_views,
+        "edges": [
+            ExecutionEdge(
+                predecessor_commitment_id=edge.predecessor_commitment_id,
+                successor_commitment_id=edge.successor_commitment_id,
+                dependency_type=edge.dependency_type,
+            )
+            for edge in edges
+        ],
         "checks": checks,
     }

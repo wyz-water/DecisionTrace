@@ -260,7 +260,12 @@ export default {
   "decisions.noDecisionEdges": "No decision-level dependencies recorded yet.",
 
   "nav.chains": "Decision chains",
+  "nav.group.execute": "EXECUTE",
   "nav.execute": "Execution",
+
+  "execute.sectionTasks": "Tasks & commitments",
+  "execute.sectionGraph": "Execution order",
+  "execute.sectionProblems": "Problems",
 
   "execute.eyebrow": "EXECUTE",
   "execute.title": "Execution",
@@ -296,6 +301,7 @@ export default {
   "execution.ownerPlaceholder": "Who does it",
   "execution.descriptionPlaceholder": "What to do",
   "execution.add": "Add task",
+  "execution.noProblems": "No problems — the execution order holds.",
 
   "candidates.reviewMine": "Review mine:",
 

@@ -257,7 +257,12 @@ export default {
   "decisions.noDecisionEdges": "暂无决策间依赖。",
 
   "nav.chains": "决策链",
+  "nav.group.execute": "执行",
   "nav.execute": "执行",
+
+  "execute.sectionTasks": "划分任务承诺",
+  "execute.sectionGraph": "拓扑排序图",
+  "execute.sectionProblems": "问题",
 
   "execute.eyebrow": "执行",
   "execute.title": "执行",
@@ -293,6 +298,7 @@ export default {
   "execution.ownerPlaceholder": "谁来做",
   "execution.descriptionPlaceholder": "做什么",
   "execution.add": "添加任务",
+  "execution.noProblems": "没有问题 —— 执行顺序成立。",
 
   "candidates.reviewMine": "只看我的:",
 

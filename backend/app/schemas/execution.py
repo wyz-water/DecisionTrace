@@ -27,9 +27,16 @@ class ExecutionCheck(BaseModel):
     message: str
 
 
+class ExecutionEdge(BaseModel):
+    predecessor_commitment_id: int
+    successor_commitment_id: int
+    dependency_type: str
+
+
 class ExecutionResponse(BaseModel):
     chain_id: int
     teacher_status: str | None
     has_cycles: bool
     tasks: list[ExecutionTask]
+    edges: list[ExecutionEdge]
     checks: list[ExecutionCheck]
