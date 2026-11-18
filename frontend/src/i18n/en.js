@@ -584,6 +584,7 @@ export default {
   "candidates.field.claim": "Claim",
   "candidates.field.author": "Author",
   "candidates.field.targetTitle": "Target decision",
+  "candidates.field.decidedBy": "Decided by",
   "candidates.failedSave": "Failed to save candidate",
   "candidates.failedConfirm": "Failed to confirm candidate",
   "candidates.cycleConfirm": "Confirming this dependency would create a circular plan ({predecessor} → {successor}). Remove an existing link first.",

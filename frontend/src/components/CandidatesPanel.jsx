@@ -7,60 +7,29 @@ import { personColor } from "../personColors";
 
 const API_URL = "http://127.0.0.1:8000";
 
-// Extraction confidence at or above this score is pre-selected for
-// batch review (mirrors HIGH_CONFIDENCE on the backend). Selection is
-// still a human act: nothing is ever auto-confirmed (A2).
-const HIGH_CONFIDENCE = 0.7;
-
 function backendDetail(data) {
   return typeof data.detail === "string"
     ? data.detail
     : data.detail?.message;
 }
 
-/**
- * Constraint brief (refactoring-ui, Workflow B):
- *   primary   = "Confirm" (the one filled button on a pending card; it is
- *               the only action that creates an authoritative record)
- *   secondary = "Edit" and the source excerpt that justifies the record
- *   tertiary  = "Reject", the review-note field, and both pagers
- * The two queues ("Pending review", "Reviewed") are separate paginated
- * lists: confirming an item moves it from one to the other, and paging
- * one queue must not move the other.
- */
 function candidateFields(candidate) {
   if (candidate.candidate_type === "DECISION") {
     return [
       { key: "title", labelKey: "candidates.field.title" },
       { key: "rationale", labelKey: "candidates.field.rationale" },
+      { key: "decided_by", labelKey: "candidates.field.decidedBy" },
     ];
   }
 
-  if (candidate.candidate_type === "COMMITMENT") {
-    return [
-      { key: "owner", labelKey: "candidates.field.owner" },
-      { key: "description", labelKey: "candidates.field.description" },
-      { key: "due_date", labelKey: "candidates.field.dueDate" },
-      { key: "due_text", labelKey: "candidates.field.dueText" },
-      { key: "decision_title", labelKey: "candidates.field.decisionTitle" },
-    ];
-  }
-
-  if (candidate.candidate_type === "ARGUMENT") {
-    return [
-      { key: "stance", labelKey: "candidates.field.stance" },
-      { key: "claim", labelKey: "candidates.field.claim" },
-      { key: "author", labelKey: "candidates.field.author" },
-      { key: "target_title", labelKey: "candidates.field.targetTitle" },
-    ];
-  }
-
-  return [
-    { key: "predecessor_owner", labelKey: "candidates.field.predecessor" },
-    { key: "successor_owner", labelKey: "candidates.field.successor" },
-  ];
+  return [];
 }
 
+/**
+ * The review queue: extracted decision candidates, color-coded by
+ * their maker, with a per-person filter ("review mine"). Each maker
+ * confirms their own decisions — the only gate is the human.
+ */
 export default function CandidatesPanel({
   pending,
   reviewed,
@@ -68,19 +37,13 @@ export default function CandidatesPanel({
   projectId,
   refreshKey = 0,
 }) {
-  const { t, te, formatDate } = useI18n();
+  const { t, te } = useI18n();
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [busyId, setBusyId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectComment, setRejectComment] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [prereqFor, setPrereqFor] = useState(null);
-  const [prereqData, setPrereqData] = useState(null);
-  const [selected, setSelected] = useState(() => new Set());
-  const [batchBusy, setBatchBusy] = useState(false);
-  const [challengeState, setChallengeState] = useState(null);
   const [makerFilter, setMakerFilter] = useState(null);
   const [makers, setMakers] = useState([]);
   const [mine, setMine] = useState(null);
@@ -98,9 +61,6 @@ export default function CandidatesPanel({
     )
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        if (cancelled && !data) {
-          return;
-        }
         if (cancelled) {
           return;
         }
@@ -197,71 +157,7 @@ export default function CandidatesPanel({
     }
   }
 
-  function scrollToCard(candidateId) {
-    document
-      .getElementById(`candidate-${candidateId}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  async function loadPrerequisites(dependency) {
-    setPrereqFor(dependency.id);
-    setPrereqData({ loading: true, rows: [], error: "" });
-
-    try {
-      const response = await fetch(
-        `${API_URL}/candidates?project_id=${dependency.project_id}` +
-          `&status=PENDING,CONFIRMED&limit=100&offset=0`
-      );
-
-      if (!response.ok) {
-        throw new Error(t("candidates.prereqLoad"));
-      }
-
-      const data = await response.json();
-      const items = data.items ?? [];
-
-      const needed = [
-        { role: "predecessor", owner: dependency.payload.predecessor_owner },
-        { role: "successor", owner: dependency.payload.successor_owner },
-      ];
-
-      const rows = needed.map(({ role, owner }) => {
-        const key = String(owner ?? "").trim().toLowerCase();
-
-        const matches = items.filter(
-          (item) =>
-            item.candidate_type === "COMMITMENT" &&
-            String(item.payload?.owner ?? "").trim().toLowerCase() === key
-        );
-
-        return {
-          role,
-          owner,
-          pending: matches.filter((item) => item.status === "PENDING"),
-          confirmed: matches.some((item) => item.status === "CONFIRMED"),
-        };
-      });
-
-      setPrereqData({ loading: false, rows, error: "" });
-    } catch (err) {
-      setPrereqData({
-        loading: false,
-        rows: [],
-        error: te(err.message) || t("candidates.prereqLoad"),
-      });
-    }
-  }
-
-  function togglePrerequisites(dependency) {
-    if (prereqFor === dependency.id) {
-      setPrereqFor(null);
-      return;
-    }
-
-    loadPrerequisites(dependency);
-  }
-
-  async function confirmPlain(candidate) {
+  async function confirm(candidate) {
     setBusyId(candidate.id);
     setError("");
 
@@ -273,20 +169,6 @@ export default function CandidatesPanel({
 
       if (!response.ok) {
         const data = await response.json();
-
-        if (data.detail?.code === "CYCLE_DETECTED") {
-          throw new Error(
-            t("candidates.cycleConfirm", {
-              predecessor:
-                data.detail.attempted?.predecessor_owner ?? "?",
-              successor: data.detail.attempted?.successor_owner ?? "?",
-            })
-          );
-        }
-
-        // The confirm endpoint answers 409 with a structured detail
-        // (cycle rejection carries code/message/hops), unlike the plain
-        // strings the edit endpoints return.
         throw new Error(
           te(backendDetail(data)) || t("candidates.failedConfirm")
         );
@@ -295,196 +177,8 @@ export default function CandidatesPanel({
       await reload();
     } catch (err) {
       setError(te(err.message) || t("candidates.failedConfirm"));
-
-      // A dependency cannot be confirmed before the commitments it links
-      // exist. When that happens, open the prerequisite list right where
-      // the user is standing instead of leaving them with a bare error.
-      if (
-        candidate.candidate_type === "DEPENDENCY" &&
-        /not found/i.test(err.message)
-      ) {
-        await loadPrerequisites(candidate);
-        scrollToCard(candidate.id);
-      }
     } finally {
       setBusyId(null);
-    }
-  }
-
-  /**
-   * The decision pre-check gate: confirming a decision first drafts the
-   * counter-considerations nobody addressed. Each one needs a reason;
-   * the resolutions travel with the confirm and become the decision's
-   * deliberation record. Candidates of other types confirm directly.
-   */
-  async function confirm(candidate) {
-    if (candidate.candidate_type !== "DECISION") {
-      await confirmPlain(candidate);
-      return;
-    }
-
-    setError("");
-    setChallengeState({
-      candidateId: candidate.id,
-      challenges: [],
-      reasons: {},
-      loading: true,
-      busy: false,
-    });
-
-    try {
-      const response = await fetch(
-        `${API_URL}/candidates/${candidate.id}/challenges`
-      );
-
-      if (!response.ok) {
-        throw new Error(t("challenges.failedLoad"));
-      }
-
-      const data = await response.json();
-
-      if (data.total === 0) {
-        setChallengeState(null);
-        await confirmPlain(candidate);
-        return;
-      }
-
-      setChallengeState({
-        candidateId: candidate.id,
-        challenges: data.challenges,
-        reasons: {},
-        loading: false,
-        busy: false,
-      });
-    } catch (err) {
-      setError(te(err.message) || t("challenges.failedLoad"));
-      setChallengeState(null);
-    }
-  }
-
-  function setChallengeReason(challengeId, value) {
-    setChallengeState((current) =>
-      current
-        ? {
-            ...current,
-            reasons: { ...current.reasons, [challengeId]: value },
-          }
-        : current
-    );
-  }
-
-  async function confirmWithResolutions(candidate) {
-    setChallengeState((current) => current && { ...current, busy: true });
-    setError("");
-
-    try {
-      const response = await fetch(
-        `${API_URL}/candidates/${candidate.id}/confirm`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            challenge_resolutions: challengeState.challenges.map(
-              (challenge) => ({
-                challenge_id: challenge.id,
-                resolved_reason:
-                  challengeState.reasons[challenge.id]?.trim() ?? "",
-              })
-            ),
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-
-        // The drafts are recomputed at confirm time: if the list moved
-        // under us (e.g. a new objection landed), show the fresh list
-        // and let the human resolve it.
-        if (data.detail?.code === "CHALLENGES_UNRESOLVED") {
-          const freshResponse = await fetch(
-            `${API_URL}/candidates/${candidate.id}/challenges`
-          );
-
-          if (freshResponse.ok) {
-            const fresh = await freshResponse.json();
-            setChallengeState({
-              candidateId: candidate.id,
-              challenges: fresh.challenges,
-              reasons: {},
-              loading: false,
-              busy: false,
-            });
-          }
-
-          throw new Error(t("challenges.stale"));
-        }
-
-        throw new Error(
-          te(backendDetail(data)) || t("challenges.failedConfirm")
-        );
-      }
-
-      setChallengeState(null);
-      await reload();
-    } catch (err) {
-      setError(te(err.message) || t("challenges.failedConfirm"));
-    }
-  }
-
-  function toggleSelect(candidateId) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(candidateId)) {
-        next.delete(candidateId);
-      } else {
-        next.add(candidateId);
-      }
-      return next;
-    });
-  }
-
-  async function confirmSelected() {
-    setBatchBusy(true);
-    setError("");
-    setNotice("");
-
-    try {
-      const response = await fetch(`${API_URL}/candidates/confirm-batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidate_ids: [...selected] }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(
-          te(backendDetail(data)) || t("candidates.failedBatch")
-        );
-      }
-
-      const result = await response.json();
-      setSelected(new Set());
-
-      if (result.failed.length > 0) {
-        const details = result.failed
-          .map((item) => `#${item.candidate_id}: ${item.detail}`)
-          .join("; ");
-        setError(t("candidates.batchFailed", { details }));
-      } else {
-        setNotice(
-          t("candidates.batchResult", {
-            confirmed: result.confirmed.length,
-            skipped: result.skipped_duplicates.length,
-          })
-        );
-      }
-
-      await reload();
-    } catch (err) {
-      setError(te(err.message) || t("candidates.failedBatch"));
-    } finally {
-      setBatchBusy(false);
     }
   }
 
@@ -550,19 +244,6 @@ export default function CandidatesPanel({
         }
       >
         <div className="candidate-top">
-          {candidate.status === "PENDING" && !editing && (
-            <input
-              type="checkbox"
-              className="candidate-select"
-              checked={selected.has(candidate.id)}
-              disabled={batchBusy}
-              onChange={() => toggleSelect(candidate.id)}
-              aria-label={t("candidates.selectCandidate", {
-                id: candidate.id,
-              })}
-            />
-          )}
-
           <span
             className={`type-badge type-${candidate.candidate_type.toLowerCase()}`}
           >
@@ -574,8 +255,8 @@ export default function CandidatesPanel({
               <span
                 className="maker-chip"
                 style={{
-                  borderColor: personColor(candidate.payload.decided_by),
-                  color: personColor(candidate.payload.decided_by),
+                  borderColor: makerColor,
+                  color: makerColor,
                 }}
               >
                 {candidate.payload.decided_by}
@@ -583,19 +264,6 @@ export default function CandidatesPanel({
             )}
 
           <StatusBadge status={candidate.status} />
-
-          {candidate.confidence != null && (
-            <span
-              className={`confidence-badge ${
-                candidate.confidence >= HIGH_CONFIDENCE ? "is-high" : ""
-              }`}
-              title={t("candidates.confidenceTitle", {
-                value: Math.round(candidate.confidence * 100),
-              })}
-            >
-              {Math.round(candidate.confidence * 100)}%
-            </span>
-          )}
 
           {candidate.duplicate_of && (
             <span className="dup-badge">
@@ -644,94 +312,6 @@ export default function CandidatesPanel({
           </p>
         )}
 
-        {challengeState?.candidateId === candidate.id && (
-          <div className="challenge-panel">
-            <p className="eyebrow">{t("challenges.eyebrow")}</p>
-            <p className="challenge-intro">{t("challenges.intro")}</p>
-
-            {challengeState.loading && (
-              <p className="muted">{t("common.loading")}</p>
-            )}
-
-            {challengeState.challenges.map((challenge) => (
-              <div className="challenge-item" key={challenge.id}>
-                <span className="challenge-kind">
-                  {t(
-                    `challenges.kind.${challenge.kind}`,
-                    {},
-                    challenge.kind
-                  )}
-                </span>
-
-                <p className="challenge-claim">{challenge.claim}</p>
-
-                {challenge.source_text && (
-                  <p className="argument-source">
-                    “{challenge.source_text}”
-                  </p>
-                )}
-
-                {challenge.citation && (
-                  <span className="challenge-citation">
-                    {challenge.citation}
-                  </span>
-                )}
-
-                <input
-                  type="text"
-                  placeholder={t("challenges.reasonPlaceholder")}
-                  value={challengeState.reasons[challenge.id] ?? ""}
-                  disabled={challengeState.busy}
-                  onChange={(event) =>
-                    setChallengeReason(challenge.id, event.target.value)
-                  }
-                />
-              </div>
-            ))}
-
-            {(() => {
-              const missing = challengeState.challenges.filter(
-                (challenge) =>
-                  !(challengeState.reasons[challenge.id] ?? "").trim()
-              ).length;
-
-              return (
-                <>
-                  {missing > 0 && (
-                    <p className="challenge-remaining">
-                      {t("challenges.remaining", { count: missing })}
-                    </p>
-                  )}
-
-                  <div className="challenge-actions">
-                    <button
-                      className="primary-button"
-                      disabled={
-                        missing > 0 ||
-                        challengeState.loading ||
-                        challengeState.busy
-                      }
-                      onClick={() => confirmWithResolutions(candidate)}
-                    >
-                      {challengeState.busy
-                        ? t("common.working")
-                        : t("challenges.confirm")}
-                    </button>
-
-                    <button
-                      className="secondary-button"
-                      disabled={challengeState.busy}
-                      onClick={() => setChallengeState(null)}
-                    >
-                      {t("challenges.cancel")}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
-
         {candidate.status === "PENDING" && (
           <div className="candidate-actions">
             {editing ? (
@@ -762,11 +342,7 @@ export default function CandidatesPanel({
 
             <button
               className="primary-button confirm-button"
-              disabled={
-                busyId === candidate.id ||
-                editing ||
-                challengeState?.candidateId === candidate.id
-              }
+              disabled={busyId === candidate.id || editing}
               onClick={() => confirm(candidate)}
             >
               {busyId === candidate.id
@@ -802,109 +378,6 @@ export default function CandidatesPanel({
             )}
           </div>
         )}
-
-        {candidate.status === "PENDING" &&
-          candidate.candidate_type === "DEPENDENCY" && (
-            <div className="prereq-box">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => togglePrerequisites(candidate)}
-              >
-                {prereqFor === candidate.id
-                  ? t("candidates.hidePrereq")
-                  : t("candidates.reviewPrereq")}
-              </button>
-
-              {prereqFor === candidate.id && prereqData && (
-                <div className="prereq-panel">
-                  <p className="prereq-hint">{t("candidates.prereqHint")}</p>
-
-                  {prereqData.loading && (
-                    <p className="muted">{t("common.loading")}</p>
-                  )}
-                  {prereqData.error && (
-                    <p className="pipeline-error">{te(prereqData.error)}</p>
-                  )}
-
-                  {prereqData.rows.map((row) => (
-                    <div className="prereq-row" key={row.role}>
-                      <div className="prereq-owner">
-                        <strong>{row.owner}</strong>
-                        <span className="prereq-role">
-                          {t(`candidates.prereqRole.${row.role}`, {}, row.role)}
-                        </span>
-                      </div>
-
-                      <div className="prereq-items">
-                        {row.pending.length > 0 ? (
-                          row.pending.map((item) => (
-                            <div className="prereq-item" key={item.id}>
-                              <div>
-                                <span className="prereq-state state-pending">
-                                  {t("candidates.prereqPending")}
-                                </span>
-                                <strong>{item.payload.description}</strong>
-                                {item.payload.due_date && (
-                                  <span className="prereq-due">
-                                    {t("candidates.prereqDue", {
-                                      date: formatDate(item.payload.due_date),
-                                    })}
-                                  </span>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                className="primary-button"
-                                disabled={busyId === item.id}
-                                onClick={async () => {
-                                  await confirm(item);
-                                  if (prereqFor === candidate.id) {
-                                    loadPrerequisites(candidate);
-                                  }
-                                }}
-                              >
-                                {busyId === item.id
-                                  ? t("common.working")
-                                  : t("common.confirm")}
-                              </button>
-                            </div>
-                          ))
-                        ) : row.confirmed ? (
-                          <div className="prereq-item">
-                            <div>
-                              <span className="prereq-state state-ok">
-                                {t("candidates.prereqConfirmed")}
-                              </span>
-                              <span>
-                                {t("candidates.prereqExists", {
-                                  owner: row.owner,
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="prereq-item">
-                            <div>
-                              <span className="prereq-state state-missing">
-                                {t("candidates.prereqMissing")}
-                              </span>
-                              <span>
-                                {t("candidates.prereqMissingHint", {
-                                  owner: row.owner,
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
       </div>
     );
   }
@@ -917,7 +390,6 @@ export default function CandidatesPanel({
       <h2>{t("candidates.title")}</h2>
 
       {error && <p className="pipeline-error">{te(error)}</p>}
-      {notice && <p className="pipeline-notice">{te(notice)}</p>}
 
       {pending.total > 0 && (
         <>
@@ -925,113 +397,35 @@ export default function CandidatesPanel({
             {t("candidates.pending", { count: pending.total })}
           </h3>
 
-          {(() => {
-            const pageIds = pending.items.map((item) => item.id);
-            const pageSelectedCount = pageIds.filter((id) =>
-              selected.has(id)
-            ).length;
-            const pageAllSelected =
-              pageIds.length > 0 && pageSelectedCount === pageIds.length;
+          {makers.length > 0 && (
+            <div className="maker-filter-row">
+              <span className="maker-filter-label">
+                {t("candidates.reviewMine")}
+              </span>
 
-            return (
-              <div className="batch-bar">
-                <label className="batch-select-all">
-                  <input
-                    type="checkbox"
-                    checked={pageAllSelected}
-                    disabled={batchBusy || pending.loading}
-                    onChange={() =>
-                      setSelected((current) => {
-                        const next = new Set(current);
-                        if (pageAllSelected) {
-                          pageIds.forEach((id) => next.delete(id));
-                        } else {
-                          pageIds.forEach((id) => next.add(id));
-                        }
-                        return next;
-                      })
-                    }
-                  />
-                  {t("candidates.selectAll")}
-                </label>
-
+              {makers.map((maker) => (
                 <button
                   type="button"
-                  className="secondary-button"
-                  disabled={batchBusy || pending.loading}
+                  key={maker}
+                  className={`maker-chip maker-chip-button ${
+                    makerFilter === maker ? "is-active" : ""
+                  }`}
+                  style={{
+                    borderColor: personColor(maker),
+                    color: makerFilter === maker ? "#ffffff" : personColor(maker),
+                    background: makerFilter === maker ? personColor(maker) : "transparent",
+                  }}
                   onClick={() =>
-                    setSelected((current) => {
-                      const next = new Set(current);
-                      pageIds.forEach((id) => {
-                        const item = pending.items.find(
-                          (entry) => entry.id === id
-                        );
-                        if (
-                          item &&
-                          item.confidence != null &&
-                          item.confidence >= HIGH_CONFIDENCE
-                        ) {
-                          next.add(id);
-                        }
-                      });
-                      return next;
-                    })
+                    setMakerFilter(
+                      makerFilter === maker ? null : maker
+                    )
                   }
                 >
-                  {t("candidates.selectHighConfidence")}
+                  {maker}
                 </button>
-
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={pageSelectedCount === 0 || batchBusy}
-                  onClick={confirmSelected}
-                >
-                  {batchBusy
-                    ? t("common.working")
-                    : t("candidates.confirmSelected", {
-                        count: pageSelectedCount,
-                      })}
-                </button>
-              </div>
-            );
-          })()}
-
-          {(() => {
-            if (makers.length > 0) {
-              return (
-                <div className="maker-filter-row">
-                  <span className="maker-filter-label">
-                    {t("candidates.reviewMine")}
-                  </span>
-
-                  {makers.map((maker) => (
-                    <button
-                      type="button"
-                      key={maker}
-                      className={`maker-chip maker-chip-button ${
-                        makerFilter === maker ? "is-active" : ""
-                      }`}
-                      style={{
-                        borderColor: personColor(maker),
-                        color: makerFilter === maker ? "#ffffff" : personColor(maker),
-                        background: makerFilter === maker ? personColor(maker) : "transparent",
-                      }}
-                      onClick={() =>
-                        setMakerFilter(
-                          makerFilter === maker ? null : maker
-                        )
-                      }
-                    >
-                      {maker}
-                    </button>
-                  ))}
-                </div>
-              );
-            }
-
-            return null;
-          })()}
+              ))}
+            </div>
+          )}
 
           <div
             className={
@@ -1046,14 +440,16 @@ export default function CandidatesPanel({
             )}
           </div>
 
-          <Pagination
-            total={pending.total}
-            limit={pending.limit}
-            offset={pending.offset}
-            onChange={pending.setOffset}
-            label={t("candidates.pendingLabel")}
-            busy={pending.loading}
-          />
+          {!makerFilter && (
+            <Pagination
+              total={pending.total}
+              limit={pending.limit}
+              offset={pending.offset}
+              onChange={pending.setOffset}
+              label={t("candidates.pendingLabel")}
+              busy={pending.loading}
+            />
+          )}
         </>
       )}
 

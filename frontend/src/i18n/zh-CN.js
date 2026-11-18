@@ -575,6 +575,7 @@ export default {
   "candidates.field.dueDate": "截止日期",
   "candidates.field.dueText": "原话日期",
   "candidates.field.decisionTitle": "关联决策",
+  "candidates.field.decidedBy": "决策人",
   "candidates.field.stance": "立场",
   "candidates.field.claim": "主张",
   "candidates.field.author": "提出者",

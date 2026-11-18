@@ -6,14 +6,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models.argument import Argument  # noqa: F401 - registers table
 from app.models.candidate import Candidate  # noqa: F401 - registers table
 from app.models.chain import Chain
 from app.models.chain_comment import ChainComment
 from app.models.commitment import Commitment  # noqa: F401
 from app.models.commitment_history import CommitmentHistory  # noqa: F401
 from app.models.decision import Decision
-from app.models.decision_dependency import DecisionDependency  # noqa: F401
 from app.models.decision_history import DecisionHistory  # noqa: F401
 from app.models.dependency import Dependency  # noqa: F401
 from app.models.discussion import Discussion  # noqa: F401 - registers table
