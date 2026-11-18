@@ -10,7 +10,7 @@ const API_URL = "http://127.0.0.1:8000";
  * AI checks, status updates). Students operate; this is where the
  * third module lives.
  */
-export default function ExecutePanel({ projectId }) {
+export default function ExecutePanel({ projectId, section = null }) {
   const { t, te } = useI18n();
   const [chains, setChains] = useState([]);
   const [error, setError] = useState("");
@@ -63,7 +63,11 @@ export default function ExecutePanel({ projectId }) {
             </div>
 
             <div className="decision-subsection">
-              <ExecutionBoard chainId={chain.id} readOnly={false} />
+              <ExecutionBoard
+                chainId={chain.id}
+                readOnly={false}
+                section={section}
+              />
             </div>
           </div>
         ))

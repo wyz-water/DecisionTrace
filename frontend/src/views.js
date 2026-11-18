@@ -9,7 +9,10 @@
 export const VIEW_GROUPS = [
   {
     labelKey: "nav.group.teacher",
-    views: [{ id: "teacher", labelKey: "nav.teacher" }],
+    views: [
+      { id: "teacher-awaiting", labelKey: "teacher.awaiting" },
+      { id: "teacher-progress", labelKey: "teacher.inProgress" },
+    ],
   },
   {
     labelKey: "nav.group.decide",
@@ -21,7 +24,11 @@ export const VIEW_GROUPS = [
   },
   {
     labelKey: "nav.group.execute",
-    views: [{ id: "execute", labelKey: "nav.execute" }],
+    views: [
+      { id: "execute-tasks", labelKey: "execute.sectionTasks" },
+      { id: "execute-graph", labelKey: "execute.sectionGraph" },
+      { id: "execute-problems", labelKey: "execute.sectionProblems" },
+    ],
   },
 ];
 

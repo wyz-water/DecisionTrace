@@ -12,7 +12,7 @@ const API_URL = "http://127.0.0.1:8000";
  * and decides: approve, reject, or hold. Everything flows back to the
  * student side through the chain itself.
  */
-export default function TeacherDashboard() {
+export default function TeacherDashboard({ section = "awaiting" }) {
   const { t, te, formatDateTime } = useI18n();
 
   const [groups, setGroups] = useState([]);
@@ -317,6 +317,36 @@ export default function TeacherDashboard() {
                 const approved = chains.filter(
                   (chain) => chain.teacher_status === "APPROVED"
                 );
+
+                if (section === "progress") {
+                  return (
+                    <div className="decision-subsection">
+                      <div className="decision-subheading">
+                        <span>{t("teacher.inProgress")}</span>
+                        <span className="subheading-note">
+                          {approved.length}
+                        </span>
+                      </div>
+
+                      {approved.length === 0 ? (
+                        <p className="muted">{t("teacher.noInProgress")}</p>
+                      ) : (
+                        approved.map((chain) => (
+                          <div className="teacher-approved" key={chain.id}>
+                            <div className="teacher-group-head">
+                              <h3>#{chain.id} {chain.title}</h3>
+                            </div>
+
+                            <ExecutionBoard
+                              chainId={chain.id}
+                              readOnly
+                            />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                }
 
                 return (
                   <>

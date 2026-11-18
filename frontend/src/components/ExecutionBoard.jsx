@@ -83,7 +83,11 @@ function computeLayout(graph) {
  * checks (cycles, blockers, ordering violations) in between.
  * Students operate it; the supervisor sees the same board read-only.
  */
-export default function ExecutionBoard({ chainId, readOnly = false }) {
+export default function ExecutionBoard({
+  chainId,
+  readOnly = false,
+  section = null,
+}) {
   const { t, te } = useI18n();
 
   const [execution, setExecution] = useState(null);
@@ -222,6 +226,7 @@ export default function ExecutionBoard({ chainId, readOnly = false }) {
     <div className="execution-board">
       {error && <p className="pipeline-error">{te(error)}</p>}
 
+      {(!section || section === "tasks") && (
       <div className="decision-subsection">
         <div className="decision-subheading">
           <span>{t("execute.sectionTasks")}</span>
@@ -362,7 +367,9 @@ export default function ExecutionBoard({ chainId, readOnly = false }) {
           </div>
         )}
       </div>
+      )}
 
+      {(!section || section === "graph") && (
       <div className="decision-subsection">
         <div className="decision-subheading">
           <span>{t("execute.sectionGraph")}</span>
@@ -465,7 +472,9 @@ export default function ExecutionBoard({ chainId, readOnly = false }) {
         </div>
         )}
       </div>
+      )}
 
+      {(!section || section === "problems") && (
       <div className="decision-subsection">
         <div className="decision-subheading">
           <span>{t("execute.sectionProblems")}</span>
@@ -486,6 +495,7 @@ export default function ExecutionBoard({ chainId, readOnly = false }) {
         </div>
       )}
       </div>
+      )}
     </div>
   );
 }

@@ -1958,10 +1958,24 @@ function App() {
           />
         )}
 
-        {view === "teacher" && <TeacherDashboard />}
+        {view === "teacher-awaiting" && (
+          <TeacherDashboard section="awaiting" />
+        )}
 
-        {view === "execute" && (
-          <ExecutePanel projectId={projectId} />
+        {view === "teacher-progress" && (
+          <TeacherDashboard section="progress" />
+        )}
+
+        {view === "execute-tasks" && (
+          <ExecutePanel projectId={projectId} section="tasks" />
+        )}
+
+        {view === "execute-graph" && (
+          <ExecutePanel projectId={projectId} section="graph" />
+        )}
+
+        {view === "execute-problems" && (
+          <ExecutePanel projectId={projectId} section="problems" />
         )}
 
         {view === "decisions" && (
