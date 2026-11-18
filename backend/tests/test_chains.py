@@ -26,11 +26,13 @@ from app.routes.chains import (
     get_chain,
     get_chains,
     submit_chain,
+    teacher_action,
 )
 from app.schemas.chain import (
     ChainCommentCreate,
     ChainCreate,
     ChainNodeCreate,
+    TeacherAction,
 )
 
 
@@ -225,6 +227,108 @@ class ChainTests(unittest.TestCase):
 
         self.assertEqual(second.teacher_status, "PENDING")
         self.assertGreaterEqual(second.submitted_at, first.submitted_at)
+
+    def test_teacher_action_sets_verdict_and_annotation(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+        submit_chain(chain.id, db=self.db)
+
+        detail = teacher_action(
+            chain.id,
+            TeacherAction(
+                status="APPROVED",
+                note="good reasoning, proceed",
+            ),
+            db=self.db,
+        )
+
+        self.assertEqual(detail.teacher_status, "APPROVED")
+        self.assertEqual(len(detail.annotations), 1)
+        self.assertEqual(
+            detail.annotations[0].text, "good reasoning, proceed"
+        )
+
+    def test_annotation_alone_is_allowed(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+        submit_chain(chain.id, db=self.db)
+
+        detail = teacher_action(
+            chain.id,
+            TeacherAction(note="please add a cost comparison"),
+            db=self.db,
+        )
+
+        self.assertEqual(detail.teacher_status, "PENDING")
+        self.assertEqual(len(detail.annotations), 1)
+
+    def test_invalid_verdict_is_rejected(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+        submit_chain(chain.id, db=self.db)
+
+        with self.assertRaises(HTTPException) as raised:
+            teacher_action(
+                chain.id,
+                TeacherAction(status="MAYBE"),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_empty_action_is_rejected(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            teacher_action(
+                chain.id,
+                TeacherAction(),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_submitted_only_filter(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+
+        self.assertEqual(
+            get_chains(project_id=self.project.id, submitted_only=True, db=self.db),
+            [],
+        )
+
+        submit_chain(chain.id, db=self.db)
+
+        submitted = get_chains(
+            project_id=self.project.id, submitted_only=True, db=self.db
+        )
+        self.assertEqual(len(submitted), 1)
 
     def test_list_chains_reports_counts(self):
         create_chain(

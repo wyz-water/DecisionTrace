@@ -4601,3 +4601,68 @@ html[lang="zh-CN"] .severity-badge {
   border-radius: 8px;
   font-size: 13px;
 }
+
+/* ---- Teacher dashboard ------------------------------------------------ */
+
+.teacher-group {
+  margin: 14px 0;
+  padding-top: 12px;
+  border-top: 1px solid #eceef2;
+}
+
+.teacher-group-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.teacher-group-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.chain-annotations {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eceef2;
+}
+
+.annotation-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-left: 3px solid #7d3c98;
+  border-radius: 0 8px 8px 0;
+  background: #faf5ff;
+}
+
+.annotation-row p {
+  margin: 0;
+  color: #344054;
+  font-size: 12.5px;
+}
+
+.annotation-time {
+  flex: none;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.teacher-action-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eceef2;
+}
+
+.teacher-action-bar input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 13px;
+}

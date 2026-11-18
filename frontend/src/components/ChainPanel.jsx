@@ -294,6 +294,21 @@ export default function ChainPanel({ projectId, decisions }) {
           </div>
         )}
 
+        {detail.annotations?.length > 0 && (
+          <div className="chain-annotations">
+            <p className="eyebrow">{t("teacher.annotations")}</p>
+
+            {detail.annotations.map((annotation) => (
+              <div className="annotation-row" key={annotation.id}>
+                <span className="annotation-time">
+                  {formatDateTime(annotation.created_at)}
+                </span>
+                <p>{annotation.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="chain-comment-form">
           <input
             type="text"

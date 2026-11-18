@@ -5,16 +5,19 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.chain import Chain
+from app.models.chain_annotation import ChainAnnotation
 from app.models.chain_comment import ChainComment
 from app.models.decision import Decision
 from app.models.project import Project
 from app.schemas.chain import (
+    ChainAnnotationResponse,
     ChainCommentCreate,
     ChainCommentResponse,
     ChainCreate,
     ChainDetail,
     ChainNodeCreate,
     ChainResponse,
+    TeacherAction,
 )
 from app.schemas.decision import DecisionResponse
 
@@ -41,6 +44,9 @@ def _chain_response(db, chain):
     )
 
 
+TEACHER_STATUSES = {"APPROVED", "REJECTED", "HELD"}
+
+
 def _chain_detail(db, chain):
     nodes = db.query(Decision).filter(
         Decision.chain_id == chain.id
@@ -49,6 +55,12 @@ def _chain_detail(db, chain):
     comments = db.query(ChainComment).filter(
         ChainComment.chain_id == chain.id
     ).order_by(ChainComment.created_at.asc(), ChainComment.id.asc()).all()
+
+    annotations = db.query(ChainAnnotation).filter(
+        ChainAnnotation.chain_id == chain.id
+    ).order_by(
+        ChainAnnotation.created_at.asc(), ChainAnnotation.id.asc()
+    ).all()
 
     return ChainDetail(
         id=chain.id,
@@ -59,6 +71,7 @@ def _chain_detail(db, chain):
         created_at=chain.created_at,
         nodes=nodes,
         comments=comments,
+        annotations=annotations,
     )
 
 
@@ -114,12 +127,16 @@ def create_chain(
 @router.get("", response_model=list[ChainResponse])
 def get_chains(
     project_id: int | None = None,
+    submitted_only: bool = False,
     db: Session = Depends(get_db)
 ):
     query = db.query(Chain)
 
     if project_id is not None:
         query = query.filter(Chain.project_id == project_id)
+
+    if submitted_only:
+        query = query.filter(Chain.submitted_at.isnot(None))
 
     chains = query.order_by(
         Chain.created_at.asc(), Chain.id.asc()
@@ -245,6 +262,49 @@ def submit_chain(
 
     chain.submitted_at = datetime.now(timezone.utc)
     chain.teacher_status = "PENDING"
+
+    db.commit()
+    db.refresh(chain)
+
+    return _chain_detail(db, chain)
+
+
+@router.post(
+    "/{chain_id}/teacher-action",
+    response_model=ChainDetail
+)
+def teacher_action(
+    chain_id: int,
+    request: TeacherAction,
+    db: Session = Depends(get_db)
+):
+    """The supervisor's verdict and/or annotation. A note may stand
+    alone (pure guidance) or accompany any verdict; a rejection never
+    deletes the chain — it becomes part of its history."""
+    chain = db.query(Chain).filter(Chain.id == chain_id).first()
+
+    if not chain:
+        raise HTTPException(status_code=404, detail="Chain not found")
+
+    status = (request.status or "").strip().upper() if request.status else None
+    note = (request.note or "").strip() or None
+
+    if status is None and note is None:
+        raise HTTPException(
+            status_code=400,
+            detail="A verdict or a note is required",
+        )
+
+    if status is not None:
+        if status not in TEACHER_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid teacher status: {status}",
+            )
+        chain.teacher_status = status
+
+    if note is not None:
+        db.add(ChainAnnotation(chain_id=chain.id, text=note))
 
     db.commit()
     db.refresh(chain)

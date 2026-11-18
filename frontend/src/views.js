@@ -17,6 +17,10 @@ export const VIEW_GROUPS = [
     views: [{ id: "overview", labelKey: "nav.overview" }],
   },
   {
+    labelKey: "nav.group.teacher",
+    views: [{ id: "teacher", labelKey: "nav.teacher" }],
+  },
+  {
     labelKey: "nav.group.decide",
     views: [
       { id: "decisions", labelKey: "nav.decisions" },

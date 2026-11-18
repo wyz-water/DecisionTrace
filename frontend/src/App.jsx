@@ -6,6 +6,7 @@ import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
 import DeliberationPanel from "./components/DeliberationPanel.jsx";
 import StakeholderPanel from "./components/StakeholderPanel.jsx";
 import ChainPanel from "./components/ChainPanel.jsx";
+import TeacherDashboard from "./components/TeacherDashboard.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import ImpactPanel from "./components/ImpactPanel.jsx";
@@ -2186,6 +2187,8 @@ function App() {
             decisions={decisions}
           />
         )}
+
+        {view === "teacher" && <TeacherDashboard />}
 
         {view === "decisions" && (
           <div className="dashboard-grid">

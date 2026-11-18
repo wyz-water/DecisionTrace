@@ -257,6 +257,23 @@ export default {
   "decisions.noDecisionEdges": "暂无决策间依赖。",
 
   "nav.chains": "决策链",
+  "nav.group.teacher": "导师",
+  "nav.teacher": "导师看板",
+
+  "teacher.eyebrow": "导师",
+  "teacher.title": "导师看板",
+  "teacher.subtitle": "各组的已提交决策链 —— 阅读、批注、做出决定。",
+  "teacher.loadFailed": "加载导师看板失败",
+  "teacher.submittedChains": "{count} 条已提交",
+  "teacher.pending": "{count} 条待处理",
+  "teacher.noGroups": "还没有小组。",
+  "teacher.noSubmitted": "还没有提交的链。",
+  "teacher.annotations": "导师批注",
+  "teacher.notePlaceholder": "批注(可选,可独立于决定)",
+  "teacher.annotateOnly": "只批注",
+  "teacher.approve": "认可",
+  "teacher.hold": "待定",
+  "teacher.reject": "否定",
 
   "candidates.reviewMine": "只看我的:",
 

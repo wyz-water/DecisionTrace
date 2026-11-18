@@ -37,6 +37,23 @@ class ChainCommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ChainAnnotationResponse(BaseModel):
+    id: int
+    chain_id: int
+    text: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TeacherAction(BaseModel):
+    """The supervisor's verdict and/or annotation. At least one of the
+    two must be given; a note may accompany any verdict, and a note
+    alone (no status) is a pure annotation."""
+    status: str | None = None  # APPROVED | REJECTED | HELD
+    note: str | None = None
+
+
 class ChainResponse(BaseModel):
     id: int
     project_id: int
@@ -57,3 +74,4 @@ class ChainDetail(BaseModel):
     created_at: datetime
     nodes: list[DecisionResponse]
     comments: list[ChainCommentResponse]
+    annotations: list[ChainAnnotationResponse]

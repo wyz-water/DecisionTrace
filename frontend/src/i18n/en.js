@@ -260,6 +260,23 @@ export default {
   "decisions.noDecisionEdges": "No decision-level dependencies recorded yet.",
 
   "nav.chains": "Decision chains",
+  "nav.group.teacher": "SUPERVISOR",
+  "nav.teacher": "Teacher dashboard",
+
+  "teacher.eyebrow": "SUPERVISOR",
+  "teacher.title": "Teacher dashboard",
+  "teacher.subtitle": "Submitted chains per group — read, annotate, decide.",
+  "teacher.loadFailed": "Failed to load the teacher dashboard",
+  "teacher.submittedChains": "{count} submitted",
+  "teacher.pending": "{count} awaiting review",
+  "teacher.noGroups": "No groups yet.",
+  "teacher.noSubmitted": "No submitted chains yet.",
+  "teacher.annotations": "Supervisor annotations",
+  "teacher.notePlaceholder": "Annotation (optional, works with or without a verdict)",
+  "teacher.annotateOnly": "Annotate only",
+  "teacher.approve": "Approve",
+  "teacher.hold": "Hold",
+  "teacher.reject": "Reject",
 
   "candidates.reviewMine": "Review mine:",
 
