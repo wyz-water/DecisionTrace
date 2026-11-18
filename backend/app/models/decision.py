@@ -55,6 +55,16 @@ class Decision(Base):
         nullable=True
     )
 
+    # The decision chain this decision is a node of (null until the
+    # chain exists). A chain groups the versions of one subject — the
+    # initial decision and its follow-ups; a reversal is just the next
+    # node of the same chain.
+    chain_id = Column(
+        Integer,
+        ForeignKey("chains.id"),
+        nullable=True
+    )
+
     # When the decision was recorded. Feeds the retrospective metrics
     # (lifespan of overturned decisions) and future staleness checks.
     created_at = Column(

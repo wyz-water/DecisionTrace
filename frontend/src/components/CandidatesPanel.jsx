@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Pagination from "./Pagination";
 import StatusBadge from "./StatusBadge";
 import { useI18n } from "../i18n";
+import { personColor } from "../personColors";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -60,7 +61,13 @@ function candidateFields(candidate) {
   ];
 }
 
-export default function CandidatesPanel({ pending, reviewed, reload }) {
+export default function CandidatesPanel({
+  pending,
+  reviewed,
+  reload,
+  projectId,
+  refreshKey = 0,
+}) {
   const { t, te, formatDate } = useI18n();
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
@@ -74,6 +81,87 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
   const [selected, setSelected] = useState(() => new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [challengeState, setChallengeState] = useState(null);
+  const [makerFilter, setMakerFilter] = useState(null);
+  const [makers, setMakers] = useState([]);
+  const [mine, setMine] = useState(null);
+
+  // The full maker list for the "review mine" chips (across pages).
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch(
+      `${API_URL}/candidates?project_id=${projectId}&status=PENDING&limit=100`
+    )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled && !data) {
+          return;
+        }
+        if (cancelled) {
+          return;
+        }
+        setMakers([
+          ...new Set(
+            (data?.items ?? [])
+              .filter(
+                (item) =>
+                  item.candidate_type === "DECISION" &&
+                  item.payload?.decided_by
+              )
+              .map((item) => item.payload.decided_by)
+          ),
+        ]);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshKey, pending.total]);
+
+  // The filtered queue when a maker chip is active.
+  useEffect(() => {
+    if (!projectId || !makerFilter) {
+      setMine(null);
+      return;
+    }
+
+    let cancelled = false;
+    setMine({ loading: true, items: [] });
+
+    fetch(
+      `${API_URL}/candidates?project_id=${projectId}&status=PENDING` +
+        `&decided_by=${encodeURIComponent(makerFilter)}&limit=50`
+    )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        const items = data?.items ?? [];
+        setMine({ loading: false, items });
+
+        // Nothing left to review for this maker: clear the filter
+        // automatically instead of leaving an empty queue.
+        if (items.length === 0) {
+          setMakerFilter(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMine({ loading: false, items: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, makerFilter, refreshKey]);
 
   function startEdit(candidate) {
     setEditingId(candidate.id);
@@ -466,6 +554,19 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
           >
             {t(`candidates.type.${candidate.candidate_type}`, {}, candidate.candidate_type)}
           </span>
+
+          {candidate.candidate_type === "DECISION" &&
+            candidate.payload?.decided_by && (
+              <span
+                className="maker-chip"
+                style={{
+                  borderColor: personColor(candidate.payload.decided_by),
+                  color: personColor(candidate.payload.decided_by),
+                }}
+              >
+                {candidate.payload.decided_by}
+              </span>
+            )}
 
           <StatusBadge status={candidate.status} />
 
@@ -882,6 +983,42 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             );
           })()}
 
+          {(() => {
+            if (makers.length > 0) {
+              return (
+                <div className="maker-filter-row">
+                  <span className="maker-filter-label">
+                    {t("candidates.reviewMine")}
+                  </span>
+
+                  {makers.map((maker) => (
+                    <button
+                      type="button"
+                      key={maker}
+                      className={`maker-chip maker-chip-button ${
+                        makerFilter === maker ? "is-active" : ""
+                      }`}
+                      style={{
+                        borderColor: personColor(maker),
+                        color: makerFilter === maker ? "#ffffff" : personColor(maker),
+                        background: makerFilter === maker ? personColor(maker) : "transparent",
+                      }}
+                      onClick={() =>
+                        setMakerFilter(
+                          makerFilter === maker ? null : maker
+                        )
+                      }
+                    >
+                      {maker}
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+
+            return null;
+          })()}
+
           <div
             className={
               pending.loading
@@ -890,7 +1027,9 @@ export default function CandidatesPanel({ pending, reviewed, reload }) {
             }
             aria-busy={pending.loading}
           >
-            {pending.items.map(renderCard)}
+            {(makerFilter ? mine?.items ?? [] : pending.items).map(
+              renderCard
+            )}
           </div>
 
           <Pagination

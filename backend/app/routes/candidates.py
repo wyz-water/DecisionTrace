@@ -199,6 +199,7 @@ def get_candidates(
     project_id: int | None = None,
     discussion_id: int | None = None,
     status: str | None = None,
+    decided_by: str | None = None,
     page: PageParams = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -231,6 +232,22 @@ def get_candidates(
     )
 
     rows, total = paginate(query, page)
+
+    # Per-person review ("review mine"): when decided_by is given, only
+    # that maker's DECISION candidates remain. Filtered in Python — the
+    # per-person queue is small and the payload is JSON.
+    if decided_by is not None:
+        key = decided_by.strip()
+
+        rows = [
+            candidate
+            for candidate in rows
+            if candidate.candidate_type == "DECISION"
+            and _field(json.loads(candidate.payload), "decided_by")
+            and _field(json.loads(candidate.payload), "decided_by").strip().lower()
+            == key.lower()
+        ]
+        total = len(rows)
 
     return page_response(
         [_serialize_candidate(db, candidate) for candidate in rows],

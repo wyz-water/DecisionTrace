@@ -23,6 +23,7 @@ from app.routes.candidates import router as candidates_router
 from app.routes.search import router as search_router
 from app.routes.snapshots import router as snapshots_router
 from app.routes.arguments import router as arguments_router
+from app.routes.chains import router as chains_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -54,6 +55,7 @@ app.include_router(candidates_router)
 app.include_router(search_router)
 app.include_router(snapshots_router)
 app.include_router(arguments_router)
+app.include_router(chains_router)
 
 
 @app.get("/")

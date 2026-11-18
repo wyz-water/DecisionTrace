@@ -6,6 +6,7 @@ import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
 import DeliberationPanel from "./components/DeliberationPanel.jsx";
 import StakeholderPanel from "./components/StakeholderPanel.jsx";
+import ChainPanel from "./components/ChainPanel.jsx";
 import CycleDialog from "./components/CycleDialog.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import ImpactPanel from "./components/ImpactPanel.jsx";
@@ -2221,6 +2222,13 @@ function App() {
           />
         )}
 
+        {view === "chains" && (
+          <ChainPanel
+            projectId={projectId}
+            decisions={decisions}
+          />
+        )}
+
         {view === "decisions" && (
           <div className="dashboard-grid">
             <section className="card decision-card">
@@ -3547,9 +3555,11 @@ function App() {
             />
 
             <CandidatesPanel
+              projectId={projectId}
               pending={pendingCandidates}
               reviewed={reviewedCandidates}
               reload={reloadData}
+              refreshKey={refreshTick}
             />
           </section>
         )}

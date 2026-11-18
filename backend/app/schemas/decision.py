@@ -35,6 +35,7 @@ class DecisionResponse(BaseModel):
     decided_by: str | None = None
     status: str
     superseded_by_decision_id: int | None = None
+    chain_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
