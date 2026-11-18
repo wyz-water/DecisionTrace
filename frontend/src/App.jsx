@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
-import ArgumentRow from "./components/ArgumentRow.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import CommitmentCreateForm from "./components/CommitmentCreateForm.jsx";
 import DeliberationPanel from "./components/DeliberationPanel.jsx";
@@ -319,8 +318,6 @@ function App() {
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
-  const [decisionDeliberation, setDecisionDeliberation] = useState(null);
-  const [deliberationError, setDeliberationError] = useState("");
   const [decisionReversal, setDecisionReversal] = useState(null);
   const [reversalError, setReversalError] = useState("");
   const [decisionDependencies, setDecisionDependencies] = useState(null);
@@ -477,10 +474,6 @@ function App() {
       ? decisionImpact
       : null;
 
-  const currentDeliberation =
-    decisionDeliberation && decisionDeliberation.decision_id === decisionId
-      ? decisionDeliberation
-      : null;
 
   async function loadDashboard(keepSelected = null, preferProjectId = null) {
     const requestId = ++dashboardRequestRef.current;
@@ -1332,41 +1325,6 @@ function App() {
       cancelled = true;
     };
   }, [projectId, refreshTick, te]);
-
-  useEffect(() => {
-    if (decisionId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadDeliberation() {
-      try {
-        const response = await fetch(
-          `${API_URL}/decisions/${decisionId}/deliberation`
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load deliberation");
-        }
-
-        if (!cancelled) {
-          setDecisionDeliberation(await response.json());
-          setDeliberationError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDeliberationError(te(err.message));
-        }
-      }
-    }
-
-    loadDeliberation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [decisionId, refreshTick, te]);
 
   useEffect(() => {
     if (decisionId == null) {
@@ -2251,7 +2209,6 @@ function App() {
                         {decisions.map((item) => (
                           <option key={item.id} value={item.id}>
                             #{item.id} {item.title}
-                            {contestedIds.has(item.id) ? " ⚠" : ""}
                           </option>
                         ))}
                       </select>
@@ -2262,11 +2219,6 @@ function App() {
                 <div className="decision-header-actions">
                   {decision && <StatusBadge status={decision.status} />}
 
-                  {currentDeliberation?.contested && (
-                    <span className="contested-badge">
-                      {t("decisions.contested")}
-                    </span>
-                  )}
 
                   {decision && !editingDecision && (
                     <button
@@ -2559,38 +2511,6 @@ function App() {
                             </div>
                           )}
                       </>
-                    )}
-                  </div>
-
-                  <div className="decision-subsection">
-                    <div className="decision-subheading">
-                      <span>{t("decisions.deliberationEyebrow")}</span>
-
-                      {currentDeliberation &&
-                        currentDeliberation.arguments.length > 0 && (
-                          <span className="subheading-note">
-                            {currentDeliberation.arguments.length}
-                          </span>
-                        )}
-                    </div>
-
-                    {deliberationError && (
-                      <p className="pipeline-error">{te(deliberationError)}</p>
-                    )}
-
-                    {currentDeliberation &&
-                    currentDeliberation.arguments.length > 0 ? (
-                      currentDeliberation.arguments.map((argument) => (
-                        <ArgumentRow
-                          key={argument.id}
-                          argument={argument}
-                          onResolved={() =>
-                            setRefreshTick((tick) => tick + 1)
-                          }
-                        />
-                      ))
-                    ) : (
-                      <p className="muted">{t("decisions.noArguments")}</p>
                     )}
                   </div>
 
