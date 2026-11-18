@@ -19,6 +19,7 @@ export default function TeacherDashboard({ section = "awaiting" }) {
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [note, setNote] = useState("");
+  const [progressChainId, setProgressChainId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -51,6 +52,17 @@ export default function TeacherDashboard({ section = "awaiting" }) {
       }
 
       setGroups(entries);
+      setProgressChainId((current) => {
+        const approvedIds = entries.flatMap(
+          ({ chains }) =>
+            chains
+              .filter((chain) => chain.teacher_status === "APPROVED")
+              .map((chain) => chain.id)
+        );
+        return approvedIds.includes(current)
+          ? current
+          : approvedIds[0] ?? null;
+      });
     } catch (err) {
       setError(te(err.message) || t("teacher.loadFailed"));
     }
@@ -331,18 +343,32 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                       {approved.length === 0 ? (
                         <p className="muted">{t("teacher.noInProgress")}</p>
                       ) : (
-                        approved.map((chain) => (
-                          <div className="teacher-approved" key={chain.id}>
-                            <div className="teacher-group-head">
-                              <h3>#{chain.id} {chain.title}</h3>
-                            </div>
+                        <>
+                          <div className="chain-create">
+                            <select
+                              value={progressChainId ?? ""}
+                              aria-label={t("execute.pickChain")}
+                              onChange={(event) =>
+                                setProgressChainId(
+                                  Number(event.target.value)
+                                )
+                              }
+                            >
+                              {approved.map((chain) => (
+                                <option key={chain.id} value={chain.id}>
+                                  #{chain.id} {chain.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
+                          {progressChainId != null && (
                             <ExecutionBoard
-                              chainId={chain.id}
+                              chainId={progressChainId}
                               readOnly
                             />
-                          </div>
-                        ))
+                          )}
+                        </>
                       )}
                     </div>
                   );

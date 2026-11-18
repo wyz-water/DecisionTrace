@@ -13,6 +13,7 @@ const API_URL = "http://127.0.0.1:8000";
 export default function ExecutePanel({ projectId, section = null }) {
   const { t, te } = useI18n();
   const [chains, setChains] = useState([]);
+  const [selectedChainId, setSelectedChainId] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -28,10 +29,14 @@ export default function ExecutePanel({ projectId, section = null }) {
         if (cancelled) {
           return;
         }
-        setChains(
-          (data ?? []).filter(
-            (chain) => chain.teacher_status === "APPROVED"
-          )
+        const approved = (data ?? []).filter(
+          (chain) => chain.teacher_status === "APPROVED"
+        );
+        setChains(approved);
+        setSelectedChainId((current) =>
+          approved.some((chain) => chain.id === current)
+            ? current
+            : approved[0]?.id ?? null
         );
       })
       .catch(() => {
@@ -56,21 +61,31 @@ export default function ExecutePanel({ projectId, section = null }) {
       {chains.length === 0 ? (
         <p className="muted">{t("execute.none")}</p>
       ) : (
-        chains.map((chain) => (
-          <div className="teacher-group" key={chain.id}>
-            <div className="teacher-group-head">
-              <h3>#{chain.id} {chain.title}</h3>
-            </div>
-
-            <div className="decision-subsection">
-              <ExecutionBoard
-                chainId={chain.id}
-                readOnly={false}
-                section={section}
-              />
-            </div>
+        <>
+          <div className="chain-create">
+            <select
+              value={selectedChainId ?? ""}
+              aria-label={t("execute.pickChain")}
+              onChange={(event) =>
+                setSelectedChainId(Number(event.target.value))
+              }
+            >
+              {chains.map((chain) => (
+                <option key={chain.id} value={chain.id}>
+                  #{chain.id} {chain.title}
+                </option>
+              ))}
+            </select>
           </div>
-        ))
+
+          {selectedChainId != null && (
+            <ExecutionBoard
+              chainId={selectedChainId}
+              readOnly={false}
+              section={section}
+            />
+          )}
+        </>
       )}
     </section>
   );

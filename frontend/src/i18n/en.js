@@ -271,6 +271,7 @@ export default {
   "execute.title": "Execution",
   "execute.subtitle": "Approved chains and their tasks, in execution order — with AI checks on cycles, blockers and ordering.",
   "execute.none": "No approved chains yet — the supervisor approves a chain first, then tasks appear here.",
+  "execute.pickChain": "Pick a chain",
   "nav.group.teacher": "SUPERVISOR",
   "nav.teacher": "Teacher dashboard",
 
