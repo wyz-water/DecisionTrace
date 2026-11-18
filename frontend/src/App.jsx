@@ -13,6 +13,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import Pagination from "./components/Pagination.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
 import { useI18n } from "./i18n";
+import { personColor } from "./personColors";
 import usePagedList from "./usePagedList.js";
 import { readView } from "./views.js";
 
@@ -2034,6 +2035,54 @@ function App() {
 
         {view === "execute-problems" && (
           <ExecutePanel projectId={projectId} section="problems" />
+        )}
+
+        {view === "decisions" && (
+          <section className="card chain-list-card">
+            <p className="eyebrow">{t("decisions.eyebrow")}</p>
+            <h2>{t("decisions.unapprovedTable")}</h2>
+
+            {visibleDecisions.length === 0 ? (
+              <p className="muted">{t("decisions.noUnapproved")}</p>
+            ) : (
+              <ul className="stakeholder-list">
+                {visibleDecisions.map((item) => (
+                  <li
+                    className={`stakeholder-row ${
+                      item.id === visibleDecision?.id ? "is-selected" : ""
+                    }`}
+                    key={item.id}
+                    onClick={() => setDecisionId(item.id)}
+                  >
+                    <StatusBadge status={item.status} />
+
+                    <span>
+                      #{item.id} {item.title}
+                    </span>
+
+                    {item.decided_by && (
+                      <span className="chain-node-maker">
+                        <span
+                          className="person-dot"
+                          style={{
+                            background: personColor(item.decided_by),
+                          }}
+                          aria-hidden="true"
+                        />
+                        {item.decided_by}
+                      </span>
+                    )}
+
+                    {item.rationale && (
+                      <span className="stakeholder-maker">
+                        {item.rationale}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
 
         {view === "decisions" && (

@@ -202,6 +202,8 @@ export default {
   "decisions.eyebrow": "DECIDE",
   "decisions.title": "Decisions",
   "decisions.subtitle": "The reasoning commitments must stay true to, and what a change to it puts at risk.",
+  "decisions.unapprovedTable": "Decisions awaiting supervisor confirmation",
+  "decisions.noUnapproved": "No unapproved decisions — they all moved to the execution group.",
   "decisions.cardEyebrow": "DECISION",
   "decisions.none": "No decision",
   "decisions.edit": "Edit",

@@ -4773,3 +4773,16 @@ html[lang="zh-CN"] .severity-badge {
 .teacher-approved .teacher-group-head h3 {
   font-size: 14px;
 }
+
+/* ---- Unapproved decisions table row selection -------------------------- */
+
+.stakeholder-row.is-selected {
+  background: #eef4ff;
+  border-radius: 8px;
+  padding-left: 8px;
+  cursor: pointer;
+}
+
+.stakeholder-row {
+  cursor: pointer;
+}

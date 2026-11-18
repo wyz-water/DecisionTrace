@@ -199,6 +199,8 @@ export default {
   "decisions.eyebrow": "决策",
   "decisions.title": "决策",
   "decisions.subtitle": "承诺必须遵守的推理，以及改变它会让什么陷入风险。",
+  "decisions.unapprovedTable": "未被导师确认的决策",
+  "decisions.noUnapproved": "没有未确认的决策 —— 它们都已移入执行组。",
   "decisions.cardEyebrow": "决策",
   "decisions.none": "暂无决策",
   "decisions.edit": "编辑",
