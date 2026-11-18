@@ -4666,3 +4666,96 @@ html[lang="zh-CN"] .severity-badge {
   border-radius: 8px;
   font-size: 13px;
 }
+
+/* ---- Execution board --------------------------------------------------- */
+
+.execution-checks {
+  margin: 8px 0;
+}
+
+.execution-check {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border-left: 3px solid #dc6803;
+  border-radius: 0 8px 8px 0;
+  background: #fffaeb;
+  color: #93370d;
+  font-size: 12.5px;
+}
+
+.execution-check-type {
+  flex: none;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.execution-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-task {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #f4f6f9;
+}
+
+.execution-position {
+  flex: none;
+  width: 22px;
+  color: #7a869c;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.execution-description {
+  flex: 1;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.execution-state {
+  color: #525d73;
+  font-size: 11.5px;
+}
+
+.execution-state.risk {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.execution-status-select {
+  padding: 4px 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.execution-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.execution-add input {
+  padding: 8px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.execution-add input:first-child {
+  width: 140px;
+}
+
+.execution-add input:nth-child(2) {
+  flex: 1;
+}

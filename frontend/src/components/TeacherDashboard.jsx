@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { personColor } from "../personColors";
+import ExecutionBoard from "./ExecutionBoard.jsx";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -224,6 +225,12 @@ export default function TeacherDashboard() {
                 <p>{annotation.text}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {detail.teacher_status === "APPROVED" && (
+          <div className="decision-subsection">
+            <ExecutionBoard chainId={detail.id} readOnly />
           </div>
         )}
 

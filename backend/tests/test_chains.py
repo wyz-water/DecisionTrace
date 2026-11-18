@@ -19,11 +19,15 @@ from app.models.dependency import Dependency  # noqa: F401
 from app.models.discussion import Discussion  # noqa: F401 - registers table
 from app.models.project import Project
 from app.models.snapshot import Snapshot  # noqa: F401 - registers table
+from app.models.commitment import Commitment
+from app.models.dependency import Dependency
 from app.routes.chains import (
     add_chain_comment,
+    add_chain_task,
     append_chain_node,
     create_chain,
     get_chain,
+    get_chain_execution,
     get_chains,
     submit_chain,
     teacher_action,
@@ -34,6 +38,7 @@ from app.schemas.chain import (
     ChainNodeCreate,
     TeacherAction,
 )
+from app.schemas.execution import ExecutionTaskCreate
 
 
 class ChainTests(unittest.TestCase):
@@ -329,6 +334,137 @@ class ChainTests(unittest.TestCase):
             project_id=self.project.id, submitted_only=True, db=self.db
         )
         self.assertEqual(len(submitted), 1)
+
+    def _approved_chain(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+        submit_chain(chain.id, db=self.db)
+        teacher_action(
+            chain.id,
+            TeacherAction(status="APPROVED"),
+            db=self.db,
+        )
+        return chain
+
+    def test_tasks_require_approval(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+        submit_chain(chain.id, db=self.db)
+
+        with self.assertRaises(HTTPException) as raised:
+            add_chain_task(
+                chain.id,
+                ExecutionTaskCreate(owner="Dora", description="ship it"),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_add_task_after_approval(self):
+        chain = self._approved_chain()
+
+        task = add_chain_task(
+            chain.id,
+            ExecutionTaskCreate(owner="Dora", description="ship it"),
+            db=self.db,
+        )
+
+        self.assertEqual(task.owner, "Dora")
+        self.assertEqual(task.status, "OPEN")
+
+        self.db.expire_all()
+        stored = self.db.query(Commitment).filter(
+            Commitment.id == task.id
+        ).first()
+        self.assertEqual(stored.chain_id, chain.id)
+
+    def test_execution_topological_order_and_checks(self):
+        chain = self._approved_chain()
+
+        first = add_chain_task(
+            chain.id,
+            ExecutionTaskCreate(owner="Dora", description="schema"),
+            db=self.db,
+        )
+        second = add_chain_task(
+            chain.id,
+            ExecutionTaskCreate(owner="Eve", description="api"),
+            db=self.db,
+        )
+        self.db.add(Dependency(
+            project_id=self.project.id,
+            predecessor_commitment_id=first.id,
+            successor_commitment_id=second.id,
+            dependency_type="BLOCKS",
+        ))
+        self.db.commit()
+
+        execution = get_chain_execution(chain.id, db=self.db)
+
+        positions = {task.id: task.position for task in execution["tasks"]}
+        self.assertLess(positions[first.id], positions[second.id])
+        self.assertEqual(execution["checks"], [])
+        self.assertFalse(execution["has_cycles"])
+
+        # block the first task: the second becomes blocked, a check fires
+        first_commitment = self.db.query(Commitment).filter(
+            Commitment.id == first.id
+        ).first()
+        first_commitment.status = "DELAYED"
+        self.db.commit()
+
+        execution = get_chain_execution(chain.id, db=self.db)
+
+        by_id = {task.id: task for task in execution["tasks"]}
+        self.assertEqual(by_id[second.id].state, "BLOCKED")
+        self.assertEqual(by_id[second.id].blocked_by, ["Dora"])
+        self.assertTrue(any(
+            check["type"] == "blocked" for check in execution["checks"]
+        ))
+
+    def test_out_of_order_check(self):
+        chain = self._approved_chain()
+
+        first = add_chain_task(
+            chain.id,
+            ExecutionTaskCreate(owner="Dora", description="schema"),
+            db=self.db,
+        )
+        second = add_chain_task(
+            chain.id,
+            ExecutionTaskCreate(owner="Eve", description="api"),
+            db=self.db,
+        )
+        self.db.add(Dependency(
+            project_id=self.project.id,
+            predecessor_commitment_id=first.id,
+            successor_commitment_id=second.id,
+            dependency_type="BLOCKS",
+        ))
+        self.db.commit()
+
+        # Eve starts before Dora finished: ordering violation
+        second_commitment = self.db.query(Commitment).filter(
+            Commitment.id == second.id
+        ).first()
+        second_commitment.status = "IN_PROGRESS"
+        self.db.commit()
+
+        execution = get_chain_execution(chain.id, db=self.db)
+
+        self.assertTrue(any(
+            check["type"] == "out_of_order" for check in execution["checks"]
+        ))
 
     def test_list_chains_reports_counts(self):
         create_chain(

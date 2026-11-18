@@ -7,7 +7,9 @@ from app.database import get_db
 from app.models.chain import Chain
 from app.models.chain_annotation import ChainAnnotation
 from app.models.chain_comment import ChainComment
+from app.models.commitment import Commitment
 from app.models.decision import Decision
+from app.models.dependency import Dependency
 from app.models.project import Project
 from app.schemas.chain import (
     ChainAnnotationResponse,
@@ -18,6 +20,16 @@ from app.schemas.chain import (
     ChainNodeCreate,
     ChainResponse,
     TeacherAction,
+)
+from app.schemas.execution import (
+    ExecutionResponse,
+    ExecutionTask,
+    ExecutionTaskCreate,
+)
+from app.services.graph import (
+    analyze_node_states,
+    detect_cycles,
+    topological_order,
 )
 from app.schemas.decision import DecisionResponse
 
@@ -310,3 +322,188 @@ def teacher_action(
     db.refresh(chain)
 
     return _chain_detail(db, chain)
+
+
+@router.post(
+    "/{chain_id}/tasks",
+    response_model=ExecutionTask
+)
+def add_chain_task(
+    chain_id: int,
+    request: ExecutionTaskCreate,
+    db: Session = Depends(get_db)
+):
+    """Add an execution task to a chain. Tasks come from the chain
+    discussion and may only be added after the supervisor approved
+    the chain (the execution phase)."""
+    chain = db.query(Chain).filter(Chain.id == chain_id).first()
+
+    if not chain:
+        raise HTTPException(status_code=404, detail="Chain not found")
+
+    if chain.teacher_status != "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Tasks can only be added after the supervisor "
+                "approves the chain"
+            ),
+        )
+
+    if not (request.owner or "").strip() or not (request.description or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Task owner and description are required",
+        )
+
+    latest_node = (
+        db.query(Decision)
+        .filter(Decision.chain_id == chain.id)
+        .order_by(Decision.created_at.desc(), Decision.id.desc())
+        .first()
+    )
+
+    task = Commitment(
+        project_id=chain.project_id,
+        chain_id=chain.id,
+        decision_id=latest_node.id if latest_node else None,
+        owner=request.owner.strip(),
+        description=request.description.strip(),
+        due_date=request.due_date,
+        status="OPEN",
+    )
+
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return _execution_task(db, task, [], None, {})
+
+
+def _execution_task(db, task, analysis, position, owners):
+    state = ""
+    blocked_by = []
+    waiting_on = []
+
+    for item in analysis:
+        if item["commitment_id"] == task.id:
+            state = item["state"]
+            blocked_by = [
+                owners.get(node_id, f"#{node_id}")
+                for node_id in item["blocked_by"]
+            ]
+            waiting_on = [
+                owners.get(node_id, f"#{node_id}")
+                for node_id in item["waiting_on"]
+            ]
+            break
+
+    return ExecutionTask(
+        id=task.id,
+        owner=task.owner,
+        description=task.description,
+        due_date=task.due_date,
+        status=task.status,
+        state=state,
+        position=position,
+        blocked_by=blocked_by,
+        waiting_on=waiting_on,
+    )
+
+
+@router.get(
+    "/{chain_id}/execution",
+    response_model=ExecutionResponse
+)
+def get_chain_execution(
+    chain_id: int,
+    db: Session = Depends(get_db)
+):
+    """The execution board of a chain: its tasks in topological order,
+    with computed readiness states and AI checks (cycles, blocked
+    tasks, ordering violations). Computed on read, shared by both
+    sides — the supervisor sees the same view read-only."""
+    chain = db.query(Chain).filter(Chain.id == chain_id).first()
+
+    if not chain:
+        raise HTTPException(status_code=404, detail="Chain not found")
+
+    tasks = db.query(Commitment).filter(
+        Commitment.chain_id == chain.id
+    ).all()
+
+    task_ids = {task.id for task in tasks}
+
+    edges = [
+        edge
+        for edge in db.query(Dependency).filter(
+            Dependency.project_id == chain.project_id
+        ).all()
+        if (
+            edge.predecessor_commitment_id in task_ids
+            and edge.successor_commitment_id in task_ids
+        )
+    ]
+
+    cycles = detect_cycles(edges, task_ids)
+    has_cycles = len(cycles) > 0
+
+    order = topological_order(edges, task_ids)
+
+    commitments_by_id = {task.id: task for task in tasks}
+    analysis = analyze_node_states(commitments_by_id, edges)
+
+    owners = {task.id: task.owner for task in tasks}
+
+    position_by_id = {
+        node_id: index for index, node_id in enumerate(order)
+    }
+
+    task_views = [
+        _execution_task(
+            db,
+            task,
+            analysis,
+            position_by_id.get(task.id),
+            owners,
+        )
+        for task in sorted(
+            tasks,
+            key=lambda item: position_by_id.get(item.id, 999),
+        )
+    ]
+
+    checks = []
+
+    if has_cycles:
+        checks.append({
+            "type": "cycle",
+            "message": "The task dependencies contain a cycle.",
+        })
+
+    for task in task_views:
+        if task.state == "BLOCKED":
+            checks.append({
+                "type": "blocked",
+                "message": (
+                    f"'{task.description}' ({task.owner}) is blocked by "
+                    + ", ".join(task.blocked_by)
+                ),
+            })
+        elif task.status == "IN_PROGRESS" and task.waiting_on:
+            checks.append({
+                "type": "out_of_order",
+                "message": (
+                    f"'{task.description}' ({task.owner}) started before "
+                    + ", ".join(task.waiting_on)
+                    + " finished"
+                ),
+            })
+
+    return {
+        "chain_id": chain.id,
+        "teacher_status": chain.teacher_status,
+        "has_cycles": has_cycles,
+        "tasks": task_views,
+        "checks": checks,
+    }

@@ -278,6 +278,19 @@ export default {
   "teacher.hold": "Hold",
   "teacher.reject": "Reject",
 
+  "execution.eyebrow": "EXECUTION",
+  "execution.taskCount": "{count} task(s)",
+  "execution.none": "No tasks yet — the execution phase starts after approval.",
+  "execution.loadFailed": "Failed to load the execution board",
+  "execution.check.cycle": "CYCLE",
+  "execution.check.blocked": "BLOCKED",
+  "execution.check.out_of_order": "OUT OF ORDER",
+  "execution.change": "Change",
+  "execution.updateStatus": "Update {owner}'s task status",
+  "execution.ownerPlaceholder": "Who does it",
+  "execution.descriptionPlaceholder": "What to do",
+  "execution.add": "Add task",
+
   "candidates.reviewMine": "Review mine:",
 
   "chains.eyebrow": "DECIDE",

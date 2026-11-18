@@ -275,6 +275,19 @@ export default {
   "teacher.hold": "待定",
   "teacher.reject": "否定",
 
+  "execution.eyebrow": "执行",
+  "execution.taskCount": "{count} 个任务",
+  "execution.none": "还没有任务 —— 导师认可后进入执行阶段。",
+  "execution.loadFailed": "加载执行看板失败",
+  "execution.check.cycle": "成环",
+  "execution.check.blocked": "被阻塞",
+  "execution.check.out_of_order": "顺序错误",
+  "execution.change": "变更",
+  "execution.updateStatus": "更新 {owner} 的任务状态",
+  "execution.ownerPlaceholder": "谁来做",
+  "execution.descriptionPlaceholder": "做什么",
+  "execution.add": "添加任务",
+
   "candidates.reviewMine": "只看我的:",
 
   "chains.eyebrow": "决策",

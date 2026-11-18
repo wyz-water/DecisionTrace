@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { personColor } from "../personColors";
+import ExecutionBoard from "./ExecutionBoard.jsx";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -335,6 +336,12 @@ export default function ChainPanel({ projectId, decisions }) {
             {t("chains.send")}
           </button>
         </div>
+
+        {detail.teacher_status === "APPROVED" && (
+          <div className="decision-subsection">
+            <ExecutionBoard chainId={detail.id} readOnly={false} />
+          </div>
+        )}
 
         <div className="chain-node-form">
           <p className="eyebrow">{t("chains.appendNode")}</p>
