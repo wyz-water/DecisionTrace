@@ -4759,3 +4759,17 @@ html[lang="zh-CN"] .severity-badge {
 .execution-add input:nth-child(2) {
   flex: 1;
 }
+
+/* ---- Teacher: awaiting vs in-progress split ---------------------------- */
+
+.teacher-approved {
+  margin-bottom: 16px;
+}
+
+.teacher-approved .teacher-group-head {
+  margin-bottom: 6px;
+}
+
+.teacher-approved .teacher-group-head h3 {
+  font-size: 14px;
+}

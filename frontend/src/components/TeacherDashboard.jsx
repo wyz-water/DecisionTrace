@@ -310,34 +310,84 @@ export default function TeacherDashboard() {
                 </span>
               </div>
 
-              {chains.length === 0 ? (
-                <p className="muted">{t("teacher.noSubmitted")}</p>
-              ) : (
-                <div className="chain-grid">
-                  {chains.map((chain) => (
-                    <article
-                      className="chain-card"
-                      key={chain.id}
-                      onClick={() => openChain(project, chain.id)}
-                    >
-                      <div className="chain-card-head">
-                        <h3>#{chain.id} {chain.title}</h3>
-                        <span className="chain-status-chip">
-                          {statusLabel(chain)}
+              {(() => {
+                const awaiting = chains.filter(
+                  (chain) => chain.teacher_status !== "APPROVED"
+                );
+                const approved = chains.filter(
+                  (chain) => chain.teacher_status === "APPROVED"
+                );
+
+                return (
+                  <>
+                    <div className="decision-subsection">
+                      <div className="decision-subheading">
+                        <span>{t("teacher.awaiting")}</span>
+                        <span className="subheading-note">
+                          {awaiting.length}
                         </span>
                       </div>
 
-                      <p className="chain-card-meta">
-                        {t("chains.nodeCount", { count: chain.node_count })}
-                        {" · "}
-                        {t("chains.commentCount", {
-                          count: chain.comment_count,
-                        })}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              )}
+                      {awaiting.length === 0 ? (
+                        <p className="muted">{t("teacher.noAwaiting")}</p>
+                      ) : (
+                        <div className="chain-grid">
+                          {awaiting.map((chain) => (
+                            <article
+                              className="chain-card"
+                              key={chain.id}
+                              onClick={() => openChain(project, chain.id)}
+                            >
+                              <div className="chain-card-head">
+                                <h3>#{chain.id} {chain.title}</h3>
+                                <span className="chain-status-chip">
+                                  {statusLabel(chain)}
+                                </span>
+                              </div>
+
+                              <p className="chain-card-meta">
+                                {t("chains.nodeCount", {
+                                  count: chain.node_count,
+                                })}
+                                {" · "}
+                                {t("chains.commentCount", {
+                                  count: chain.comment_count,
+                                })}
+                              </p>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="decision-subsection">
+                      <div className="decision-subheading">
+                        <span>{t("teacher.inProgress")}</span>
+                        <span className="subheading-note">
+                          {approved.length}
+                        </span>
+                      </div>
+
+                      {approved.length === 0 ? (
+                        <p className="muted">{t("teacher.noInProgress")}</p>
+                      ) : (
+                        approved.map((chain) => (
+                          <div className="teacher-approved" key={chain.id}>
+                            <div className="teacher-group-head">
+                              <h3>#{chain.id} {chain.title}</h3>
+                            </div>
+
+                            <ExecutionBoard
+                              chainId={chain.id}
+                              readOnly
+                            />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           );
         })
