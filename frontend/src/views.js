@@ -25,6 +25,7 @@ export const VIEW_GROUPS = [
   {
     labelKey: "nav.group.execute",
     views: [
+      { id: "execute-decisions", labelKey: "execute.sectionDecisions" },
       { id: "execute-tasks", labelKey: "execute.sectionTasks" },
       { id: "execute-graph", labelKey: "execute.sectionGraph" },
       { id: "execute-problems", labelKey: "execute.sectionProblems" },

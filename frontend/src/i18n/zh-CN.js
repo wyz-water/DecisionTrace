@@ -260,6 +260,7 @@ export default {
   "nav.group.execute": "执行",
   "nav.execute": "执行",
 
+  "execute.sectionDecisions": "决策列表",
   "execute.sectionTasks": "划分任务承诺",
   "execute.sectionGraph": "拓扑排序图",
   "execute.sectionProblems": "问题",
@@ -269,6 +270,8 @@ export default {
   "execute.subtitle": "已认可的链及其任务,按执行顺序排列 —— AI 检查成环、阻塞与顺序错误。",
   "execute.none": "还没有被认可的链 —— 导师先认可,任务才会出现在这里。",
   "execute.pickChain": "选择决策链",
+  "execute.noDecisions": "还没有被认可的决策 —— 导师认可其链后,它们会移到这里。",
+  "execute.chainOf": "链 #{id}",
   "nav.group.teacher": "导师",
   "nav.teacher": "导师看板",
 

@@ -263,6 +263,7 @@ export default {
   "nav.group.execute": "EXECUTE",
   "nav.execute": "Execution",
 
+  "execute.sectionDecisions": "Decision list",
   "execute.sectionTasks": "Tasks & commitments",
   "execute.sectionGraph": "Execution order",
   "execute.sectionProblems": "Problems",
@@ -272,6 +273,8 @@ export default {
   "execute.subtitle": "Approved chains and their tasks, in execution order — with AI checks on cycles, blockers and ordering.",
   "execute.none": "No approved chains yet — the supervisor approves a chain first, then tasks appear here.",
   "execute.pickChain": "Pick a chain",
+  "execute.noDecisions": "No approved decisions yet — they move here after the supervisor approves their chain.",
+  "execute.chainOf": "chain #{id}",
   "nav.group.teacher": "SUPERVISOR",
   "nav.teacher": "Teacher dashboard",
 

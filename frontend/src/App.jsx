@@ -4,6 +4,7 @@ import DiscussionsPanel from "./components/DiscussionsPanel.jsx";
 import CandidatesPanel from "./components/CandidatesPanel.jsx";
 import ChainPanel from "./components/ChainPanel.jsx";
 import ExecutePanel from "./components/ExecutePanel.jsx";
+import ExecuteDecisions from "./components/ExecuteDecisions.jsx";
 import TeacherDashboard from "./components/TeacherDashboard.jsx";
 import DecisionCreateForm from "./components/DecisionCreateForm.jsx";
 import LanguageToggle from "./components/LanguageToggle.jsx";
@@ -314,6 +315,7 @@ function App() {
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [decisionReversal, setDecisionReversal] = useState(null);
+  const [approvedChainIds, setApprovedChainIds] = useState(new Set());
   const [reversalError, setReversalError] = useState("");
   const [decisionDependencies, setDecisionDependencies] = useState(null);
   const [dependenciesError, setDependenciesError] = useState("");
@@ -394,6 +396,27 @@ function App() {
   const dashboardRequestRef = useRef(0);
 
   const projectId = project?.id ?? null;
+
+  // Unapproved decisions stay in the Decisions view; approved ones move
+  // to the execution group's decision list.
+  const visibleDecisions = decisions.filter(
+    (decision) => !approvedChainIds.has(decision.chain_id)
+  );
+  const visibleDecision =
+    visibleDecisions.find((item) => item.id === decisionId) ?? null;
+
+  // When the selected decision is no longer visible (its chain got
+  // approved and it moved to the execution group), fall back to the
+  // first visible one.
+  useEffect(() => {
+    if (
+      visibleDecisions.length > 0 &&
+      !visibleDecisions.some((item) => item.id === decisionId)
+    ) {
+      setDecisionId(visibleDecisions[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleDecisions.length, decisionId, approvedChainIds]);
 
   const discussions = usePagedList(
     projectId ? `${API_URL}/discussions?project_id=${projectId}` : null,
@@ -552,6 +575,34 @@ function App() {
 
   // Reload everything after a write. `loadDashboard` alone would leave
   // the paginated lists and the impact cards showing pre-write data.
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch(`${API_URL}/chains?project_id=${projectId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        setApprovedChainIds(
+          new Set(
+            (data ?? [])
+              .filter((chain) => chain.teacher_status === "APPROVED")
+              .map((chain) => chain.id)
+          )
+        );
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshTick]);
+
   async function reloadData(keepSelected = null, preferProjectId = null) {
     const refreshed = await loadDashboard(keepSelected, preferProjectId);
 
@@ -1371,7 +1422,7 @@ function App() {
 
   function startDecisionEdit() {
     setDecisionDraft({
-      title: decision.title,
+      title: visibleDecision.title,
       rationale: decision.rationale ?? "",
       status: decision.status,
       reason: "",
@@ -1966,6 +2017,13 @@ function App() {
           <TeacherDashboard section="progress" />
         )}
 
+        {view === "execute-decisions" && (
+          <ExecuteDecisions
+            decisions={decisions}
+            approvedChainIds={approvedChainIds}
+          />
+        )}
+
         {view === "execute-tasks" && (
           <ExecutePanel projectId={projectId} section="tasks" />
         )}
@@ -1986,7 +2044,7 @@ function App() {
                   <p className="eyebrow">{t("decisions.cardEyebrow")}</p>
 
                   <div className="decision-title-row">
-                    <h2>{decision?.title || t("decisions.none")}</h2>
+                    <h2>{visibleDecision?.title || t("decisions.none")}</h2>
 
                     {decisions.length > 1 && (
                       <select
@@ -1997,7 +2055,7 @@ function App() {
                           setDecisionId(Number(event.target.value))
                         }
                       >
-                        {decisions.map((item) => (
+                        {visibleDecisions.map((item) => (
                           <option key={item.id} value={item.id}>
                             #{item.id} {item.title}
                           </option>
@@ -2008,10 +2066,12 @@ function App() {
                 </div>
 
                 <div className="decision-header-actions">
-                  {decision && <StatusBadge status={decision.status} />}
+                  {visibleDecision && (
+                    <StatusBadge status={visibleDecision.status} />
+                  )}
 
 
-                  {decision && !editingDecision && (
+                  {visibleDecision && !editingDecision && (
                     <button
                       className="secondary-button"
                       onClick={startDecisionEdit}
@@ -2122,19 +2182,19 @@ function App() {
                 <>
                   <div className="rationale">
                     <span>{t("decisions.rationale")}</span>
-                    <p>{decision?.rationale || t("decisions.noRationale")}</p>
+                    <p>{visibleDecision?.rationale || t("decisions.noRationale")}</p>
                   </div>
 
                   <div className="trace-source">
                     {t("decisions.sourceDiscussion", {
-                      id: decision?.source_discussion_id ?? "—",
+                      id: visibleDecision?.source_discussion_id ?? "—",
                     })}
                   </div>
 
                   <div className="decided-by">
-                    {decision?.decided_by
+                    {visibleDecision?.decided_by
                       ? t("decisions.decidedBy", {
-                          name: decision.decided_by,
+                          name: visibleDecision.decided_by,
                         })
                       : t("decisions.decidedByTeam")}
                   </div>
@@ -2147,7 +2207,7 @@ function App() {
                 </p>
               )}
 
-              {decision && (
+              {visibleDecision && (
                 <>
                   <div className="decision-subsection">
                     <div className="decision-subheading">
