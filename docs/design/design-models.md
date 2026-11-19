@@ -128,14 +128,14 @@ sequenceDiagram
     API-->>UI: decision candidates (with source sentences)
     S->>UI: confirm / edit / reject (per maker)
     API-->>UI: decisions created
-    S->>UI: start a chain from a decision; discuss per node; append revisions
+    S->>UI: start a chain from a decision, discuss per node, append revisions
     API-->>UI: chain detail (nodes + threads)
     S->>UI: submit the chain
     API-->>UI: latest verdict-less node → PENDING
     T->>UI: awaiting view shows the whole chain inline
     T->>UI: annotate a node / approve node X
     API-->>API: other pending/held/approved nodes → REJECTED
-    API-->>UI: node X APPROVED; chain locked
+    API-->>UI: node X APPROVED, chain locked
     S->>UI: execution: add tasks to node X
     API-->>UI: tasks, topological order, AI checks
     T->>UI: in-progress view: read-only boards per group
