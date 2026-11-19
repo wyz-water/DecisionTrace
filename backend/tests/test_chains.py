@@ -16,7 +16,6 @@ from app.models.decision_history import DecisionHistory  # noqa: F401
 from app.models.dependency import Dependency  # noqa: F401
 from app.models.discussion import Discussion  # noqa: F401 - registers table
 from app.models.project import Project
-from app.models.snapshot import Snapshot  # noqa: F401 - registers table
 from app.models.commitment import Commitment
 from app.models.dependency import Dependency
 from app.routes.chains import (

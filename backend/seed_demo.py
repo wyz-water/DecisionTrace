@@ -32,7 +32,7 @@ def wipe(conn):
         "chain_annotations", "chain_comments", "chains",
         "decision_history", "commitment_history",
         "dependencies", "commitments", "candidates",
-        "arguments", "decisions", "discussions", "snapshots",
+"decisions", "discussions",
     ]
     for table in tables:
         conn.execute("DELETE FROM {0}".format(table))

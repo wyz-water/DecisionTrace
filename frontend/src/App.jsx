@@ -11,7 +11,6 @@ import LanguageToggle from "./components/LanguageToggle.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Pagination from "./components/Pagination.jsx";
-import StatusBadge from "./components/StatusBadge.jsx";
 import { useI18n } from "./i18n";
 import { personColor } from "./personColors";
 import { buildDecisionNumbers } from "./decisionNumbers";
@@ -26,274 +25,6 @@ const API_URL = "http://127.0.0.1:8000";
 const DISCUSSIONS_PAGE_SIZE = 3;
 const CANDIDATES_PAGE_SIZE = 4;
 const AUDIT_PAGE_SIZE = 4;
-
-const STATUS_COLORS = {
-  COMPLETED: { fill: "#eaf8ef", stroke: "#267447", text: "#267447" },
-  IN_PROGRESS: { fill: "#eef4ff", stroke: "#315ca8", text: "#315ca8" },
-  OPEN: { fill: "#f2f4f7", stroke: "#475467", text: "#475467" },
-  DELAYED: { fill: "#fff1f0", stroke: "#b42318", text: "#b42318" },
-  BLOCKED: { fill: "#fff1f0", stroke: "#b42318", text: "#b42318" },
-};
-
-function names(ids, byId) {
-  return ids.map((id) => byId[id]?.owner ?? `#${id}`).join(", ");
-}
-
-function pct(rate) {
-  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
-}
-
-function stateNote(analysis, byId, t) {
-  switch (analysis.state) {
-    case "DONE":
-      return t("status.DONE");
-    case "READY":
-      return t("status.READY");
-    case "WAITING":
-      return t("plan.waitingOn", { names: names(analysis.waiting_on, byId) });
-    case "BLOCKED":
-      return t("plan.blockedBy", { names: names(analysis.blocked_by, byId) });
-    case "CYCLIC":
-      return t("status.CYCLIC");
-    default:
-      return "";
-  }
-}
-
-// --- Graph layout -----------------------------------------------------------
-
-const NODE_W = 170;
-const NODE_H = 64;
-const LAYER_GAP = 240;
-const ROW_GAP = 100;
-const PAD = 30;
-
-/**
- * Place the graph in columns, one column per topological depth.
- *
- * Returns null when a node has no depth, which happens exactly when the
- * node sits on a cycle: a loop has no topological order, so there is no
- * left-to-right arrangement that could be drawn honestly. The caller
- * renders the "cannot be ordered" notice instead of a partial graph.
- */
-function computeLayout(graph) {
-  const { nodes, edges, topological_order: topo } = graph;
-
-  if (nodes.length === 0) {
-    return null;
-  }
-
-  const predecessors = {};
-  for (const edge of edges) {
-    (predecessors[edge.successor_commitment_id] ??= []).push(
-      edge.predecessor_commitment_id
-    );
-  }
-
-  const layer = {};
-  for (const id of topo) {
-    const predLayers = (predecessors[id] ?? [])
-      .map((predId) => layer[predId])
-      .filter((value) => value != null);
-
-    layer[id] = predLayers.length ? Math.max(...predLayers) + 1 : 0;
-  }
-
-  // A node without a depth sits on a cycle; there is no order to draw.
-  if (nodes.some((node) => !(node.id in layer))) {
-    return null;
-  }
-
-  const layers = {};
-  for (const node of nodes) {
-    (layers[layer[node.id]] ??= []).push(node);
-  }
-
-  const positions = {};
-  let maxRows = 0;
-  let maxColumn = 0;
-
-  for (const column of Object.keys(layers)) {
-    maxRows = Math.max(maxRows, layers[column].length);
-    maxColumn = Math.max(maxColumn, Number(column));
-
-    layers[column].forEach((node, index) => {
-      positions[node.id] = {
-        x: Number(column) * LAYER_GAP + PAD + NODE_W / 2,
-        y: index * ROW_GAP + PAD + NODE_H / 2,
-      };
-    });
-  }
-
-  return {
-    positions,
-    // Sized from the widest column that actually holds a node, not from
-    // the number of columns: sparse layer numbers used to under-size the
-    // viewBox and crop the graph.
-    svgWidth: maxColumn * LAYER_GAP + NODE_W + PAD * 2,
-    svgHeight: (maxRows - 1) * ROW_GAP + NODE_H + PAD * 2,
-  };
-}
-
-function CycleNotice({ graph }) {
-  const { t } = useI18n();
-  const owners = {};
-  for (const node of graph.nodes) {
-    owners[node.id] = node.owner;
-  }
-
-  return (
-    <div className="graph-blocked" role="alert">
-      <span className="graph-blocked-badge">
-        {t("consistency.type.CYCLE")}
-      </span>
-
-      <div className="graph-blocked-body">
-        <p className="graph-blocked-title">
-          {t("plan.cycleNoticeTitle")}
-        </p>
-
-        <p>{t("plan.cycleNoticeBody")}</p>
-
-        <ul className="graph-blocked-loops">
-          {graph.cycles.map((cycle) => (
-            <li key={cycle.join("-")}>
-              {cycle.map((id) => owners[id] ?? `#${id}`).join(" → ")}
-            </li>
-          ))}
-        </ul>
-
-        <p className="graph-blocked-hint">{t("plan.cycleNoticeHint")}</p>
-      </div>
-    </div>
-  );
-}
-
-function GraphView({ graph, selectedId, onSelect, highlightIds = [] }) {
-  const { t } = useI18n();
-
-  // A cycle has no topological order, so there is nothing honest to draw.
-  if (graph.has_cycles) {
-    return <CycleNotice graph={graph} />;
-  }
-
-  const layout = computeLayout(graph);
-
-  if (!layout) {
-    return <p className="muted">{t("plan.noCommitments")}</p>;
-  }
-
-  const { positions, svgWidth, svgHeight } = layout;
-
-  return (
-    <div className="graph-wrap">
-      <svg
-        className="graph-svg"
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        width={svgWidth}
-        height={svgHeight}
-        role="img"
-        aria-label={t("dependencies.graphAria")}
-      >
-        <defs>
-          <marker
-            id="arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#98a2b3" />
-          </marker>
-        </defs>
-
-        {graph.edges.map((edge) => {
-          const from = positions[edge.predecessor_commitment_id];
-          const to = positions[edge.successor_commitment_id];
-
-          if (!from || !to) {
-            return null;
-          }
-
-          // Without cycles every edge runs one column to the right, so a
-          // straight line is the honest shape.
-          return (
-            <path
-              className="graph-edge"
-              key={edge.id}
-              d={`M ${from.x + NODE_W / 2} ${from.y} L ${to.x - NODE_W / 2} ${to.y}`}
-              markerEnd="url(#arrow)"
-            />
-          );
-        })}
-
-        {graph.nodes.map((node) => {
-          const pos = positions[node.id];
-
-          if (!pos) {
-            return null;
-          }
-
-          const colors = STATUS_COLORS[node.status] ?? STATUS_COLORS.OPEN;
-          const selected = node.id === selectedId;
-          const affected = highlightIds.includes(node.id);
-
-          return (
-            <g
-              className={`graph-node ${selected ? "selected" : ""} ${
-                affected ? "affected" : ""
-              }`}
-              key={node.id}
-              onClick={() => onSelect(node.id)}
-            >
-              <rect
-                x={pos.x - NODE_W / 2}
-                y={pos.y - NODE_H / 2}
-                width={NODE_W}
-                height={NODE_H}
-                rx={12}
-                fill={colors.fill}
-                stroke={
-                  selected
-                    ? "#172033"
-                    : affected
-                      ? "#b54708"
-                      : colors.stroke
-                }
-                strokeWidth={selected || affected ? 2.5 : 1.5}
-                strokeDasharray={affected && !selected ? "5 3" : undefined}
-              />
-              <text
-                x={pos.x - NODE_W / 2 + 14}
-                y={pos.y - 5}
-                fontSize={13}
-                fontWeight={700}
-                fill="#172033"
-              >
-                {node.owner}
-              </text>
-              <text
-                x={pos.x - NODE_W / 2 + 14}
-                y={pos.y + 15}
-                fontSize={11.5}
-                fill={colors.text}
-              >
-                #{node.id} ·{" "}
-                {t(
-                  `status.${node.status}`,
-                  {},
-                  node.status.replace("_", " ")
-                )}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 // --- Section header ----------------------------------------------------------
 
@@ -310,85 +41,23 @@ function ViewHeader({ eyebrow, title, children }) {
 // --- App ---------------------------------------------------------------------
 
 function App() {
-  const { t, tp, te, formatDate, formatDateTime } = useI18n();
+  const { t, te, formatDateTime } = useI18n();
   const [project, setProject] = useState(null);
   const [projects, setProjects] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [decisionId, setDecisionId] = useState(null);
-  const [decisionImpact, setDecisionImpact] = useState(null);
-  const [decisionReversal, setDecisionReversal] = useState(null);
-
-  const [reversalError, setReversalError] = useState("");
-  const [decisionDependencies, setDecisionDependencies] = useState(null);
-  const [dependenciesError, setDependenciesError] = useState("");
-  const [projectHealth, setProjectHealth] = useState(null);
-  const [healthError, setHealthError] = useState("");
-  const [graph, setGraph] = useState({
-    nodes: [],
-    edges: [],
-    topological_order: [],
-    cycles: [],
-    has_cycles: false,
-    analysis: [],
-  });
-  const [impact, setImpact] = useState(null);
-  const [impactLoading, setImpactLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
-  const [whatIfOpen, setWhatIfOpen] = useState(false);
-  const [whatIfStatus, setWhatIfStatus] = useState("DELAYED");
-  const [whatIf, setWhatIf] = useState(null);
-  const [whatIfLoading, setWhatIfLoading] = useState(false);
-  const [whatIfError, setWhatIfError] = useState("");
-  const [conflicts, setConflicts] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [newStatus, setNewStatus] = useState("");
-  const [reason, setReason] = useState("");
-  const [updating, setUpdating] = useState(false);
 
   const [editingDecision, setEditingDecision] = useState(false);
   const [decisionDraft, setDecisionDraft] = useState({});
   const [updatingDecision, setUpdatingDecision] = useState(false);
   const [decisionError, setDecisionError] = useState("");
-  const [editorError, setEditorError] = useState("");
 
-  // New-dependency form. The server refuses an edge that would close a
-  // cycle and answers 409 with the loop; that payload opens the dialog.
-  const [dependencyDraft, setDependencyDraft] = useState({
-    predecessor: "",
-    successor: "",
-  });
-  const [dependencySaving, setDependencySaving] = useState(false);
-  const [dependencyError, setDependencyError] = useState("");
-  // Advisory, not a rejection: the edge is stored and the dates are wrong.
-  const [dependencyNotice, setDependencyNotice] = useState(null);
-  const [cycleReport, setCycleReport] = useState(null);
-  const [cycleError, setCycleError] = useState("");
-
-  // Bumped after every mutation so the paginated lists and the impact
-  // cards re-fetch without losing the page the user is standing on.
+  // Bumped after every mutation so the paginated lists re-fetch without
+  // losing the page the user is standing on.
   const [refreshTick, setRefreshTick] = useState(0);
-
-  // Graph snapshots: saved copies of the dependency graph with a title
-  // and timestamp ("meeting summary as a graph").
-  const [snapshots, setSnapshots] = useState([]);
-  const [snapshotTitle, setSnapshotTitle] = useState("");
-  const [snapshotSaving, setSnapshotSaving] = useState(false);
-  const [snapshotError, setSnapshotError] = useState("");
-  const [snapshotNotice, setSnapshotNotice] = useState("");
-  const [viewingSnapshot, setViewingSnapshot] = useState(null);
-  const [viewingSnapshotLoading, setViewingSnapshotLoading] = useState(false);
-  const [viewingSnapshotError, setViewingSnapshotError] = useState("");
-
-  // Snapshot comparison: the two selected ids, the server-computed diff,
-  // and the loading/error states that keep the result from going stale.
-  const [compareFromId, setCompareFromId] = useState("");
-  const [compareToId, setCompareToId] = useState("");
-  const [snapshotDiff, setSnapshotDiff] = useState(null);
-  const [snapshotDiffLoading, setSnapshotDiffLoading] = useState(false);
-  const [snapshotDiffError, setSnapshotDiffError] = useState("");
 
   // Which section is on screen. Driven by the URL hash so a reload, a
   // bookmark and the back button all land on the same section.
@@ -435,6 +104,7 @@ function App() {
       return first.id - second.id;
     }
   );
+
   const visibleDecision =
     visibleDecisions.find((item) => item.id === decisionId) ?? null;
 
@@ -499,23 +169,6 @@ function App() {
     refreshTick
   );
 
-  // One shared list feeds the overview attention, the decision-card
-  // markers and the deliberation view — the whole layer reads from the
-  // same data, so the three surfaces can never disagree.
-  const argumentsList = usePagedList(
-    projectId ? `${API_URL}/arguments?project_id=${projectId}` : null,
-    100,
-    refreshTick
-  );
-
-  const commitmentHistory = usePagedList(
-    selectedId != null
-      ? `${API_URL}/commitments/${selectedId}/history`
-      : null,
-    AUDIT_PAGE_SIZE,
-    refreshTick
-  );
-
   const decisionHistory = usePagedList(
     decisionId != null
       ? `${API_URL}/decisions/${decisionId}/history`
@@ -523,32 +176,6 @@ function App() {
     AUDIT_PAGE_SIZE,
     refreshTick
   );
-
-  // The impact cards keep the last response they fetched and only render
-  // it while it still belongs to the current selection. Comparing against
-  // the payload's own id means a stale card can never be shown, without
-  // an effect having to clear state just to hide it.
-  const currentImpact =
-    impact && impact.commitment_id === selectedId ? impact : null;
-
-  const currentWhatIf =
-    whatIfOpen &&
-    whatIf?.commitment_id === selectedId &&
-    whatIf?.hypothetical_status === whatIfStatus
-      ? whatIf
-      : null;
-
-  // Remount the impact panel when the source, hypothesis, or mode changes
-  // so its internal list pagination always starts on page one.
-  const impactPanelKey = `impact-${selectedId ?? "none"}-${whatIfStatus}-${
-    whatIfOpen ? "preview" : "current"
-  }`;
-
-  const currentDecisionImpact =
-    decisionImpact && decisionImpact.decision_id === decisionId
-      ? decisionImpact
-      : null;
-
 
   async function loadDashboard(keepSelected = null, preferProjectId = null) {
     const requestId = ++dashboardRequestRef.current;
@@ -614,8 +241,6 @@ function App() {
           ? previous
           : decisionsData[0]?.id ?? null
       );
-      setConflicts([]);
-      setSelectedId(null);
       return true;
     } catch (err) {
       if (requestId === dashboardRequestRef.current) {
@@ -631,7 +256,7 @@ function App() {
   }
 
   // Reload everything after a write. `loadDashboard` alone would leave
-  // the paginated lists and the impact cards showing pre-write data.
+  // the paginated lists showing pre-write data.
   async function reloadData(keepSelected = null, preferProjectId = null) {
     const refreshed = await loadDashboard(keepSelected, preferProjectId);
 
@@ -642,41 +267,7 @@ function App() {
     return refreshed;
   }
 
-  function openImpact(commitmentId, status = "DELAYED") {
-    setSelectedId(commitmentId);
-    setWhatIfStatus(status);
-    setWhatIfError("");
-    setWhatIfOpen(true);
-
-    // The Plan page renders the preview below the commitment grid. Bring
-    // it into view after the click so the preview is genuinely one click
-    // away instead of one click plus a manual scroll.
-    if (view === "plan") {
-      window.setTimeout(() => {
-        document
-          .getElementById("impact-panel")
-          ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }, 0);
-    }
-  }
-
-  function previewImpact(status = whatIfStatus) {
-    if (selectedId == null) {
-      return;
-    }
-
-    setWhatIfStatus(status);
-    setWhatIfError("");
-    setWhatIfOpen(true);
-  }
-
-  function closeImpact() {
-    setWhatIfOpen(false);
-    setWhatIfError("");
-  }
-
   function selectProject(nextProject) {
-    closeImpact();
     window.localStorage.setItem(
       "decisiontrace.activeProjectId",
       String(nextProject.id)
@@ -700,7 +291,6 @@ function App() {
 
     const created = await response.json();
 
-    closeImpact();
     window.localStorage.setItem(
       "decisiontrace.activeProjectId",
       String(created.id)
@@ -723,7 +313,6 @@ function App() {
     // Dropping the active project must not leave its id behind as the
     // "last picked" project, or the loader would try to resurrect it.
     if (project?.id === targetProject.id) {
-      closeImpact();
       window.localStorage.removeItem("decisiontrace.activeProjectId");
       activeProjectIdRef.current = null;
       setProject(null);
@@ -760,7 +349,7 @@ function App() {
     );
 
     if (activeProjectIdRef.current === created.project_id) {
-      const refreshed = await reloadData(selectedId, created.project_id);
+      const refreshed = await reloadData(null, created.project_id);
 
       if (refreshed && activeProjectIdRef.current === created.project_id) {
         setDecisionId(created.id);
@@ -770,417 +359,6 @@ function App() {
 
     return created;
   }
-
-  async function createCommitment(payload) {
-    const created = await createRecord(
-      "/commitments", payload, "recordForm.commitmentFailed"
-    );
-
-    if (activeProjectIdRef.current === created.project_id) {
-      await reloadData(created.id, created.project_id);
-    }
-
-    return created;
-  }
-
-  async function loadSnapshots() {
-    if (!project?.id) {
-      setSnapshots([]);
-      setViewingSnapshot(null);
-      setViewingSnapshotError("");
-      setSnapshotDiff(null);
-      setSnapshotDiffError("");
-      setCompareFromId("");
-      setCompareToId("");
-      return;
-    }
-
-    try {
-      setViewingSnapshot(null);
-      setViewingSnapshotError("");
-
-      const response = await fetch(
-        `${API_URL}/projects/${project.id}/snapshots?limit=20`
-      );
-
-      if (!response.ok) {
-        return;
-      }
-
-      const data = await response.json();
-      const items = data.items ?? [];
-
-      setSnapshots(items);
-      setSnapshotDiff(null);
-      setSnapshotDiffError("");
-
-      // Default to "previous vs latest": older on the left, newer on the
-      // right. Keep an explicit choice while it still exists in the list.
-      setCompareFromId((current) =>
-        items.some((item) => String(item.id) === String(current))
-          ? current
-          : items[1]?.id ?? items[0]?.id ?? ""
-      );
-      setCompareToId((current) =>
-        items.some((item) => String(item.id) === String(current))
-          ? current
-          : items[0]?.id ?? ""
-      );
-
-      if (items.length < 2) {
-        setSnapshotDiff(null);
-      }
-    } catch {
-      // A failed list refresh keeps the previous list on screen.
-    }
-  }
-
-  async function fetchSnapshotDetail(snapshotId) {
-    const response = await fetch(
-      `${API_URL}/projects/${project.id}/snapshots/${snapshotId}`
-    );
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || "Failed to load the snapshot.");
-    }
-
-    return response.json();
-  }
-
-  async function viewSnapshot(snapshot) {
-    if (!project?.id) {
-      return;
-    }
-
-    setViewingSnapshot(null);
-    setViewingSnapshotLoading(true);
-    setViewingSnapshotError("");
-
-    try {
-      setViewingSnapshot(await fetchSnapshotDetail(snapshot.id));
-    } catch (err) {
-      setViewingSnapshotError(
-        te(err.message) || t("dependencies.failedLoadSnapshot")
-      );
-    } finally {
-      setViewingSnapshotLoading(false);
-    }
-  }
-
-  async function runSnapshotDiff(fromId, toId) {
-    if (!project?.id || !fromId || !toId) {
-      return;
-    }
-
-    if (String(fromId) === String(toId)) {
-      setSnapshotDiff(null);
-      setSnapshotDiffError(t("dependencies.compareSame"));
-      return;
-    }
-
-    setSnapshotDiff(null);
-    setSnapshotDiffError("");
-    setSnapshotDiffLoading(true);
-
-    try {
-      const response = await fetch(
-        `${API_URL}/projects/${project.id}/snapshots/${fromId}/diff/${toId}`
-      );
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || "Failed to compare snapshots.");
-      }
-
-      setSnapshotDiff(await response.json());
-    } catch (err) {
-      setSnapshotDiffError(
-        te(err.message) || t("dependencies.compareFailed")
-      );
-    } finally {
-      setSnapshotDiffLoading(false);
-    }
-  }
-
-  async function compareSnapshots(event) {
-    event.preventDefault();
-    await runSnapshotDiff(compareFromId, compareToId);
-  }
-
-  function compareWithPrevious(index) {
-    const current = snapshots[index];
-    const previous = snapshots[index + 1];
-
-    if (!current || !previous) {
-      return;
-    }
-
-    setCompareFromId(previous.id);
-    setCompareToId(current.id);
-    runSnapshotDiff(previous.id, current.id);
-  }
-
-  async function saveSnapshot(event) {
-    event.preventDefault();
-
-    const title = snapshotTitle.trim();
-
-    if (!title || !project?.id) {
-      return;
-    }
-
-    setSnapshotSaving(true);
-    setSnapshotError("");
-    setSnapshotNotice("");
-
-    try {
-      const response = await fetch(
-        `${API_URL}/projects/${project.id}/snapshots`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || "Failed to save the snapshot.");
-      }
-
-      const snapshot = await response.json();
-
-      downloadGraphSvg(snapshot.graph, title);
-      setSnapshotTitle("");
-
-      const nodes = snapshot.graph?.nodes?.length ?? 0;
-      const edges = snapshot.graph?.edges?.length ?? 0;
-
-      setSnapshotNotice(
-        t("dependencies.snapshotSaved", {
-          nodes,
-          nodeWord: tp("dependencies.snapshotCommitments", nodes, {
-            count: nodes,
-          }),
-          edges,
-          edgeWord: tp("dependencies.snapshotDependencies", edges, {
-            count: edges,
-          }),
-        })
-      );
-
-      await loadSnapshots();
-    } catch (err) {
-      setSnapshotError(te(err.message) || t("dependencies.failedSnapshot"));
-    } finally {
-      setSnapshotSaving(false);
-    }
-  }
-
-  function buildGraphSvg(graph, title) {
-    const layout = computeLayout(graph);
-
-    if (!layout) {
-      return null;
-    }
-
-    const { positions, svgWidth, svgHeight } = layout;
-    const svgNs = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(svgNs, "svg");
-
-    svg.setAttribute("xmlns", svgNs);
-    svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
-    svg.setAttribute("width", svgWidth);
-    svg.setAttribute("height", svgHeight);
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", title);
-
-    const titleNode = document.createElementNS(svgNs, "title");
-    titleNode.textContent = title;
-    svg.appendChild(titleNode);
-
-    const background = document.createElementNS(svgNs, "rect");
-    background.setAttribute("width", svgWidth);
-    background.setAttribute("height", svgHeight);
-    background.setAttribute("fill", "#ffffff");
-    svg.appendChild(background);
-
-    const defs = document.createElementNS(svgNs, "defs");
-    const marker = document.createElementNS(svgNs, "marker");
-    marker.setAttribute("id", "snapshot-arrow");
-    marker.setAttribute("viewBox", "0 0 10 10");
-    marker.setAttribute("refX", "9");
-    marker.setAttribute("refY", "5");
-    marker.setAttribute("markerWidth", "7");
-    marker.setAttribute("markerHeight", "7");
-    marker.setAttribute("orient", "auto-start-reverse");
-
-    const arrow = document.createElementNS(svgNs, "path");
-    arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
-    arrow.setAttribute("fill", "#98a2b3");
-    marker.appendChild(arrow);
-    defs.appendChild(marker);
-    svg.appendChild(defs);
-
-    for (const edge of graph.edges) {
-      const from = positions[edge.predecessor_commitment_id];
-      const to = positions[edge.successor_commitment_id];
-
-      if (!from || !to) {
-        continue;
-      }
-
-      const path = document.createElementNS(svgNs, "path");
-      path.setAttribute(
-        "d",
-        `M ${from.x + NODE_W / 2} ${from.y} L ${to.x - NODE_W / 2} ${to.y}`
-      );
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "#98a2b3");
-      path.setAttribute("stroke-width", "1.6");
-      path.setAttribute("marker-end", "url(#snapshot-arrow)");
-      svg.appendChild(path);
-    }
-
-    for (const node of graph.nodes) {
-      const pos = positions[node.id];
-
-      if (!pos) {
-        continue;
-      }
-
-      const colors = STATUS_COLORS[node.status] ?? STATUS_COLORS.OPEN;
-      const rect = document.createElementNS(svgNs, "rect");
-      rect.setAttribute("x", pos.x - NODE_W / 2);
-      rect.setAttribute("y", pos.y - NODE_H / 2);
-      rect.setAttribute("width", NODE_W);
-      rect.setAttribute("height", NODE_H);
-      rect.setAttribute("rx", "12");
-      rect.setAttribute("fill", colors.fill);
-      rect.setAttribute("stroke", colors.stroke);
-      rect.setAttribute("stroke-width", "1.5");
-      svg.appendChild(rect);
-
-      const owner = document.createElementNS(svgNs, "text");
-      owner.setAttribute("x", pos.x - NODE_W / 2 + 14);
-      owner.setAttribute("y", pos.y - 5);
-      owner.setAttribute("font-family", '"Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif');
-      owner.setAttribute("font-size", "13");
-      owner.setAttribute("font-weight", "700");
-      owner.setAttribute("fill", "#172033");
-      owner.textContent = node.owner;
-      svg.appendChild(owner);
-
-      const status = document.createElementNS(svgNs, "text");
-      status.setAttribute("x", pos.x - NODE_W / 2 + 14);
-      status.setAttribute("y", pos.y + 15);
-      status.setAttribute("font-family", '"Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif');
-      status.setAttribute("font-size", "11.5");
-      status.setAttribute("fill", colors.text);
-      status.textContent = `#${node.id} · ${t(
-        `status.${node.status}`,
-        {},
-        node.status.replace("_", " ")
-      )}`;
-      svg.appendChild(status);
-    }
-
-    return svg;
-  }
-
-  function downloadGraphSvg(graph, title) {
-    const svg = buildGraphSvg(graph, title);
-
-    if (!svg) {
-      return;
-    }
-
-    // Serialize a detached SVG built from the saved graph, not the SVG
-    // currently on screen: saving while viewing an older snapshot must
-    // download the graph that was just saved.
-    const xml = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([xml], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download =
-      `${title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.svg`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function downloadSnapshotJson(snapshot) {
-    if (!project?.id) {
-      return;
-    }
-
-    try {
-      const detail = await fetchSnapshotDetail(snapshot.id);
-      const blob = new Blob([JSON.stringify(detail.graph, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download =
-        `${snapshot.title.replace(/[^\w一-鿿]+/g, "-").toLowerCase() || "snapshot"}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setSnapshotError(
-        te(err.message) || t("dependencies.failedLoadSnapshot")
-      );
-    }
-  }
-
-  async function deleteSnapshot(snapshotId) {
-    if (!project?.id) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${API_URL}/projects/${project.id}/snapshots/${snapshotId}`,
-        { method: "DELETE" }
-      );
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || "Failed to delete the snapshot.");
-      }
-
-      if (viewingSnapshot?.id === snapshotId) {
-        setViewingSnapshot(null);
-      }
-
-      setSnapshotDiff(null);
-      await loadSnapshots();
-    } catch (err) {
-      setSnapshotError(
-        te(err.message) || t("dependencies.failedDeleteSnapshot")
-      );
-    }
-  }
-
-  function formatSnapshotTime(value) {
-    return formatDateTime(value);
-  }
-
-  useEffect(() => {
-    // Same deferred-loader pattern as the dashboard effect above.
-    // `view` is in the deps so a snapshot saved from the intake view
-    // (meeting summary → snapshot) is visible the moment the user opens
-    // the Dependencies view, without a full dashboard reload.
-    async function load() {
-      await loadSnapshots();
-    }
-
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, view]);
 
   useEffect(() => {
     // Defined locally and awaited: react-hooks' set-state-in-effect rule
@@ -1229,209 +407,18 @@ function App() {
     };
   }, [projectId]);
 
-  // Cross-section links (a conflict chip that should open the audit
-  // trail, for example) go through the hash so the sidebar state, the
-  // URL and the back button stay in agreement.
-  function navigate(nextView) {
-    if (nextView === view) {
+  function startDecisionEdit() {
+    const decision =
+      decisions.find((item) => item.id === decisionId) ??
+      decisions[0] ??
+      null;
+
+    if (!decision) {
       return;
     }
 
-    window.location.hash = nextView;
-  }
-
-  useEffect(() => {
-    if (selectedId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadTrace() {
-      setImpactLoading(true);
-
-      try {
-        const impactResponse = await fetch(
-          `${API_URL}/commitments/${selectedId}/impact`
-        );
-
-        if (!impactResponse.ok) {
-          throw new Error("Failed to load traceability data");
-        }
-
-        if (!cancelled) {
-          setImpact(await impactResponse.json());
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(te(err.message));
-        }
-      } finally {
-        if (!cancelled) {
-          setImpactLoading(false);
-        }
-      }
-    }
-
-    loadTrace();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId, refreshTick, te]);
-
-  useEffect(() => {
-    if (!whatIfOpen || selectedId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadWhatIf() {
-      setWhatIfLoading(true);
-      setWhatIfError("");
-
-      try {
-        const response = await fetch(
-          `${API_URL}/commitments/${selectedId}/what-if?status=${whatIfStatus}`
-        );
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.detail || "Failed to preview impact.");
-        }
-
-        if (!cancelled) {
-          setWhatIf(await response.json());
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setWhatIfError(
-            te(err.message) || t("impact.failedPreview")
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setWhatIfLoading(false);
-        }
-      }
-    }
-
-    loadWhatIf();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [whatIfOpen, selectedId, whatIfStatus, refreshTick, te, t]);
-
-  useEffect(() => {
-    if (projectId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadHealth() {
-      try {
-        const response = await fetch(
-          `${API_URL}/projects/${projectId}/health`
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load decision health");
-        }
-
-        if (!cancelled) {
-          setProjectHealth(await response.json());
-          setHealthError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setHealthError(te(err.message));
-        }
-      }
-    }
-
-    loadHealth();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, refreshTick, te]);
-
-  useEffect(() => {
-    if (decisionId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadReversal() {
-      try {
-        const response = await fetch(
-          `${API_URL}/decisions/${decisionId}/reversal`
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load the reversal trace");
-        }
-
-        if (!cancelled) {
-          setDecisionReversal(await response.json());
-          setReversalError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setReversalError(te(err.message));
-        }
-      }
-    }
-
-    loadReversal();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [decisionId, refreshTick, te]);
-
-  useEffect(() => {
-    if (decisionId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadDecisionDependencies() {
-      try {
-        const response = await fetch(
-          `${API_URL}/decisions/${decisionId}/dependencies`
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load decision dependencies");
-        }
-
-        if (!cancelled) {
-          setDecisionDependencies(await response.json());
-          setDependenciesError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDependenciesError(te(err.message));
-        }
-      }
-    }
-
-    loadDecisionDependencies();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [decisionId, refreshTick, te]);
-
-  function startDecisionEdit() {
     setDecisionDraft({
-      title: visibleDecision.title,
+      title: decision.title,
       rationale: decision.rationale ?? "",
       status: decision.status,
       reason: "",
@@ -1442,17 +429,22 @@ function App() {
   }
 
   async function saveDecision() {
+    const decision =
+      decisions.find((item) => item.id === decisionId) ??
+      decisions[0] ??
+      null;
+
+    if (!decision) {
+      return;
+    }
+
     if (!decisionDraft.title?.trim()) {
       setDecisionError(t("decisions.titleRequired"));
       return;
     }
 
     // A decision keeps its recorded goal: the rationale may change, but
-    // it cannot be erased (mirrors the backend rule on PATCH). A
-    // decision extracted without a rationale stays editable — the
-    // backend rejects only an explicit erasure, not an empty rationale
-    // left untouched (extraction candidates are exempt from the
-    // rationale requirement, and they must still be supersedable).
+    // it cannot be erased (mirrors the backend rule on PATCH).
     const draftRationale = decisionDraft.rationale ?? "";
     const currentRationale = decision.rationale ?? "";
 
@@ -1515,7 +507,7 @@ function App() {
 
       setEditingDecision(false);
 
-      await reloadData(selectedId);
+      await reloadData();
     } catch (err) {
       setDecisionError(te(err.message) || t("decisions.failedUpdate"));
     } finally {
@@ -1523,433 +515,11 @@ function App() {
     }
   }
 
-  async function updateCommitmentStatus(commitmentId) {
-    if (!newStatus) {
-      return;
-    }
-
-    try {
-      setUpdating(true);
-      setEditorError("");
-
-      const response = await fetch(
-        `${API_URL}/commitments/${commitmentId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: newStatus,
-            reason: reason || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Failed to update status");
-      }
-
-      setEditingId(null);
-      setNewStatus("");
-      setReason("");
-
-      await reloadData(commitmentId);
-    } catch (err) {
-      setEditorError(te(err.message) || t("plan.failedStatus"));
-    } finally {
-      setUpdating(false);
-    }
-  }
-
-  async function addDependency(event) {
-    event.preventDefault();
-
-    if (!project) {
-      return;
-    }
-
-    if (!dependencyDraft.predecessor || !dependencyDraft.successor) {
-      setDependencyError(t("dependencies.pickBoth"));
-      return;
-    }
-
-    try {
-      setDependencySaving(true);
-      setDependencyError("");
-      setDependencyNotice(null);
-
-      const response = await fetch(`${API_URL}/dependencies`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          project_id: project.id,
-          predecessor_commitment_id: Number(dependencyDraft.predecessor),
-          successor_commitment_id: Number(dependencyDraft.successor),
-          dependency_type: "BLOCKS",
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        const detail = data.detail;
-
-        // 409 + CYCLE_DETECTED carries the loop; anything else is a
-        // plain message shown under the form.
-        if (detail && detail.code === "CYCLE_DETECTED") {
-          setCycleError("");
-          setCycleReport(detail);
-          return;
-        }
-
-        if (detail && detail.code === "DUPLICATE_DEPENDENCY") {
-          const predecessor = graph.nodes.find(
-            (node) => node.id === Number(dependencyDraft.predecessor)
-          );
-          const successor = graph.nodes.find(
-            (node) => node.id === Number(dependencyDraft.successor)
-          );
-
-          setDependencyError(
-            t("dependencies.duplicate", {
-              from: predecessor?.owner ?? "?",
-              to: successor?.owner ?? "?",
-            })
-          );
-          return;
-        }
-
-        throw new Error(
-          typeof detail === "string"
-            ? detail
-            : detail?.message || "Failed to add the dependency"
-        );
-      }
-
-      const created = await response.json();
-
-      setDependencyDraft({ predecessor: "", successor: "" });
-      setDependencyNotice(
-        created.warning
-          ? { ...created.warning, dependency_id: created.id }
-          : null
-      );
-      await reloadData(selectedId);
-    } catch (err) {
-      setDependencyError(te(err.message) || t("dependencies.failedAdd"));
-    } finally {
-      setDependencySaving(false);
-    }
-  }
-
-  async function removeDependency(dependencyId) {
-    try {
-      setDependencySaving(true);
-      setDependencyError("");
-      setCycleError("");
-
-      const response = await fetch(
-        `${API_URL}/dependencies/${dependencyId}`,
-        { method: "DELETE" }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(
-          typeof data.detail === "string"
-            ? data.detail
-            : "Failed to remove the dependency"
-        );
-      }
-
-      setCycleReport(null);
-      setDependencyNotice(null);
-      await reloadData(selectedId);
-    } catch (err) {
-      if (cycleReport) {
-        setCycleError(te(err.message));
-      } else {
-        setDependencyError(te(err.message) || t("dependencies.failedRemove"));
-      }
-    } finally {
-      setDependencySaving(false);
-    }
-  }
-
-  async function markCycleTaskBlocked() {
-    if (!cycleReport) {
-      return;
-    }
-
-    const target = cycleReport.recommendation;
-
-    try {
-      setDependencySaving(true);
-      setCycleError("");
-
-      const response = await fetch(
-        `${API_URL}/commitments/${target.commitment_id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            status: "BLOCKED",
-            reason: t("cycle.blockedReason", {
-              chain: cycleReport.chain.join(" → "),
-            }),
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(
-          typeof data.detail === "string"
-            ? data.detail
-            : "Failed to mark the commitment as blocked"
-        );
-      }
-
-      setCycleReport(null);
-      setDependencyDraft({ predecessor: "", successor: "" });
-      setSelectedId(target.commitment_id);
-      await reloadData(target.commitment_id);
-    } catch (err) {
-      setCycleError(te(err.message));
-    } finally {
-      setDependencySaving(false);
-    }
-  }
-
   if (loading) {
     return <div className="message">{t("app.loading")}</div>;
   }
 
-  const byId = {};
-  for (const node of graph.nodes) {
-    byId[node.id] = node;
-  }
-
-  const decision =
-    decisions.find((item) => item.id === decisionId) ??
-    decisions[0] ??
-    null;
-
-  const analysisById = {};
-  for (const item of graph.analysis) {
-    analysisById[item.commitment_id] = item;
-  }
-
-  // The API sends a stable `type` plus the record ids; the English
-  // `message` is only a fallback. Rebuilding the sentence here keeps the
-  // consistency screen in the same language as the rest of the UI.
-  function describeConflict(conflict) {
-    const ids = conflict.commitment_ids ?? [];
-
-    switch (conflict.type) {
-      case "CYCLE":
-        return t("consistency.cycle", { owners: names(ids, byId) });
-
-      case "ORDER_VIOLATION": {
-        const successor = byId[ids[0]];
-        const predecessor = byId[ids[1]];
-
-        return t("consistency.orderViolation", {
-          successor: successor?.owner ?? `#${ids[0]}`,
-          predecessor: predecessor?.owner ?? `#${ids[1]}`,
-          status: predecessor
-            ? t(
-                `status.${predecessor.status}`,
-                {},
-                predecessor.status.replace("_", " ")
-              )
-            : "?",
-        });
-      }
-
-      case "DATE_INVERSION": {
-        const successor = byId[ids[0]];
-        const predecessor = byId[ids[1]];
-
-        return t("consistency.dateInversion", {
-          successor: successor?.owner ?? `#${ids[0]}`,
-          successorDate: formatDate(successor?.due_date),
-          predecessor: predecessor?.owner ?? `#${ids[1]}`,
-          predecessorDate: formatDate(predecessor?.due_date),
-        });
-      }
-
-      case "DUPLICATE": {
-        const first = byId[ids[0]];
-
-        return t("consistency.duplicate", {
-          owner: first?.owner ?? "?",
-          count: ids.length,
-          ids: ids.map((id) => `#${id}`).join(", "),
-        });
-      }
-
-      case "STALE_DECISION": {
-        const commitment = byId[ids[0]];
-        const linkedDecision = decisions.find(
-          (item) => item.id === conflict.decision_ids?.[0]
-        );
-
-        return t("consistency.staleDecision", {
-          owner: commitment?.owner ?? "?",
-          status: commitment
-            ? t(
-                `status.${commitment.status}`,
-                {},
-                commitment.status.replace("_", " ")
-              )
-            : "?",
-          title: linkedDecision?.title ?? "?",
-          decisionStatus: linkedDecision
-            ? t(
-                `consistency.decisionStatus.${linkedDecision.status}`,
-                {},
-                linkedDecision.status.toLowerCase()
-              )
-            : "?",
-        });
-      }
-
-      default:
-        return te(conflict.message);
-    }
-  }
-
-  const orderedNodes = graph.topological_order
-    .map((id) => byId[id])
-    .filter(Boolean);
-
-  // Only actual cycle members are "cyclic". Nodes omitted from the
-  // topological order because they sit downstream of a cycle are
-  // deferred, not cyclic.
-  const cyclicNodeIds = new Set(graph.cycles.flat());
-
-  const cyclicNodes = graph.nodes.filter(
-    (node) => cyclicNodeIds.has(node.id)
-  );
-
-  const deferredNodes = graph.nodes.filter(
-    (node) =>
-      !graph.topological_order.includes(node.id) &&
-      !cyclicNodeIds.has(node.id)
-  );
-
-  const selectedNode = selectedId != null ? byId[selectedId] : null;
-
   const pendingTotal = pendingCandidates.total;
-  const openCommitments = graph.nodes.filter(
-    (node) => node.status !== "COMPLETED"
-  ).length;
-
-  // Local calendar day, not a UTC instant: an evening in UTC+8 must not
-  // mark today's due date as overdue.
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(now.getDate()).padStart(2, "0")}`;
-  const isOverdue = (node) =>
-    node.due_date && node.due_date < today && node.status !== "COMPLETED";
-  const overdueCommitments = graph.nodes.filter(isOverdue);
-
-  // Contested is computed from the arguments (A13): a decision with at
-  // least one open AGAINST argument. The same set marks the decision
-  // dropdown, so the surfaces agree by construction, not by luck.
-  const contestedIds = new Set(
-    (argumentsList.items ?? [])
-      .filter(
-        (item) =>
-          item.status === "OPEN" &&
-          item.stance === "AGAINST" &&
-          item.decision_id != null
-      )
-      .map((item) => item.decision_id)
-  );
-
-  const contestedDecisions = decisions.filter((item) =>
-    contestedIds.has(item.id)
-  );
-
-  // Everything the user could act on, ordered by what unblocks the most:
-  // a cycle breaks the plan, a conflict undermines the record, and
-  // unreviewed candidates are simply work in the queue.
-  const attention = [];
-
-  if (graph.has_cycles) {
-    attention.push({
-      key: "cycles",
-      tag: t("overview.tagPlan"),
-      message: t("overview.attentionCycle"),
-      action: t("overview.actionOpenPlan"),
-      view: "plan",
-    });
-  }
-
-  if (conflicts.length > 0) {
-    attention.push({
-      key: "conflicts",
-      tag: t("overview.tagConsistency"),
-      message: tp("overview.attentionConflicts", conflicts.length, {
-        count: conflicts.length,
-        message: describeConflict(conflicts[0]),
-      }),
-      action: t("overview.actionReview"),
-      view: "consistency",
-    });
-  }
-
-  if (contestedDecisions.length > 0) {
-    attention.push({
-      key: "contested",
-      tag: t("overview.tagDecisions"),
-      message: tp(
-        "overview.attentionContested",
-        contestedDecisions.length,
-        {
-          count: contestedDecisions.length,
-          title: contestedDecisions[0].title,
-        }
-      ),
-      action: t("overview.actionReview"),
-      view: "deliberation",
-    });
-  }
-
-  if (pendingTotal > 0) {
-    attention.push({
-      key: "pending",
-      tag: t("overview.tagIntake"),
-      message: tp("overview.attentionPending", pendingTotal, {
-        count: pendingTotal,
-      }),
-      action: t("overview.actionReview"),
-      view: "intake",
-    });
-  }
-
-  if (overdueCommitments.length > 0) {
-    attention.push({
-      key: "overdue",
-      tag: t("overview.tagCommitments"),
-      message: tp("overview.attentionOverdue", overdueCommitments.length, {
-        count: overdueCommitments.length,
-        owner: overdueCommitments[0].owner,
-        date: formatDate(overdueCommitments[0].due_date),
-      }),
-      action: t("overview.actionReview"),
-      view: "plan",
-    });
-  }
 
   return (
     <div className="app">
@@ -1961,14 +531,6 @@ function App() {
           </div>
 
           <div className="topbar-right">
-            {conflicts.length > 0 && (
-              <a className="topbar-conflicts" href="#consistency">
-                {tp("app.conflict", conflicts.length, {
-                  count: conflicts.length,
-                })}
-              </a>
-            )}
-
             <ProjectSwitcher
               projects={projects}
               activeProject={project}
@@ -1982,10 +544,7 @@ function App() {
         </div>
       </header>
 
-      <Sidebar
-        active={view}
-        counts={{ intake: pendingTotal, consistency: conflicts.length }}
-      />
+      <Sidebar active={view} counts={{ intake: pendingTotal }} />
 
       <main className="dashboard">
         {error && (
@@ -2102,7 +661,7 @@ function App() {
                   <div className="decision-title-row">
                     <h2>{visibleDecision?.title || t("decisions.none")}</h2>
 
-                    {decisions.length > 1 && (
+                    {visibleDecisions.length > 1 && (
                       <select
                         className="decision-select"
                         value={decisionId ?? ""}
@@ -2113,7 +672,7 @@ function App() {
                       >
                         {visibleDecisions.map((item) => (
                           <option key={item.id} value={item.id}>
-                            #{item.id} {item.title}
+                            {decisionNumber(item)} {item.title}
                           </option>
                         ))}
                       </select>
@@ -2127,7 +686,6 @@ function App() {
                       {supervisorStatusLabel(visibleDecision)}
                     </span>
                   )}
-
 
                   {visibleDecision && !editingDecision && (
                     <button
@@ -2198,7 +756,6 @@ function App() {
                     </option>
                   </select>
 
-
                   <input
                     type="text"
                     placeholder={t("decisions.reasonPlaceholder")}
@@ -2240,7 +797,10 @@ function App() {
                 <>
                   <div className="rationale">
                     <span>{t("decisions.rationale")}</span>
-                    <p>{visibleDecision?.rationale || t("decisions.noRationale")}</p>
+                    <p>
+                      {visibleDecision?.rationale ||
+                        t("decisions.noRationale")}
+                    </p>
                   </div>
 
                   <div className="trace-source">
@@ -2341,7 +901,6 @@ function App() {
                 </>
               )}
             </section>
-
           </div>
         )}
 
@@ -2371,9 +930,9 @@ function App() {
             />
           </section>
         )}
-        </main>
-      </div>
-    );
+      </main>
+    </div>
+  );
 }
 
 export default App;

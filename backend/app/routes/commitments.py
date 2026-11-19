@@ -23,57 +23,6 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "",
-    response_model=CommitmentResponse
-)
-def create_commitment(
-    commitment: CommitmentCreate,
-    db: Session = Depends(get_db)
-):
-    project = db.query(Project).filter(
-        Project.id == commitment.project_id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found"
-        )
-
-    if commitment.decision_id is not None:
-        decision = db.query(Decision).filter(
-            Decision.id == commitment.decision_id
-        ).first()
-
-        if not decision:
-            raise HTTPException(
-                status_code=404,
-                detail="Decision not found"
-            )
-
-        if decision.project_id != commitment.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Decision does not belong to this project"
-            )
-
-    new_commitment = Commitment(
-        project_id=commitment.project_id,
-        decision_id=commitment.decision_id,
-        owner=commitment.owner,
-        description=commitment.description,
-        due_date=commitment.due_date,
-        status=commitment.status
-    )
-
-    db.add(new_commitment)
-    db.commit()
-    db.refresh(new_commitment)
-
-    return new_commitment
-
-
 @router.get(
     "",
     response_model=list[CommitmentResponse]

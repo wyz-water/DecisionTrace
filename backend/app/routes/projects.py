@@ -13,8 +13,6 @@ from app.models.decision import Decision
 from app.models.decision_history import DecisionHistory
 from app.models.dependency import Dependency
 from app.models.discussion import Discussion
-from app.models.snapshot import Snapshot
-from app.models.argument import Argument
 from app.schemas.project import ProjectCreate, ProjectResponse
 
 
