@@ -1,5 +1,6 @@
 import { useI18n } from "../i18n";
 import { personColor } from "../personColors";
+import { buildDecisionNumbers } from "../decisionNumbers";
 
 /**
  * The decision list of the execution group: decisions whose chain the
@@ -13,21 +14,7 @@ export default function ExecuteDecisions({ decisions }) {
     (decision) => decision.teacher_status === "APPROVED"
   );
 
-  function decisionNumber(item) {
-    if (item.chain_id == null) {
-      return "#" + item.id;
-    }
-
-    const siblings = decisions
-      .filter((entry) => entry.chain_id === item.chain_id)
-      .sort((first, second) =>
-        (first.created_at ?? "") > (second.created_at ?? "") ? 1 : -1
-      );
-
-    const index = siblings.findIndex((entry) => entry.id === item.id);
-
-    return "#" + item.chain_id + "-" + (index + 1);
-  }
+  const { decisionNumber, chainNumber } = buildDecisionNumbers(decisions);
 
   return (
     <section className="card chain-list-card">
@@ -62,7 +49,9 @@ export default function ExecuteDecisions({ decisions }) {
 
               {decision.chain_id != null && (
                 <span className="stakeholder-maker">
-                  {t("execute.chainOf", { id: decision.chain_id })}
+                  {t("execute.chainOf", {
+                    id: chainNumber(decision.chain_id),
+                  })}
                 </span>
               )}
             </li>

@@ -477,7 +477,17 @@ export default function ChainPanel({ projectId, decisions }) {
               onClick={() => reload(chain.id)}
             >
               <div className="chain-card-head">
-                <h3>#{chain.id} {chain.title}</h3>
+                <h3>
+                  {(() => {
+                    const sorted = [...chains].sort((a, b) =>
+                      (a.created_at ?? "") > (b.created_at ?? "") ? 1 : -1
+                    );
+                    const index = sorted.findIndex(
+                      (entry) => entry.id === chain.id
+                    );
+                    return `#${index + 1} ${chain.title}`;
+                  })()}
+                </h3>
                 <span className="chain-status-chip">
                   {statusLabel(chain)}
                 </span>

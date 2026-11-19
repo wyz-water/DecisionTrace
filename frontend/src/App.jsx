@@ -14,6 +14,7 @@ import Pagination from "./components/Pagination.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
 import { useI18n } from "./i18n";
 import { personColor } from "./personColors";
+import { buildDecisionNumbers } from "./decisionNumbers";
 import usePagedList from "./usePagedList.js";
 import { readView } from "./views.js";
 
@@ -403,27 +404,9 @@ function App() {
     (decision) => decision.teacher_status !== "APPROVED"
   );
 
-  // Every decision carries a number: standalone decisions keep the
-  // global id, chain nodes are numbered by their position inside the
-  // chain ("#chain-node"). The table groups rows by chain, so chains
-  // read as units instead of interleaving with free decisions.
-  function decisionNumber(item) {
-    if (item.chain_id == null) {
-      return "#" + item.id;
-    }
-
-    const siblings = decisions
-      .filter((entry) => entry.chain_id === item.chain_id)
-      .sort((first, second) =>
-        (first.created_at ?? "") > (second.created_at ?? "") ? 1 : -1
-      );
-
-    const index = siblings.findIndex(
-      (entry) => entry.id === item.id
-    );
-
-    return "#" + item.chain_id + "-" + (index + 1);
-  }
+  // Project-scoped display numbers: chains are 1..N, chain nodes are
+  // "#chain-node", standalone decisions 1..M — restarted per project.
+  const { decisionNumber, chainLocal } = buildDecisionNumbers(decisions);
 
   const sortedVisibleDecisions = [...visibleDecisions].sort(
     (first, second) => {
@@ -435,8 +418,11 @@ function App() {
       }
 
       if (firstChained) {
-        if (first.chain_id !== second.chain_id) {
-          return first.chain_id - second.chain_id;
+        const firstLocal = chainLocal.get(first.chain_id) ?? 999;
+        const secondLocal = chainLocal.get(second.chain_id) ?? 999;
+
+        if (firstLocal !== secondLocal) {
+          return firstLocal - secondLocal;
         }
 
         return (first.created_at ?? "") > (second.created_at ?? "")

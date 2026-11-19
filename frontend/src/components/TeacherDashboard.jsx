@@ -164,13 +164,23 @@ export default function TeacherDashboard({ section = "awaiting" }) {
     );
   }
 
-  function reviewBlock(project, chain) {
+  function reviewBlock(project, chain, groupChains) {
     const detail = chain.detail;
 
     return (
       <div className="teacher-chain-review" key={chain.id}>
         <div className="teacher-group-head">
-          <h3>#{chain.id} {chain.title}</h3>
+          <h3>
+            {(() => {
+              const sorted = [...groupChains].sort((a, b) =>
+                (a.created_at ?? "") > (b.created_at ?? "") ? 1 : -1
+              );
+              const index = sorted.findIndex(
+                (entry) => entry.id === chain.id
+              );
+              return `#${index + 1} ${chain.title}`;
+            })()}
+          </h3>
           <span className="chain-status-chip">{statusLabel(chain)}</span>
         </div>
 
@@ -432,7 +442,9 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                 {awaiting.length === 0 ? (
                   <p className="muted">{t("teacher.noAwaiting")}</p>
                 ) : (
-                  awaiting.map((chain) => reviewBlock(project, chain))
+                  awaiting.map((chain) =>
+                    reviewBlock(project, chain, chains)
+                  )
                 )}
               </div>
             </div>
