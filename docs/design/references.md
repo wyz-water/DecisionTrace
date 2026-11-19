@@ -121,6 +121,14 @@ analysis (Part III, §5) is the same chapter one section further.
 
 ---
 
+so "which task may start next" becomes a single topological sort of
+the current graph. In the repositioned system the same algorithm backs
+the execution phase: the layered SVG columns are literal topological
+depths, and a task missing from the order is the definition of the
+cycle check. Citing the algorithm book matters because our checks are
+not heuristics — they are the standard ones, implemented directly, so
+their correctness does not depend on our own proof.
+
 ## 5. Wan, Z., Cheng, F., Mao, Z., Liu, Q., Song, H., Li, J., & Kurohashi, S. (2023). GPT-RE: In-context learning for relation extraction using large language models. *EMNLP 2023*.
 
 GPT-RE frames relation extraction as in-context learning: rather than
@@ -143,3 +151,7 @@ The honest difference between GPT-RE and our use: their benchmark is
 scientific literature with fixed schemas; our input is messy team
 meeting text in two languages, which is why field accuracy ≥ 80% is
 our target, not the high nineties reported in the paper.
+
+The reference also disciplined our adoption rule: the LLM path stays
+only if the blind comparison shows it beating the rule engine without
+losing any target — measured evidence first, adoption second.
