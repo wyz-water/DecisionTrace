@@ -4,9 +4,6 @@ from app.services.evaluation import (
     inter_annotator_agreement,
     score_all,
     score_type,
-    snapshot_agreement,
-    summary_coverage,
-    summary_faithfulness,
     verification_rates,
     wrong_type_count,
 )
@@ -127,70 +124,6 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("DECISION", result["per_type"])
         self.assertIn("COMMITMENT", result["per_type"])
         self.assertEqual(result["wrong_type"], 0)
-
-
-class SummaryTests(unittest.TestCase):
-    def test_coverage_counts_gold_entities_in_the_summary(self):
-        gold = [decision(), commitment()]
-
-        result = summary_coverage(
-            gold, ["Redis", "set up the cache"]
-        )
-
-        self.assertEqual(result["covered"], 2)
-        self.assertEqual(result["coverage"], 1.0)
-
-    def test_coverage_misses_are_reported(self):
-        gold = [decision(), commitment()]
-
-        result = summary_coverage(gold, ["Redis"])
-
-        self.assertEqual(result["covered"], 1)
-        self.assertEqual(result["coverage"], 0.5)
-
-    def test_faithfulness_requires_support_in_the_text(self):
-        result = summary_faithfulness(
-            ["Redis", "set up the cache", "invented Kafka plan"], TEXT
-        )
-
-        self.assertEqual(result["faithful"], 2)
-        self.assertEqual(result["faithfulness"], round(2 / 3, 3))
-
-    def test_dependency_display_name_is_a_pair(self):
-        gold = [{
-            "type": "DEPENDENCY",
-            "fields": {
-                "predecessor_owner": "Dora",
-                "successor_owner": "Eve",
-                "dependency_type": "BLOCKS",
-            },
-            "span": "Eve depends on Dora",
-        }]
-
-        result = summary_coverage(gold, ["dora -> eve"])
-
-        self.assertEqual(result["coverage"], 1.0)
-
-
-class SnapshotTests(unittest.TestCase):
-    def test_full_agreement(self):
-        result = snapshot_agreement(
-            ["1", "2"], [("1", "2")], ["1", "2"], [("1", "2")]
-        )
-
-        self.assertEqual(result["nodes"]["agreement"], 1.0)
-        self.assertEqual(result["edges"]["agreement"], 1.0)
-
-    def test_partial_edge_agreement(self):
-        result = snapshot_agreement(
-            ["1", "2", "3"],
-            [("1", "2"), ("2", "3")],
-            ["1", "2"],
-            [("1", "2")],
-        )
-
-        self.assertEqual(result["nodes"]["agreement"], round(2 / 3, 3))
-        self.assertEqual(result["edges"]["agreement"], 0.5)
 
 
 class InterAnnotatorTests(unittest.TestCase):

@@ -45,7 +45,9 @@ count).
   layered by topological depth; tasks without a topological position
   (on a cycle) carry a CYCLIC state in the plan list and the Problems
   section names the CYCLE check, so a loop is never drawn as a broken
-  picture.
+  picture. The check is defensive today: the edges ship with the
+  seeded demo data (acyclic); edge creation — and with it cycle
+  refusal before storage — returns in Part III (R5.5).
 
 ## 3. Interaction Conventions
 
@@ -68,10 +70,10 @@ count).
 | `App.jsx` | Shell, project context, decisions state, hash routing, view dispatch |
 | `Sidebar.jsx` / `views.js` | Nav groups and badges |
 | `ProjectSwitcher.jsx` | Group creation/switching/deletion |
-| `DiscussionsPanel.jsx` | Paste/import meeting texts, extraction trigger |
+| `DiscussionsPanel.jsx` | Paste/import meeting texts; extraction trigger (import extracts automatically, pasted text has an explicit action) |
 | `CandidatesPanel.jsx` | Pending/reviewed queues, per-maker filter, confirm/edit/reject |
 | `ChainPanel.jsx` | Chain list + detail: nodes with per-node threads, append revision, submit; execution board when approved |
-| `TeacherDashboard.jsx` | Awaiting (inline chains, per-node verdicts/annotations) and In-progress (per-group selectors, read-only boards) |
+| `TeacherDashboard.jsx` | Awaiting (inline chains, per-node verdicts/annotations; held/rejected chains stay in the queue until the group revises and re-submits) and In-progress (per-group selectors, read-only boards) |
 | `ExecuteDecisions.jsx` | The approved decisions list |
 | `ExecutePanel.jsx` / `ExecutionBoard.jsx` | Tasks, topological graph, AI checks — one board component, student-editable or supervisor-read-only |
 | `DecisionCreateForm.jsx` | Manual decision creation (fallback path) |

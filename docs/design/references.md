@@ -35,7 +35,7 @@ transcript can support. We also took Conklin's caution seriously in one
 respect he would recognize: he warns that structured capture fails when
 it adds friction, because participants stop feeding the map. Our answer
 is that the map is extracted from the discussion text and humans only
-verify (§5, rules 1–3) — mapping without a mapper in the room. Where we
+verify (architecture §5, A9) — mapping without a mapper in the room. Where we
 depart from the book: Conklin is skeptical that software can do the
 mapping itself. Our claim is narrower and testable — the extractor does
 not need to understand the debate, it needs to find who said what, and
@@ -54,10 +54,12 @@ that interesting reasoning about disagreement can be done with one
 relation and a fixed-point computation, without modeling what the
 arguments actually say.
 
-We cite it for exactly that move. DecisionTrace's reasoning layer is
-deliberately as thin as Dung's framework: arguments carry stance and
-claim, and the only computed state is `contested` — a decision with at
-least one open `AGAINST` argument (A13). We do not implement Dung's
+We cite it for exactly that move. The pre-repositioning reasoning layer
+was deliberately as thin as Dung's framework: arguments carried stance
+and claim, and the only computed state was `contested` — a decision
+with at least one open `AGAINST` argument. The chain model keeps the
+same principle through supervisor verdicts: disagreement is settled by
+an explicit selection (A12). We do not implement Dung's
 acceptability semantics (that would require argument-to-argument attack
 edges, which extraction from meeting text cannot supply reliably), and
 we say so in the design rather than pretending otherwise. What we took
@@ -86,7 +88,7 @@ architecture to every kind of team decision: the same
 decision-plus-context-plus-consequence triangle, but extracted from
 meeting text instead of hand-written by engineers, and connected into a
 graph so consequences can be traced across decisions. Our ADR table in
-the architecture document (A1–A13) is itself written in Nygard's format
+the architecture document (A1–A18) is itself written in Nygard's format
 — context, decision, consequences — which we treat as the system
 documenting itself the way it asks its users to. The paper also reminds
 us of the failure mode our design tries to avoid: ADRs work for a
@@ -115,9 +117,11 @@ feedback that steered the project ("graph-structured meeting summary
 with a topological-sort flavor") is, in implementation terms, exactly
 this chapter. The textbook also gives us the honest limits: topological
 sort says nothing when the graph has a cycle (there is no valid order),
-which is why the design refuses to store cycles and renders them as
-errors instead of drawing a partial order. The planned critical-path
-analysis (Part III, §5) is the same chapter one section further.
+which is why dependency edge creation — when it returns in Part III
+(R5.5) — refuses cycles before storage, and the read-time checks
+render any cycle as an error instead of drawing a partial order. The
+planned critical-path analysis (Part III) is the same chapter one
+section further.
 
 ---
 

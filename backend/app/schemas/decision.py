@@ -19,11 +19,8 @@ class DecisionUpdate(BaseModel):
     status: str | None = None
     reason: str | None = None
     # Who made the decision (None = team decision). Explicitly settable
-    # and clearable via model_fields_set, like the successor link.
+    # and clearable via model_fields_set.
     decided_by: str | None = None
-    # Names the decision that replaced this one. Meaningful only when the
-    # resulting status is SUPERSEDED; otherwise it is forced to None.
-    superseded_by_decision_id: int | None = None
 
 
 class DecisionResponse(BaseModel):

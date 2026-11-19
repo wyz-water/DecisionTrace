@@ -20,9 +20,12 @@ extracts decision candidates with the exact source sentence; humans
 verify at the single gate. The supervisor never transcribes anything:
 they read submitted decision chains and decide.
 
-**The decision chain.** A decision is no longer a form field with a
-status. It is a decision point on a chain — one topic, one line of
-discussion. Every point carries its own chat-style thread, so the
+**The decision chain.** A decision is no longer a lone form field
+with a status. It is a decision point on a chain — one topic, one
+line of discussion. A decision can start free-standing (a *free
+decision*, the drafting state), but only points on a chain are
+submitted, supervised and executed: starting a chain from a free
+decision is the step that makes it count. Every point carries its own chat-style thread, so the
 reasoning lives under the decision it reasons about. A revision is a
 new point on the same chain; earlier points stay as history. Chain
 points do not consume global numbering — display numbers are
@@ -33,8 +36,8 @@ chains inline — every point, its discussion, its annotations — and may
 annotate any point, and approve, hold or reject any point. Approval is
 a **selection**, not a rubber stamp: the supervisor may pick any point
 as the best one, not necessarily the newest; choosing one overrules
-the chain's other points, and the chain locks — a decision in
-execution cannot keep changing.
+the chain's other pending or held points, and the chain locks — a
+decision in execution cannot keep changing.
 
 **Execution follows approval, never precedes it.** Only an approved
 point enters the execution phase: the group assigns tasks to it, the
