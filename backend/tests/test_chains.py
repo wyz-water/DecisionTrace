@@ -222,6 +222,39 @@ class ChainTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 400)
         self.assertIn("no further decisions", str(raised.exception.detail))
 
+    def test_approval_overrules_other_nodes(self):
+        chain = create_chain(
+            ChainCreate(
+                project_id=self.project.id,
+                decision_id=self.decision.id,
+            ),
+            db=self.db,
+        )
+
+        second = append_chain_node(
+            chain.id,
+            ChainNodeCreate(title="Use SQLite for the demo"),
+            db=self.db,
+        )
+
+        submit_chain(chain.id, db=self.db)
+        first = (
+            self.db.query(Decision)
+            .filter(Decision.id == self.decision.id)
+            .first()
+        )
+
+        teacher_action(
+            chain.id,
+            TeacherAction(status="APPROVED", decision_id=first.id),
+            db=self.db,
+        )
+        self.db.refresh(first)
+        self.db.refresh(second)
+
+        self.assertEqual(first.teacher_status, "APPROVED")
+        self.assertEqual(second.teacher_status, "REJECTED")
+
     def test_submit_sets_pending_and_resubmit_updates(self):
         chain = create_chain(
             ChainCreate(

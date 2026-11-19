@@ -401,7 +401,9 @@ function App() {
   // Unapproved decision points stay in the Decisions view; approved
   // ones (the supervisor's choice) move to the execution group.
   const visibleDecisions = decisions.filter(
-    (decision) => decision.teacher_status !== "APPROVED"
+    (decision) =>
+      decision.teacher_status !== "APPROVED" &&
+      decision.teacher_status !== "REJECTED"
   );
 
   // Project-scoped display numbers: chains are 1..N, chain nodes are
@@ -1197,12 +1199,27 @@ function App() {
   }, []);
 
   useEffect(() => {
-    function handleHashChange() {
+    async function handleHashChange() {
       setView(readView(window.location.hash));
 
       // A section swap is a page change: land at the top, not halfway
       // down a section the user has not seen yet.
       window.scrollTo(0, 0);
+
+      // Decisions change elsewhere (the supervisor approving a node
+      // overrules the chain's other points), so refresh the list when
+      // a view is (re)entered.
+      try {
+        const response = await fetch(
+          `${API_URL}/decisions?project_id=${projectId}`
+        );
+
+        if (response.ok) {
+          setDecisions(await response.json());
+        }
+      } catch {
+        // Keep the stale list on network trouble.
+      }
     }
 
     window.addEventListener("hashchange", handleHashChange);
@@ -1210,7 +1227,7 @@ function App() {
     return () => {
       window.removeEventListener("hashchange", handleHashChange);
     };
-  }, []);
+  }, [projectId]);
 
   // Cross-section links (a conflict chip that should open the audit
   // trail, for example) go through the hash so the sidebar state, the

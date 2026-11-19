@@ -375,15 +375,18 @@ def teacher_action(
         target.teacher_status = status
 
         # Approval is a selection: at most one node of a chain is the
-        # approved one. Choosing another node demotes the previous
-        # choice back to an undecided point.
+        # approved one. Choosing a node overrules the chain's other
+        # pending/held/approved points — they become REJECTED (the
+        # supervisor's choice settles the chain).
         if status == "APPROVED":
             for node in db.query(Decision).filter(
                 Decision.chain_id == chain.id,
                 Decision.id != target.id,
-                Decision.teacher_status == "APPROVED",
+                Decision.teacher_status.in_(
+                    ["PENDING", "HELD", "APPROVED"]
+                ),
             ).all():
-                node.teacher_status = None
+                node.teacher_status = "REJECTED"
 
     if note is not None:
         annotation_decision_id = None
