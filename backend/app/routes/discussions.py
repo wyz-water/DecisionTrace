@@ -15,7 +15,6 @@ from app.models.project import Project
 from app.models.candidate import Candidate
 from app.models.decision import Decision
 from app.models.discussion import Discussion
-from app.models.argument import Argument
 from app.schemas.discussion import (
     DiscussionCreate,
     DiscussionImportResponse,
@@ -27,7 +26,6 @@ from app.services.importing import (
     extract_docx_text,
     extract_pdf_text,
 )
-from app.services.extractor import summarize_discussion
 from app.services.pagination import PageParams, page_response, paginate
 
 
@@ -115,7 +113,6 @@ async def import_discussion(
         title=new_discussion.title,
         content=new_discussion.content,
         encoding=encoding,
-        summary=summarize_discussion(new_discussion.content),
     )
 
 
@@ -152,7 +149,6 @@ def create_discussion(
         "project_id": new_discussion.project_id,
         "title": new_discussion.title,
         "content": new_discussion.content,
-        "summary": summarize_discussion(new_discussion.content),
     }
 
 
@@ -182,7 +178,6 @@ def get_discussions(
             "project_id": row.project_id,
             "title": row.title,
             "content": row.content,
-            "summary": summarize_discussion(row.content),
         }
         for row in rows
     ]
@@ -217,14 +212,6 @@ def delete_discussion(
         Decision.source_discussion_id == discussion.id
     ).update({"source_discussion_id": None}, synchronize_session=False)
 
-    # Confirmed arguments stay authoritative, same as decisions; only the
-    # pointer back to the deleted discussion is cleared.
-    db.query(Argument).filter(
-        Argument.discussion_id == discussion.id
-    ).update({"discussion_id": None}, synchronize_session=False)
-
-    summary = summarize_discussion(discussion.content)
-
     db.delete(discussion)
     db.commit()
 
@@ -233,5 +220,4 @@ def delete_discussion(
         "project_id": discussion.project_id,
         "title": discussion.title,
         "content": discussion.content,
-        "summary": summary,
     }

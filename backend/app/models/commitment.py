@@ -19,6 +19,14 @@ class Commitment(Base):
         nullable=True
     )
 
+    # The chain this task belongs to (execution phase): tasks come
+    # from the chain discussion after the supervisor approved it.
+    chain_id = Column(
+        Integer,
+        ForeignKey("chains.id"),
+        nullable=True
+    )
+
     owner = Column(
         String(100),
         nullable=False

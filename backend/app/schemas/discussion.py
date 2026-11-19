@@ -12,7 +12,6 @@ class DiscussionSummary(BaseModel):
     decisions: list[str]
     commitments: list[str]
     dependencies: list[str]
-    arguments: list[str] = []
     total: int
 
 

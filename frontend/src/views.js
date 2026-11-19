@@ -1,42 +1,34 @@
 /**
- * Section registry.
+ * Section registry — the repositioned system.
  *
- * The sidebar and the router read the same list, so a section can never
- * exist in one and not the other. Grouping follows the order the product
- * actually works in: what we decided -> what we are doing -> how we check
- * it. Each view is one job, not one card.
- *
- * Labels are translation keys, not display strings: the sidebar resolves
- * them through `useI18n`, so switching language never leaves a stale
- * English label in the navigation.
+ * Student side: decisions (the records), chains (discussion + submit +
+ * execution), intake (paste + extract + review).
+ * Supervisor side: the teacher dashboard.
  */
 
 export const VIEW_GROUPS = [
   {
-    labelKey: "nav.group.workspace",
-    views: [{ id: "overview", labelKey: "nav.overview" }],
+    labelKey: "nav.group.teacher",
+    views: [
+      { id: "teacher-awaiting", labelKey: "teacher.awaiting" },
+      { id: "teacher-progress", labelKey: "teacher.inProgress" },
+    ],
   },
   {
     labelKey: "nav.group.decide",
     views: [
       { id: "decisions", labelKey: "nav.decisions" },
-      { id: "deliberation", labelKey: "nav.deliberation" },
+      { id: "chains", labelKey: "nav.chains" },
       { id: "intake", labelKey: "nav.intake" },
     ],
   },
   {
     labelKey: "nav.group.execute",
     views: [
-      { id: "plan", labelKey: "nav.plan" },
-      { id: "dependencies", labelKey: "nav.dependencies" },
-    ],
-  },
-  {
-    labelKey: "nav.group.trace",
-    views: [
-      { id: "search", labelKey: "nav.search" },
-      { id: "consistency", labelKey: "nav.consistency" },
-      { id: "audit", labelKey: "nav.audit" },
+      { id: "execute-decisions", labelKey: "execute.sectionDecisions" },
+      { id: "execute-tasks", labelKey: "execute.sectionTasks" },
+      { id: "execute-graph", labelKey: "execute.sectionGraph" },
+      { id: "execute-problems", labelKey: "execute.sectionProblems" },
     ],
   },
 ];
@@ -45,7 +37,7 @@ export const VIEW_IDS = VIEW_GROUPS.flatMap((group) =>
   group.views.map((view) => view.id)
 );
 
-export const DEFAULT_VIEW = "overview";
+export const DEFAULT_VIEW = "chains";
 
 /** Map `#plan` / `#/plan` / anything unknown to a real view id. */
 export function readView(hash) {

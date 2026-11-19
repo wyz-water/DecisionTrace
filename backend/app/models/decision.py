@@ -46,12 +46,29 @@ class Decision(Base):
         default="CONFIRMED"
     )
 
+    # The supervisor's verdict on THIS decision point (node). Approval
+    # is per node: an approved node enters the execution phase.
+    teacher_status = Column(
+        String(20),
+        nullable=True
+    )
+
     # The decision that replaced this one, when this one was SUPERSEDED.
     # Reversal is a first-class relationship (not just a status): the
     # reversal trace can then name the successor instead of guessing.
     superseded_by_decision_id = Column(
         Integer,
         ForeignKey("decisions.id"),
+        nullable=True
+    )
+
+    # The decision chain this decision is a node of (null until the
+    # chain exists). A chain groups the versions of one subject — the
+    # initial decision and its follow-ups; a reversal is just the next
+    # node of the same chain.
+    chain_id = Column(
+        Integer,
+        ForeignKey("chains.id"),
         nullable=True
     )
 

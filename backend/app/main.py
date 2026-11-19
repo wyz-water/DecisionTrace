@@ -3,26 +3,27 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 
-from app.models.project import Project
-from app.models.discussion import Discussion
-from app.models.decision import Decision
-from app.models.decision_history import DecisionHistory
-from app.models.commitment import Commitment
-from app.models.dependency import Dependency
-from app.models.commitment_history import CommitmentHistory
-from app.models.candidate import Candidate
-from app.models.snapshot import Snapshot
-from app.models.argument import Argument
+# Model imports register the tables with SQLAlchemy metadata; legacy
+# tables (Snapshot, Argument) stay registered so create_all does not
+# drop anything and the demo database keeps working.
+from app.models.project import Project  # noqa: F401
+from app.models.discussion import Discussion  # noqa: F401
+from app.models.decision import Decision  # noqa: F401
+from app.models.decision_history import DecisionHistory  # noqa: F401
+from app.models.commitment import Commitment  # noqa: F401
+from app.models.dependency import Dependency  # noqa: F401
+from app.models.commitment_history import CommitmentHistory  # noqa: F401
+from app.models.candidate import Candidate  # noqa: F401
+from app.models.chain import Chain  # noqa: F401
+from app.models.chain_annotation import ChainAnnotation  # noqa: F401
+from app.models.chain_comment import ChainComment  # noqa: F401
 
 from app.routes.projects import router as projects_router
 from app.routes.discussions import router as discussions_router
 from app.routes.decisions import router as decisions_router
 from app.routes.commitments import router as commitments_router
-from app.routes.dependencies import router as dependencies_router
 from app.routes.candidates import router as candidates_router
-from app.routes.search import router as search_router
-from app.routes.snapshots import router as snapshots_router
-from app.routes.arguments import router as arguments_router
+from app.routes.chains import router as chains_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -49,11 +50,8 @@ app.include_router(projects_router)
 app.include_router(discussions_router)
 app.include_router(decisions_router)
 app.include_router(commitments_router)
-app.include_router(dependencies_router)
 app.include_router(candidates_router)
-app.include_router(search_router)
-app.include_router(snapshots_router)
-app.include_router(arguments_router)
+app.include_router(chains_router)
 
 
 @app.get("/")

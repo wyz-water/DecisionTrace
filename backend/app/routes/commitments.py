@@ -13,11 +13,7 @@ from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentResponse,
     CommitmentStatusUpdate,
-    CommitmentImpactResponse,
-    CommitmentWhatIfResponse,
 )
-from app.services.graph import transitive_impact
-from app.services.impact import simulate_impact
 from app.services.pagination import PageParams, page_response, paginate
 
 
@@ -25,57 +21,6 @@ router = APIRouter(
     prefix="/commitments",
     tags=["Commitments"]
 )
-
-
-@router.post(
-    "",
-    response_model=CommitmentResponse
-)
-def create_commitment(
-    commitment: CommitmentCreate,
-    db: Session = Depends(get_db)
-):
-    project = db.query(Project).filter(
-        Project.id == commitment.project_id
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found"
-        )
-
-    if commitment.decision_id is not None:
-        decision = db.query(Decision).filter(
-            Decision.id == commitment.decision_id
-        ).first()
-
-        if not decision:
-            raise HTTPException(
-                status_code=404,
-                detail="Decision not found"
-            )
-
-        if decision.project_id != commitment.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Decision does not belong to this project"
-            )
-
-    new_commitment = Commitment(
-        project_id=commitment.project_id,
-        decision_id=commitment.decision_id,
-        owner=commitment.owner,
-        description=commitment.description,
-        due_date=commitment.due_date,
-        status=commitment.status
-    )
-
-    db.add(new_commitment)
-    db.commit()
-    db.refresh(new_commitment)
-
-    return new_commitment
 
 
 @router.get(
@@ -152,129 +97,6 @@ def update_commitment_status(
     db.refresh(commitment)
 
     return commitment
-
-@router.get(
-    "/{commitment_id}/impact",
-    response_model=CommitmentImpactResponse
-)
-def get_commitment_impact(
-    commitment_id: int,
-    db: Session = Depends(get_db)
-):
-    commitment = db.query(Commitment).filter(
-        Commitment.id == commitment_id
-    ).first()
-
-    if not commitment:
-        raise HTTPException(
-            status_code=404,
-            detail="Commitment not found"
-        )
-
-    project_commitments = db.query(Commitment).filter(
-        Commitment.project_id == commitment.project_id
-    ).all()
-
-    project_dependencies = db.query(Dependency).filter(
-        Dependency.project_id == commitment.project_id
-    ).all()
-
-    commitments_by_id = {
-        item.id: item
-        for item in project_commitments
-    }
-
-    affected = transitive_impact(
-        commitment.id,
-        commitment.status,
-        commitments_by_id,
-        project_dependencies
-    )
-
-    affected_commitments = [
-        {
-            "id": item["commitment"].id,
-            "owner": item["commitment"].owner,
-            "description": item["commitment"].description,
-            "status": item["commitment"].status,
-            "dependency_type": item["dependency_type"],
-            "reason": " → ".join(
-                f"#{node_id}"
-                for node_id in item["path"]
-            ),
-            "path": item["path"],
-            "depth": item["depth"],
-        }
-        for item in affected
-    ]
-
-    has_impact = len(affected_commitments) > 0
-
-    return {
-        "commitment_id": commitment.id,
-        "commitment_status": commitment.status,
-        "has_impact": has_impact,
-        "affected_commitments": affected_commitments
-    }
-
-
-@router.get(
-    "/{commitment_id}/what-if",
-    response_model=CommitmentWhatIfResponse
-)
-def get_commitment_what_if(
-    commitment_id: int,
-    status: str = "DELAYED",
-    db: Session = Depends(get_db)
-):
-    """Preview the downstream effect of a hypothetical source status.
-
-    This is deliberately read-only: it never writes a history row and
-    never changes ``commitment.status``. The source's current status is
-    ignored for the preview, so an OPEN commitment can be tested as
-    DELAYED.
-    """
-    commitment = db.query(Commitment).filter(
-        Commitment.id == commitment_id
-    ).first()
-
-    if not commitment:
-        raise HTTPException(
-            status_code=404,
-            detail="Commitment not found"
-        )
-
-    hypothetical_status = status.upper()
-
-    if hypothetical_status not in {"DELAYED", "BLOCKED"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid hypothetical status"
-        )
-
-    project_commitments = db.query(Commitment).filter(
-        Commitment.project_id == commitment.project_id
-    ).all()
-
-    project_dependencies = db.query(Dependency).filter(
-        Dependency.project_id == commitment.project_id
-    ).all()
-
-    result = simulate_impact(
-        commitment.id,
-        hypothetical_status,
-        project_commitments,
-        project_dependencies,
-    )
-
-    return {
-        "commitment_id": commitment.id,
-        "current_status": commitment.status,
-        "hypothetical_status": hypothetical_status,
-        "preview": True,
-        **result,
-    }
-
 
 @router.get(
     "/{commitment_id}/history",

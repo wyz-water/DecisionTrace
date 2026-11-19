@@ -1,4 +1,4 @@
-"""Extract candidate project records from discussion text.
+"""Extract decision candidates from discussion text.
 
 Two backends:
 
@@ -7,22 +7,20 @@ Two backends:
   is set, with automatic fallback to rules on any failure.
 
 Extraction output is always a *candidate*, never an authoritative
-record. Humans review and confirm it.
+record. Humans review and confirm it — per maker, each reviewer
+confirms their own decisions.
+
+After the repositioning, extraction produces DECISION candidates only:
+commitments and execution tasks come later, from the chain discussion,
+after the supervisor approves the chain.
 """
 
-import calendar
 import json
 import os
 import re
 import urllib.request
-from datetime import date, timedelta
 
 from app.schemas.candidate import CandidateResponse
-
-WEEKDAYS_EN = {
-    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-    "friday": 4, "saturday": 5, "sunday": 6,
-}
 
 
 # Owner names that are pronouns / noise, not people.
@@ -64,217 +62,15 @@ DECISION_PATTERNS = [
     ),
 ]
 
-# "We decided to use Redis (because it scales well,) after we had
-# decided to migrate to the cloud" — one sentence, two facts: the
-# decision itself and the decision it rests on. Checked before the
-# plain decision patterns so the compound sentence does not get eaten
-# by them with the "after" clause stuck inside the title.
-DECISION_DEPENDENCY_PATTERNS = [
-    re.compile(
-        r"(?:we|the team|our team)\s+(?:decided|agreed|chose)\s+"
-        r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
-        r"(?:\s+because\s+(?P<rationale>[^,]+?))?,?\s+"
-        r"after\s+(?:we|the team|our team)?\s*(?:had\s+)?(?:already\s+)?"
-        r"(?:decided|agreed)\s+(?:to\s+|on\s+)?"
-        r"(?P<predecessor>[^.,;!?]+?)[.,;!?]?\s*$",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"building\s+on\s+(?:our|the team's)?\s*decision\s+"
-        r"(?:to\s+)?(?P<predecessor>[^.,;!?]+?),\s*"
-        r"(?:we|the team|our team)\s+(?:decided|agreed|chose)\s+"
-        r"(?:to\s+|on\s+)?(?P<title>[^.,;!?]+?)"
-        r"(?:\s+because\s+(?P<rationale>[^.,;!?]+?))?[.,;!?]?\s*$",
-        re.IGNORECASE,
-    ),
-]
-
-COMMITMENT_PATTERN = re.compile(
-    r"(?P<owner>[A-Z][a-z]+)\s+"
-    r"(?:will|is going to|commits? to|agrees to|needs to|must)\s+"
-    r"(?P<description>[^.,;!?]+?)"
-    r"(?:\s+by\s+(?P<due>[^.,;!?]+))?[.,;!?]?\s*$",
-)
-
-DEPENDENCY_PATTERNS = [
-    # "Bob depends on / is blocked by / needs Carol"
-    re.compile(
-        r"(?P<owner>[A-Z][a-z]+)[^.,;!?]*?\b"
-        r"(?:depends on|is blocked by|needs|waits for|waiting for)\s+"
-        r"(?P<other>[A-Z][a-z]+)",
-        re.IGNORECASE,
-    ),
-    # "Carol blocks / must finish before Bob"
-    re.compile(
-        r"(?P<other>[A-Z][a-z]+)\s+"
-        r"(?:blocks|must finish before|needs to finish before)\s+"
-        r"(?P<owner>[A-Z][a-z]+)",
-        re.IGNORECASE,
-    ),
-    # "Bob ... after Carol finishes / is done"
-    re.compile(
-        r"(?P<owner>[A-Z][a-z]+)[^.,;!?]*?\bafter\s+"
-        r"(?P<other>[A-Z][a-z]+)\s+"
-        r"(?:finishes|is done|completes|delivers)",
-        re.IGNORECASE,
-    ),
-]
-
 # Chinese full-width punctuation ends sentences too (。;); the team's
-# discussions are mixed-language. The full-width comma splits clauses —
-# "但是风险很大,我们不同意这周上线" is two arguments, not one. ASCII
-# commas do NOT split, so English extraction behavior is unchanged.
+# discussions are mixed-language. The full-width comma splits clauses.
 SENTENCE_SPLIT = re.compile(r"[.;!?\n。；，]+")
-
-# Claims too thin to be worth a human's review.
-CLAIM_NOISE = {"it", "this", "that"}
 
 # Chinese words that look like a person but are not one.
 AUTHOR_NOISE_CN = {
     "我们", "他们", "你们", "大家", "这个", "这些", "那个", "那些",
     "因为", "但是", "不过", "如果", "所以", "而且",
 }
-
-# (stance, pattern) pairs. Order matters: the first match wins.
-# Target is captured only when the pattern also names the reason, so
-# "Bob disagrees with using Redis because it is complex" links the
-# argument to the Redis decision while "I disagree" stays free-standing.
-ARGUMENT_PATTERNS = [
-    # "Bob disagrees with using Redis because it is complex"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?P<author>[A-Z][a-z]+)\s+"
-            r"(?:disagrees?\s+with|objects?\s+to|opposes?)\s+"
-            r"(?P<target>[^.,;!?]+?)\s+because\s+"
-            r"(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "Bob disagrees with using Redis" (bare, no reason given)
-    (
-        "AGAINST",
-        re.compile(
-            r"(?P<author>[A-Z][a-z]+)\s+"
-            r"(?:disagrees?\s+with|objects?\s+to|opposes?)\s+"
-            r"(?P<target>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "I disagree with using Redis" / "we are not convinced about the plan"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?P<who>I|we)\s+"
-            r"(?:disagree|object|am\s+not\s+convinced|are\s+not\s+convinced)"
-            r"\s+(?:with|to|about)?\s*(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "I worry that Redis adds complexity" / "we are concerned about the
-    # migration"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?P<who>I|we)\s+"
-            r"(?:worry|am\s+worried|are\s+worried|"
-            r"am\s+concerned|are\s+concerned)\s+"
-            r"(?:that|about)?\s*(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "the risk is the cost" / "the problem is ..."
-    (
-        "AGAINST",
-        re.compile(
-            r"the\s+(?:risk|problem|concern)\s+is\s+"
-            r"(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "but ... risk/concern/problem/slow/complex/expensive ..."
-    # Conservative: the claim must carry a doubt keyword, so plain
-    # "but we also fixed the docs" does not become an argument.
-    (
-        "AGAINST",
-        re.compile(
-            r"\bbut\s+(?P<claim>[^.,;!?]*"
-            r"(?:risk|concern|worr|problem|slow|complex|expensive|"
-            r"doubt|danger|fail)[^.,;!?]*)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "Bob agrees with using Redis because it scales"
-    (
-        "FOR",
-        re.compile(
-            r"(?P<author>[A-Z][a-z]+)\s+"
-            r"(?:agrees?\s+with|supports?|endorses?)\s+"
-            r"(?P<target>[^.,;!?]+?)\s+because\s+"
-            r"(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "Bob agrees with using Redis" (bare, no reason given)
-    (
-        "FOR",
-        re.compile(
-            r"(?P<author>[A-Z][a-z]+)\s+"
-            r"(?:agrees?\s+with|supports?|endorses?)\s+"
-            r"(?P<target>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # "I agree that we should use Redis" / "we prefer the first option"
-    (
-        "FOR",
-        re.compile(
-            r"(?P<who>I|we)\s+"
-            r"(?:agree|support|prefer)\s+"
-            r"(?:that|with|to)?\s*(?P<claim>[^.,;!?]+)",
-            re.IGNORECASE,
-        ),
-    ),
-    # 中文:"王芳反对这个方案" / "我不同意使用 Redis"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
-            r"(?:我|我们)?\s*(?:不同意|反对|不赞成)\s*"
-            r"(?:采用|使用|这个|该|这样)?\s*"
-            r"(?P<claim>[^,，。;；!！?？]+)"
-        ),
-    ),
-    # 中文:"王芳担心迁移风险太大" / "我顾虑成本太高"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
-            r"(?:我|我们)?\s*(?:担心|担忧|顾虑)\s*"
-            r"(?P<claim>[^,，。;；!！?？]+)"
-        ),
-    ),
-    # 中文:"但是迁移风险太大" / "不过成本太高"
-    (
-        "AGAINST",
-        re.compile(
-            r"(?:但是|不过|然而)\s*"
-            r"(?P<claim>[^,，。;；!！?？]*"
-            r"(?:风险|担心|问题|不可行|困难|太慢|复杂|太贵)"
-            r"[^,，。;；!！?？]*)"
-        ),
-    ),
-    # 中文:"王芳支持用 Redis" / "我同意先迁移数据"
-    (
-        "FOR",
-        re.compile(
-            r"(?:(?P<author>[一-龥]{2,3})\s*)?"
-            r"(?:我|我们)?\s*(?:同意|支持|赞成)\s*"
-            r"(?:采用|使用)?\s*"
-            r"(?P<claim>[^,，。;；!！?？了]+)"
-        ),
-    ),
-]
 
 
 def _clean_title(value):
@@ -290,260 +86,52 @@ def _clean_title(value):
     return value.strip()
 
 
-def _resolve_due_date(value):
-    """Resolve a due phrase to an ISO date, keeping the original text.
-
-    ISO dates pass through. A small, conservative set of
-    natural-language phrases ("by Friday", "by next Monday", "by
-    tomorrow", "by end of the week/month") resolves against today. The
-    original phrase is returned even when it cannot be resolved, so the
-    review UI can show "due as said: <phrase>" instead of silently
-    dropping it — the resolved date is a candidate suggestion, the
-    human is still the gate.
-    """
-    value = (value or "").strip()
-
-    if not value:
-        return None, None
-
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        return value, None
-
-    today = date.today()
-    lowered = value.lower()
-
-    match = re.fullmatch(
-        r"(?:(next|this)\s+)?"
-        r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
-        lowered,
-    )
-
-    if match:
-        target = WEEKDAYS_EN[match.group(2)]
-        days_ahead = (target - today.weekday()) % 7
-
-        if match.group(1) == "next":
-            days_ahead += 7
-
-        return (today + timedelta(days=days_ahead)).isoformat(), value
-
-    if lowered == "tomorrow":
-        return (today + timedelta(days=1)).isoformat(), value
-
-    if lowered in ("end of the week", "end of week"):
-        days_ahead = (6 - today.weekday()) % 7
-        return (today + timedelta(days=days_ahead)).isoformat(), value
-
-    if lowered == "weekend":
-        days_ahead = (5 - today.weekday()) % 7
-        return (today + timedelta(days=days_ahead)).isoformat(), value
-
-    if lowered in ("end of the month", "end of month", "month end"):
-        last_day = calendar.monthrange(today.year, today.month)[1]
-        return date(today.year, today.month, last_day).isoformat(), value
-
-    return None, value
-
-
 def rule_based_extract(text):
-    """Apply sentence-level patterns and return candidate dicts.
-
-    Two cross-sentence rules on top of the per-sentence patterns:
-
-    - *proximity linking*: a commitment following a decision sentence
-      in the same discussion links to that decision (the extractor's
-      `decision_title`), until another decision sentence takes over.
-      Meetings talk in context — "We decided to use Redis. Dora will
-      set up the cache." — and the link saves the reviewer an edit;
-      the human can still clear or change it.
-    - *natural-language due dates*: see `_resolve_due_date`.
-    """
+    """Apply sentence-level decision patterns and return candidate
+    dicts. Every extracted decision carries its maker (decided_by)
+    when a named person made it."""
     candidates = []
-    last_decision_title = None
 
     for sentence in SENTENCE_SPLIT.split(text):
         sentence = sentence.strip()
         if not sentence:
             continue
 
-        # Compound sentences first: "we decided to use X (because …)
-        # after we had decided to Y" emits the decision AND the
-        # decision-dependency edge it rests on. Checked before the plain
-        # decision patterns so the "after" clause cannot end up inside
-        # the title.
-        decision_emitted = False
-
-        for pattern in DECISION_DEPENDENCY_PATTERNS:
+        for pattern in DECISION_PATTERNS:
             match = pattern.search(sentence)
 
             if not match:
                 continue
 
             title = _clean_title(match.group("title"))
-            predecessor = _clean_title(match.group("predecessor"))
+
+            groups = match.groupdict()
             rationale = (
-                match.group("rationale").strip()
-                if match.group("rationale")
+                groups["rationale"].strip()
+                if groups.get("rationale")
                 else None
             )
 
-            if title and predecessor:
+            author = groups.get("author")
+
+            if (
+                author
+                and (author.title() in NOT_OWNERS
+                     or author in AUTHOR_NOISE_CN)
+            ):
+                author = None
+
+            if title:
                 candidates.append({
                     "candidate_type": "DECISION",
                     "payload": {
                         "title": title,
                         "rationale": rationale,
+                        "decided_by": author,
                         "status": "CONFIRMED",
                     },
                     "source_text": sentence,
                 })
-                candidates.append({
-                    "candidate_type": "DECISION_DEPENDENCY",
-                    "payload": {
-                        "predecessor_title": predecessor,
-                        "successor_title": title,
-                        "dependency_type": "DEPENDS_ON",
-                    },
-                    "source_text": sentence,
-                })
-
-                last_decision_title = title
-                decision_emitted = True
-
-            break
-
-        if not decision_emitted:
-            for pattern in DECISION_PATTERNS:
-                match = pattern.search(sentence)
-
-                if not match:
-                    continue
-
-                title = _clean_title(match.group("title"))
-
-                groups = match.groupdict()
-                rationale = (
-                    groups["rationale"].strip()
-                    if groups.get("rationale")
-                    else None
-                )
-
-                author = groups.get("author")
-
-                if (
-                    author
-                    and (author.title() in NOT_OWNERS
-                         or author in AUTHOR_NOISE_CN)
-                ):
-                    author = None
-
-                if title:
-                    candidates.append({
-                        "candidate_type": "DECISION",
-                        "payload": {
-                            "title": title,
-                            "rationale": rationale,
-                            "decided_by": author,
-                            "status": "CONFIRMED",
-                        },
-                        "source_text": sentence,
-                    })
-
-                    last_decision_title = title
-
-                break
-
-        match = COMMITMENT_PATTERN.search(sentence)
-
-        if match:
-            owner = match.group("owner")
-            if owner not in NOT_OWNERS:
-                due_date, due_text = _resolve_due_date(match.group("due"))
-
-                candidates.append({
-                    "candidate_type": "COMMITMENT",
-                    "payload": {
-                        "owner": owner,
-                        "description": match.group("description").strip(),
-                        "due_date": due_date,
-                        "due_text": due_text,
-                        "status": "OPEN",
-                        "decision_title": last_decision_title,
-                    },
-                    "source_text": sentence,
-                })
-
-        for pattern in DEPENDENCY_PATTERNS:
-            match = pattern.search(sentence)
-
-            if not match:
-                continue
-
-            owner = match.group("owner")
-            other = match.group("other")
-
-            # Patterns are case-insensitive, so lowercase pronouns can
-            # match; normalize before checking the stop list.
-            if owner.title() in NOT_OWNERS or other.title() in NOT_OWNERS:
-                continue
-
-            candidates.append({
-                "candidate_type": "DEPENDENCY",
-                "payload": {
-                    "predecessor_owner": other,
-                    "successor_owner": owner,
-                    "dependency_type": "BLOCKS",
-                },
-                "source_text": sentence,
-            })
-
-            break
-
-        for stance, pattern in ARGUMENT_PATTERNS:
-            match = pattern.search(sentence)
-
-            if not match:
-                continue
-
-            # Not every pattern defines every group: read them through
-            # groupdict so a missing group is None, not an IndexError.
-            groups = match.groupdict()
-
-            # The claim is the reason when the pattern names one;
-            # otherwise the object of agreement/disagreement is the claim.
-            claim = groups.get("claim") or groups.get("target")
-            claim = (claim or "").strip()
-
-            # One-character claims and pronoun claims are pattern noise
-            # ("了", "no", "it"), not arguments worth a human's review.
-            if len(claim) < 2 or claim.lower() in CLAIM_NOISE:
-                continue
-
-            author = groups.get("author")
-
-            if author and author.title() in NOT_OWNERS:
-                author = None
-
-            if author and author in AUTHOR_NOISE_CN:
-                author = None
-
-            # The target only counts when the sentence also gave the
-            # reason: "disagrees with X because Y" links to X, a bare
-            # "disagrees with X" stays free-standing.
-            target = None
-            if groups.get("claim") and groups.get("target"):
-                target = groups["target"].strip()
-
-            candidates.append({
-                "candidate_type": "ARGUMENT",
-                "payload": {
-                    "stance": stance,
-                    "claim": claim,
-                    "author": author,
-                    "target_title": target,
-                },
-                "source_text": sentence,
-            })
 
             break
 
@@ -555,75 +143,15 @@ DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 SYSTEM_PROMPT = (
     "You extract structured project records from a team discussion. "
     'Return ONLY a JSON object with this exact shape: '
-    '{"candidates": [{"candidate_type": "DECISION" | "COMMITMENT" | '
-    '"DEPENDENCY" | "DECISION_DEPENDENCY" | "ARGUMENT", "payload": { ... }, '
+    '{"candidates": [{"candidate_type": "DECISION", "payload": { ... }, '
     '"source_text": "..."}]}. '
-    "Payload shapes: "
-    'DECISION: {"title": str, "rationale": str | null, '
+    'Payload shape: {"title": str, "rationale": str | null, '
     '"decided_by": str | null, "status": "CONFIRMED"} — decided_by is '
     "the named person who made the decision; null for a collective "
     '"we decided". '
-    'COMMITMENT: {"owner": str, "description": str, '
-    '"due_date": "YYYY-MM-DD" | null, "status": "OPEN", '
-    '"decision_title": str | null}. '
-    'DEPENDENCY: {"predecessor_owner": str, "successor_owner": str, '
-    '"dependency_type": "BLOCKS"}. '
-    'DECISION_DEPENDENCY: {"predecessor_title": str, '
-    '"successor_title": str, "dependency_type": "DEPENDS_ON"} — the '
-    "successor decision rests on the predecessor decision. "
-    'ARGUMENT: {"stance": "FOR" | "AGAINST", "claim": str, '
-    '"author": str | null, "target_title": str | null}. '
     "Only extract facts explicitly stated in the text. Do not invent. "
     "source_text must be the exact sentence the candidate came from."
 )
-
-
-def summarize_discussion(text):
-    """Rule-based meeting summary: names and counts per record type.
-
-    Always uses the rule engine — never the LLM — so the summary is
-    deterministic, offline and free, and so listing discussions cannot
-    trigger API calls. It is a preview of what extraction will find, not
-    a second opinion on it.
-    """
-    items = rule_based_extract(text or "")
-
-    decisions = []
-    commitments = []
-    dependencies = []
-    arguments = []
-
-    for item in items:
-        payload = item.get("payload") or {}
-        candidate_type = item.get("candidate_type")
-
-        if candidate_type == "DECISION" and payload.get("title"):
-            decisions.append(str(payload["title"]))
-        elif candidate_type == "COMMITMENT" and payload.get("owner"):
-            commitments.append(str(payload["owner"]))
-        elif candidate_type == "DEPENDENCY":
-            pair = (
-                payload.get("predecessor_owner"),
-                payload.get("successor_owner"),
-            )
-            if all(pair):
-                dependencies.append(f"{pair[0]} → {pair[1]}")
-        elif candidate_type == "ARGUMENT" and payload.get("claim"):
-            stance = str(payload.get("stance") or "")
-            arguments.append(f"{stance} {payload['claim']}")
-
-    return {
-        "decisions": decisions,
-        "commitments": commitments,
-        "dependencies": dependencies,
-        "arguments": arguments,
-        "total": (
-            len(decisions)
-            + len(commitments)
-            + len(dependencies)
-            + len(arguments)
-        ),
-    }
 
 
 def _extract_via_llm(text):
@@ -675,10 +203,7 @@ def extract_candidates(text):
 
 def _normalize(candidates):
     """Keep only well-formed candidates from the LLM response."""
-    allowed_types = {
-        "DECISION", "COMMITMENT", "DEPENDENCY",
-        "DECISION_DEPENDENCY", "ARGUMENT",
-    }
+    allowed_types = {"DECISION"}
 
     cleaned = []
 
@@ -701,65 +226,6 @@ def _normalize(candidates):
     return cleaned
 
 
-def score_confidence(candidate_type, payload):
-    """Evidence-based confidence in [0, 1], from the payload alone.
-
-    Deterministic and backend-independent: the same evidence scores the
-    same whether the candidate came from rules or the LLM. It is a
-    *review aid*, not a decision — confirmation stays the human's job
-    (A2); a high score only gets the candidate pre-selected for batch
-    review, never auto-confirmed.
-    """
-    payload = payload or {}
-
-    if candidate_type == "DECISION":
-        score = 0.5
-
-        if str(payload.get("rationale") or "").strip():
-            score += 0.2
-
-        title = str(payload.get("title") or "").strip()
-
-        if len(title) >= 8:
-            score += 0.2
-        elif len(title) >= 3:
-            score += 0.1
-    elif candidate_type == "COMMITMENT":
-        score = 0.5
-
-        if payload.get("due_date"):
-            score += 0.2
-
-        if len(str(payload.get("description") or "").strip()) >= 8:
-            score += 0.1
-
-        if payload.get("decision_title"):
-            score += 0.1
-    elif candidate_type == "DEPENDENCY":
-        # The pattern is strong and both owners are validated again at
-        # confirm time; the residual risk is owner ambiguity.
-        score = 0.7
-    elif candidate_type == "ARGUMENT":
-        score = 0.5
-
-        if payload.get("author"):
-            score += 0.2
-
-        if payload.get("target_title"):
-            score += 0.2
-
-        if len(str(payload.get("claim") or "").strip()) >= 10:
-            score += 0.1
-    else:
-        score = 0.5
-
-    return round(min(score, 1.0), 2)
-
-
-# The review UI pre-selects candidates at or above this score.
-HIGH_CONFIDENCE = 0.7
-
-
 def serialize_candidate(candidate):
     """Build a CandidateResponse from the model row."""
     payload = json.loads(candidate.payload)
@@ -777,5 +243,4 @@ def serialize_candidate(candidate):
         status=candidate.status,
         review_comment=candidate.review_comment,
         created_at=candidate.created_at,
-        confidence=score_confidence(candidate.candidate_type, payload),
     )
