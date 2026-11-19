@@ -4619,7 +4619,13 @@ html[lang="zh-CN"] .severity-badge {
 
 .teacher-group-head h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 19px;
+  font-weight: 800;
+  color: #101828;
+}
+
+.teacher-group > .teacher-group-head h3 {
+  font-size: 21px;
 }
 
 .chain-annotations {

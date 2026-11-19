@@ -21,9 +21,8 @@ export default function TeacherDashboard({ section = "awaiting" }) {
 
   const [groups, setGroups] = useState([]);
   const [error, setError] = useState("");
-  const [busyChain, setBusyChain] = useState(null);
-  const [notes, setNotes] = useState({});
-  const [targets, setTargets] = useState({});
+  const [busyNode, setBusyNode] = useState(null);
+  const [notes, setNotes] = useState({});  // keyed by decision node id
   const [progressDecisionId, setProgressDecisionId] = useState(null);
 
   async function loadGroups() {
@@ -93,8 +92,8 @@ export default function TeacherDashboard({ section = "awaiting" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function act(chain, status) {
-    setBusyChain(chain.id);
+  async function act(chain, node, status) {
+    setBusyNode(node.id);
     setError("");
 
     try {
@@ -105,11 +104,8 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status,
-            note: (notes[chain.id] || "").trim() || null,
-            decision_id:
-              targets[chain.id] ??
-              chain.detail?.nodes?.[chain.detail.nodes.length - 1]?.id ??
-              null,
+            note: (notes[node.id] || "").trim() || null,
+            decision_id: node.id,
           }),
         }
       );
@@ -119,13 +115,12 @@ export default function TeacherDashboard({ section = "awaiting" }) {
         throw new Error(te(data.detail) || t("teacher.loadFailed"));
       }
 
-      setNotes((current) => ({ ...current, [chain.id]: "" }));
-      setTargets((current) => ({ ...current, [chain.id]: null }));
+      setNotes((current) => ({ ...current, [node.id]: "" }));
       await loadGroups();
     } catch (err) {
       setError(te(err.message) || t("teacher.loadFailed"));
     } finally {
-      setBusyChain(null);
+      setBusyNode(null);
     }
   }
 
@@ -213,23 +208,6 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                   </span>
                 )}
 
-                <button
-                  type="button"
-                  className="secondary-button annotate-node"
-                  onClick={() =>
-                    setTargets((current) => ({
-                      ...current,
-                      [chain.id]:
-                        current[chain.id] === node.id ? null : node.id,
-                    }))
-                  }
-                >
-                  {t(
-                    targets[chain.id] === node.id
-                      ? "teacher.annotateTargetActive"
-                      : "teacher.annotateNode"
-                  )}
-                </button>
               </div>
 
               <p className="chain-node-title">{node.title}</p>
@@ -256,6 +234,56 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                   (annotation) => annotation.decision_id === node.id
                 )
                 .map(annotationRow)}
+
+              <div className="teacher-action-bar">
+                <input
+                  type="text"
+                  placeholder={t("teacher.notePlaceholder")}
+                  value={notes[node.id] ?? ""}
+                  onChange={(event) =>
+                    setNotes((current) => ({
+                      ...current,
+                      [node.id]: event.target.value,
+                    }))
+                  }
+                />
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busyNode === node.id}
+                  onClick={() => act(chain, node, null)}
+                >
+                  {t("teacher.annotateOnly")}
+                </button>
+
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={busyNode === node.id}
+                  onClick={() => act(chain, node, "APPROVED")}
+                >
+                  {t("teacher.approve")}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busyNode === node.id}
+                  onClick={() => act(chain, node, "HELD")}
+                >
+                  {t("teacher.hold")}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button reject-button"
+                  disabled={busyNode === node.id}
+                  onClick={() => act(chain, node, "REJECTED")}
+                >
+                  {t("teacher.reject")}
+                </button>
+              </div>
             </div>
           ))}
 
@@ -271,63 +299,6 @@ export default function TeacherDashboard({ section = "awaiting" }) {
             </div>
           )}
 
-        {targets[chain.id] != null && (
-          <p className="annotation-target-note">
-            {t("teacher.annotateTarget", {
-              id: targets[chain.id],
-            })}
-          </p>
-        )}
-
-        <div className="teacher-action-bar">
-          <input
-            type="text"
-            placeholder={t("teacher.notePlaceholder")}
-            value={notes[chain.id] ?? ""}
-            onChange={(event) =>
-              setNotes((current) => ({
-                ...current,
-                [chain.id]: event.target.value,
-              }))
-            }
-          />
-
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busyChain === chain.id}
-            onClick={() => act(chain, null)}
-          >
-            {t("teacher.annotateOnly")}
-          </button>
-
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busyChain === chain.id}
-            onClick={() => act(chain, "APPROVED")}
-          >
-            {t("teacher.approve")}
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busyChain === chain.id}
-            onClick={() => act(chain, "HELD")}
-          >
-            {t("teacher.hold")}
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button reject-button"
-            disabled={busyChain === chain.id}
-            onClick={() => act(chain, "REJECTED")}
-          >
-            {t("teacher.reject")}
-          </button>
-        </div>
       </div>
     );
   }
