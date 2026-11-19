@@ -1,6 +1,5 @@
 import { useI18n } from "../i18n";
 import { personColor } from "../personColors";
-import StatusBadge from "./StatusBadge.jsx";
 
 /**
  * The decision list of the execution group: decisions whose chain the
@@ -26,7 +25,9 @@ export default function ExecuteDecisions({ decisions, approvedChainIds }) {
         <ul className="stakeholder-list">
           {approved.map((decision) => (
             <li className="stakeholder-row" key={decision.id}>
-              <StatusBadge status={decision.status} />
+              <span className="chain-status-chip">
+                {t("chains.status.APPROVED")}
+              </span>
 
               <span>
                 #{decision.id} {decision.title}

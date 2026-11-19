@@ -317,6 +317,7 @@ function App() {
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [decisionReversal, setDecisionReversal] = useState(null);
   const [approvedChainIds, setApprovedChainIds] = useState(new Set());
+  const [chainsData, setChainsData] = useState([]);
   const [reversalError, setReversalError] = useState("");
   const [decisionDependencies, setDecisionDependencies] = useState(null);
   const [dependenciesError, setDependenciesError] = useState("");
@@ -405,6 +406,32 @@ function App() {
   );
   const visibleDecision =
     visibleDecisions.find((item) => item.id === decisionId) ?? null;
+
+  const chainsById = new Map(
+    chainsData.map((chain) => [chain.id, chain])
+  );
+
+  function supervisorStatusLabel(decision) {
+    const chain = chainsById.get(decision.chain_id);
+
+    if (!chain) {
+      return t("decisions.noChain");
+    }
+
+    if (chain.teacher_status === "PENDING") {
+      return t("chains.statusPending");
+    }
+
+    if (chain.teacher_status) {
+      return t(
+        `chains.status.${chain.teacher_status}`,
+        {},
+        chain.teacher_status.toLowerCase()
+      );
+    }
+
+    return t("chains.statusDraft");
+  }
 
   // When the selected decision is no longer visible (its chain got
   // approved and it moved to the execution group), fall back to the
@@ -589,6 +616,7 @@ function App() {
         if (cancelled) {
           return;
         }
+        setChainsData(data ?? []);
         setApprovedChainIds(
           new Set(
             (data ?? [])
@@ -2054,7 +2082,9 @@ function App() {
                     key={item.id}
                     onClick={() => setDecisionId(item.id)}
                   >
-                    <StatusBadge status={item.status} />
+                    <span className="chain-status-chip">
+                      {supervisorStatusLabel(item)}
+                    </span>
 
                     <span>
                       #{item.id} {item.title}
@@ -2116,7 +2146,9 @@ function App() {
 
                 <div className="decision-header-actions">
                   {visibleDecision && (
-                    <StatusBadge status={visibleDecision.status} />
+                    <span className="chain-status-chip">
+                      {supervisorStatusLabel(visibleDecision)}
+                    </span>
                   )}
 
 
