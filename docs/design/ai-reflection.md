@@ -92,7 +92,7 @@ whether you verified AI output yourself or relied on a teammate's
 review.]*
 
 
-## 3. The Repositioning, in Retrospect
+## 8. The Repositioning, in Retrospect
 
 The instructor's critique (2026-11-12) — the product was "too local",
 missing the who/what-connects/what-to-extract questions — triggered the

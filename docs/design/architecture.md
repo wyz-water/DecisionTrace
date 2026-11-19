@@ -115,11 +115,26 @@ mechanism: a held point asks for more discussion, a rejected point is
 the record of a dissent that won (or lost, when overruled by another
 point's approval).
 
-## 7. Deployment (development)
+## 7. Technology and Deployment Architecture
 
-Local only: FastAPI on `127.0.0.1:8000`, the SPA on `localhost:5173`,
-CORS for that origin. The demo database is curated; verification and
-testing run against a temp copy so the demo state survives.
+**Technology.** Backend: FastAPI (Python) + SQLAlchemy ORM over
+SQLite; Pydantic schemas; pytest-style `unittest` suite. Frontend:
+React (Vite) with hash routing, a flat-key i18n layer (EN/ZH), and
+Playwright driving the end-to-end verification. Optional external
+service: the DeepSeek chat API, used only for the LLM extraction path.
+
+*Alternatives considered:* PostgreSQL instead of SQLite (A1 — rejected
+for zero-setup); a component library for the UI (rejected — the
+product is a small set of bespoke views, a design system would be
+heavier than the views); a Python web framework other than FastAPI
+(rejected — FastAPI's Pydantic-native validation matches the
+schema-first API).
+
+**Deployment (development).** Local only: FastAPI on
+`127.0.0.1:8000`, the SPA on `localhost:5173`, CORS for that origin.
+The demo database is curated; verification and testing run against a
+temp copy so the demo state survives. A class presentation runs from
+this same setup — no server or account anywhere.
 
 ## 8. Security & Integrity Notes
 
