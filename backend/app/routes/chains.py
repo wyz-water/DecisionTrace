@@ -214,6 +214,15 @@ def append_chain_node(
     if not chain:
         raise HTTPException(status_code=404, detail="Chain not found")
 
+    if _derived_chain_status(db, chain) == "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The chain's decision is approved and in execution — "
+                "no further decisions can be added"
+            ),
+        )
+
     title = (request.title or "").strip()
 
     if not title:

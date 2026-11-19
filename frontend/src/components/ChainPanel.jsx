@@ -389,6 +389,11 @@ export default function ChainPanel({ projectId, decisions }) {
           </div>
         )}
 
+        {detail.teacher_status === "APPROVED" ? (
+          <p className="muted" style={{ marginTop: 14 }}>
+            {t("chains.approvedNoAppend")}
+          </p>
+        ) : (
         <div className="chain-node-form">
           <p className="eyebrow">{t("chains.appendNode")}</p>
 
@@ -422,6 +427,7 @@ export default function ChainPanel({ projectId, decisions }) {
             {t("chains.append")}
           </button>
         </div>
+        )}
       </section>
     );
   }

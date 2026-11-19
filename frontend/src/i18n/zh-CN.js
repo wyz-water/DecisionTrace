@@ -343,6 +343,7 @@ export default {
   "chains.nodeRationalePlaceholder": "为什么",
   "chains.nodeMakerPlaceholder": "决策人(可选)",
   "chains.append": "追加节点",
+  "chains.approvedNoAppend": "导师已认可此链 —— 不能再追加决策。",
 
   "stakeholder.eyebrow": "负责人视角",
   "stakeholder.title": "负责人想看什么",

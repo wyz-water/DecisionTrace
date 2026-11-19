@@ -346,6 +346,7 @@ export default {
   "chains.nodeRationalePlaceholder": "Why",
   "chains.nodeMakerPlaceholder": "Decided by (optional)",
   "chains.append": "Append node",
+  "chains.approvedNoAppend": "The supervisor approved this chain — no further decisions can be added.",
 
   "stakeholder.eyebrow": "STAKEHOLDER",
   "stakeholder.title": "What the responsible person sees",

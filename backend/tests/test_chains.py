@@ -209,6 +209,19 @@ class ChainTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 400)
 
+    def test_approved_chain_rejects_new_nodes(self):
+        chain = self._approved_chain()
+
+        with self.assertRaises(HTTPException) as raised:
+            append_chain_node(
+                chain.id,
+                ChainNodeCreate(title="Use SQLite for the demo"),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn("no further decisions", str(raised.exception.detail))
+
     def test_submit_sets_pending_and_resubmit_updates(self):
         chain = create_chain(
             ChainCreate(
