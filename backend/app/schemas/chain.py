@@ -40,6 +40,7 @@ class ChainCommentResponse(BaseModel):
 class ChainAnnotationResponse(BaseModel):
     id: int
     chain_id: int
+    decision_id: int | None
     text: str
     created_at: datetime
 
@@ -49,9 +50,11 @@ class ChainAnnotationResponse(BaseModel):
 class TeacherAction(BaseModel):
     """The supervisor's verdict and/or annotation. At least one of the
     two must be given; a note may accompany any verdict, and a note
-    alone (no status) is a pure annotation."""
+    alone (no status) is a pure annotation. The annotation may be
+    attached to any decision node of the chain."""
     status: str | None = None  # APPROVED | REJECTED | HELD
     note: str | None = None
+    decision_id: int | None = None
 
 
 class ChainResponse(BaseModel):

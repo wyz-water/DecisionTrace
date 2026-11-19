@@ -6,22 +6,25 @@ import ExecutionBoard from "./ExecutionBoard.jsx";
 const API_URL = "http://127.0.0.1:8000";
 
 /**
- * The supervisor's side: one group card per project, listing the
- * chains the students submitted. The supervisor reads the chain
- * (decisions + discussion), annotates — with or without a verdict —
- * and decides: approve, reject, or hold. Everything flows back to the
- * student side through the chain itself.
+ * The supervisor's side.
+ *
+ * Awaiting decision: every submitted chain rendered INLINE — the whole
+ * chain (all decision nodes, the discussion under each, the
+ * annotations), not just its title. The supervisor may annotate ANY
+ * decision node of the chain, with or without a verdict.
+ *
+ * In progress: a selector over the approved chains with their
+ * read-only execution boards.
  */
 export default function TeacherDashboard({ section = "awaiting" }) {
   const { t, te, formatDateTime } = useI18n();
 
   const [groups, setGroups] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [note, setNote] = useState("");
-  const [progressChainId, setProgressChainId] = useState(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [busyChain, setBusyChain] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [targets, setTargets] = useState({});
+  const [progressChainId, setProgressChainId] = useState(null);
 
   async function loadGroups() {
     setError("");
@@ -45,10 +48,29 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           throw new Error(t("teacher.loadFailed"));
         }
 
-        entries.push({
-          project,
-          chains: await chainsResponse.json(),
-        });
+        const chains = await chainsResponse.json();
+
+        // Fetch the full detail of every awaiting chain so the whole
+        // chain renders inline.
+        const withDetails = [];
+
+        for (const chain of chains) {
+          if (chain.teacher_status === "APPROVED") {
+            withDetails.push({ ...chain, detail: null });
+            continue;
+          }
+
+          const detailResponse = await fetch(
+            `${API_URL}/chains/${chain.id}`
+          );
+
+          withDetails.push({
+            ...chain,
+            detail: detailResponse.ok ? await detailResponse.json() : null,
+          });
+        }
+
+        entries.push({ project, chains: withDetails });
       }
 
       setGroups(entries);
@@ -73,42 +95,20 @@ export default function TeacherDashboard({ section = "awaiting" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function openChain(project, chainId) {
-    setSelected({ project, chainId });
-    setDetail(null);
-    setNote("");
-    setError("");
-
-    try {
-      const response = await fetch(`${API_URL}/chains/${chainId}`);
-
-      if (!response.ok) {
-        throw new Error(t("teacher.loadFailed"));
-      }
-
-      setDetail(await response.json());
-    } catch (err) {
-      setError(te(err.message) || t("teacher.loadFailed"));
-    }
-  }
-
-  async function act(status) {
-    if (!detail) {
-      return;
-    }
-
-    setBusy(true);
+  async function act(chain, status) {
+    setBusyChain(chain.id);
     setError("");
 
     try {
       const response = await fetch(
-        `${API_URL}/chains/${detail.id}/teacher-action`,
+        `${API_URL}/chains/${chain.id}/teacher-action`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status,
-            note: note.trim() || null,
+            note: (notes[chain.id] || "").trim() || null,
+            decision_id: targets[chain.id] ?? null,
           }),
         }
       );
@@ -118,13 +118,13 @@ export default function TeacherDashboard({ section = "awaiting" }) {
         throw new Error(te(data.detail) || t("teacher.loadFailed"));
       }
 
-      setNote("");
-      setDetail(await response.json());
+      setNotes((current) => ({ ...current, [chain.id]: "" }));
+      setTargets((current) => ({ ...current, [chain.id]: null }));
       await loadGroups();
     } catch (err) {
       setError(te(err.message) || t("teacher.loadFailed"));
     } finally {
-      setBusy(false);
+      setBusyChain(null);
     }
   }
 
@@ -152,37 +152,29 @@ export default function TeacherDashboard({ section = "awaiting" }) {
     );
   }
 
-  if (selected && detail) {
+  function annotationRow(annotation) {
     return (
-      <section className="card chain-detail-card">
-        <div className="chain-detail-head">
-          <div>
-            <p className="eyebrow">{t("teacher.eyebrow")}</p>
-            <h2>{detail.title}</h2>
-            <p className="muted">
-              {selected.project.name} ·{" "}
-              <span className="chain-status-chip">
-                {statusLabel(detail)}
-              </span>
-            </p>
-          </div>
+      <div className="annotation-row" key={annotation.id}>
+        <span className="annotation-time">
+          {formatDateTime(annotation.created_at)}
+        </span>
+        <p>{annotation.text}</p>
+      </div>
+    );
+  }
 
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              setSelected(null);
-              setDetail(null);
-            }}
-          >
-            {t("chains.back")}
-          </button>
+  function reviewBlock(project, chain) {
+    const detail = chain.detail;
+
+    return (
+      <div className="teacher-chain-review" key={chain.id}>
+        <div className="teacher-group-head">
+          <h3>#{chain.id} {chain.title}</h3>
+          <span className="chain-status-chip">{statusLabel(chain)}</span>
         </div>
 
-        {error && <p className="pipeline-error">{te(error)}</p>}
-
-        <div className="chain-nodes">
-          {detail.nodes.map((node, index) => (
+        {detail &&
+          detail.nodes.map((node, index) => (
             <div className="chain-node" key={node.id}>
               <div className="chain-node-head">
                 <span className="chain-node-index">
@@ -199,6 +191,24 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                 <span className="chain-node-time">
                   {formatDateTime(node.created_at)}
                 </span>
+
+                <button
+                  type="button"
+                  className="secondary-button annotate-node"
+                  onClick={() =>
+                    setTargets((current) => ({
+                      ...current,
+                      [chain.id]:
+                        current[chain.id] === node.id ? null : node.id,
+                    }))
+                  }
+                >
+                  {t(
+                    targets[chain.id] === node.id
+                      ? "teacher.annotateTargetActive"
+                      : "teacher.annotateNode"
+                  )}
+                </button>
               </div>
 
               <p className="chain-node-title">
@@ -221,44 +231,53 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                     {comment.text}
                   </div>
                 ))}
+
+              {detail.annotations
+                .filter(
+                  (annotation) => annotation.decision_id === node.id
+                )
+                .map(annotationRow)}
             </div>
           ))}
-        </div>
 
-        {detail.annotations.length > 0 && (
-          <div className="chain-annotations">
-            <p className="eyebrow">{t("teacher.annotations")}</p>
+        {detail &&
+          detail.annotations.filter(
+            (annotation) => annotation.decision_id == null
+          ).length > 0 && (
+            <div className="chain-annotations">
+              <p className="eyebrow">{t("teacher.annotations")}</p>
+              {detail.annotations
+                .filter((annotation) => annotation.decision_id == null)
+                .map(annotationRow)}
+            </div>
+          )}
 
-            {detail.annotations.map((annotation) => (
-              <div className="annotation-row" key={annotation.id}>
-                <span className="annotation-time">
-                  {formatDateTime(annotation.created_at)}
-                </span>
-                <p>{annotation.text}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {detail.teacher_status === "APPROVED" && (
-          <div className="decision-subsection">
-            <ExecutionBoard chainId={detail.id} readOnly />
-          </div>
+        {targets[chain.id] != null && (
+          <p className="annotation-target-note">
+            {t("teacher.annotateTarget", {
+              id: targets[chain.id],
+            })}
+          </p>
         )}
 
         <div className="teacher-action-bar">
           <input
             type="text"
             placeholder={t("teacher.notePlaceholder")}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
+            value={notes[chain.id] ?? ""}
+            onChange={(event) =>
+              setNotes((current) => ({
+                ...current,
+                [chain.id]: event.target.value,
+              }))
+            }
           />
 
           <button
             type="button"
             className="secondary-button"
-            disabled={busy}
-            onClick={() => act(null)}
+            disabled={busyChain === chain.id}
+            onClick={() => act(chain, null)}
           >
             {t("teacher.annotateOnly")}
           </button>
@@ -266,8 +285,8 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           <button
             type="button"
             className="primary-button"
-            disabled={busy}
-            onClick={() => act("APPROVED")}
+            disabled={busyChain === chain.id}
+            onClick={() => act(chain, "APPROVED")}
           >
             {t("teacher.approve")}
           </button>
@@ -275,8 +294,8 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           <button
             type="button"
             className="secondary-button"
-            disabled={busy}
-            onClick={() => act("HELD")}
+            disabled={busyChain === chain.id}
+            onClick={() => act(chain, "HELD")}
           >
             {t("teacher.hold")}
           </button>
@@ -284,13 +303,13 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           <button
             type="button"
             className="secondary-button reject-button"
-            disabled={busy}
-            onClick={() => act("REJECTED")}
+            disabled={busyChain === chain.id}
+            onClick={() => act(chain, "REJECTED")}
           >
             {t("teacher.reject")}
           </button>
         </div>
-      </section>
+      </div>
     );
   }
 
@@ -306,118 +325,83 @@ export default function TeacherDashboard({ section = "awaiting" }) {
         <p className="muted">{t("teacher.noGroups")}</p>
       ) : (
         groups.map(({ project, chains }) => {
-          const pending = chains.filter(
-            (chain) => chain.teacher_status === "PENDING"
-          ).length;
+          const awaiting = chains.filter(
+            (chain) => chain.teacher_status !== "APPROVED"
+          );
+          const approved = chains.filter(
+            (chain) => chain.teacher_status === "APPROVED"
+          );
+
+          if (section === "progress") {
+            return (
+              <div className="teacher-group" key={project.id}>
+                <div className="teacher-group-head">
+                  <h3>{project.name}</h3>
+                </div>
+
+                <div className="decision-subsection">
+                  <div className="decision-subheading">
+                    <span>{t("teacher.inProgress")}</span>
+                    <span className="subheading-note">
+                      {approved.length}
+                    </span>
+                  </div>
+
+                  {approved.length === 0 ? (
+                    <p className="muted">{t("teacher.noInProgress")}</p>
+                  ) : (
+                    <>
+                      <div className="chain-create">
+                        <select
+                          value={progressChainId ?? ""}
+                          aria-label={t("execute.pickChain")}
+                          onChange={(event) =>
+                            setProgressChainId(
+                              Number(event.target.value)
+                            )
+                          }
+                        >
+                          {approved.map((chain) => (
+                            <option key={chain.id} value={chain.id}>
+                              #{chain.id} {chain.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {progressChainId != null && (
+                        <ExecutionBoard
+                          chainId={progressChainId}
+                          readOnly
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div className="teacher-group" key={project.id}>
               <div className="teacher-group-head">
                 <h3>{project.name}</h3>
-
-                <span className="chain-card-meta">
-                  {t("teacher.submittedChains", { count: chains.length })}
-                  {pending > 0 &&
-                    ` · ${t("teacher.pending", { count: pending })}`}
-                </span>
               </div>
 
-              {(() => {
-                const awaiting = chains.filter(
-                  (chain) => chain.teacher_status !== "APPROVED"
-                );
-                const approved = chains.filter(
-                  (chain) => chain.teacher_status === "APPROVED"
-                );
+              <div className="decision-subsection">
+                <div className="decision-subheading">
+                  <span>{t("teacher.awaiting")}</span>
+                  <span className="subheading-note">
+                    {awaiting.length}
+                  </span>
+                </div>
 
-                if (section === "progress") {
-                  return (
-                    <div className="decision-subsection">
-                      <div className="decision-subheading">
-                        <span>{t("teacher.inProgress")}</span>
-                        <span className="subheading-note">
-                          {approved.length}
-                        </span>
-                      </div>
-
-                      {approved.length === 0 ? (
-                        <p className="muted">{t("teacher.noInProgress")}</p>
-                      ) : (
-                        <>
-                          <div className="chain-create">
-                            <select
-                              value={progressChainId ?? ""}
-                              aria-label={t("execute.pickChain")}
-                              onChange={(event) =>
-                                setProgressChainId(
-                                  Number(event.target.value)
-                                )
-                              }
-                            >
-                              {approved.map((chain) => (
-                                <option key={chain.id} value={chain.id}>
-                                  #{chain.id} {chain.title}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {progressChainId != null && (
-                            <ExecutionBoard
-                              chainId={progressChainId}
-                              readOnly
-                            />
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    <div className="decision-subsection">
-                      <div className="decision-subheading">
-                        <span>{t("teacher.awaiting")}</span>
-                        <span className="subheading-note">
-                          {awaiting.length}
-                        </span>
-                      </div>
-
-                      {awaiting.length === 0 ? (
-                        <p className="muted">{t("teacher.noAwaiting")}</p>
-                      ) : (
-                        <div className="chain-grid">
-                          {awaiting.map((chain) => (
-                            <article
-                              className="chain-card"
-                              key={chain.id}
-                              onClick={() => openChain(project, chain.id)}
-                            >
-                              <div className="chain-card-head">
-                                <h3>#{chain.id} {chain.title}</h3>
-                                <span className="chain-status-chip">
-                                  {statusLabel(chain)}
-                                </span>
-                              </div>
-
-                              <p className="chain-card-meta">
-                                {t("chains.nodeCount", {
-                                  count: chain.node_count,
-                                })}
-                                {" · "}
-                                {t("chains.commentCount", {
-                                  count: chain.comment_count,
-                                })}
-                              </p>
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
+                {awaiting.length === 0 ? (
+                  <p className="muted">{t("teacher.noAwaiting")}</p>
+                ) : (
+                  awaiting.map((chain) => reviewBlock(project, chain))
+                )}
+              </div>
             </div>
           );
         })

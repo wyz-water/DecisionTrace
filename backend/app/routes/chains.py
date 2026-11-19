@@ -317,7 +317,27 @@ def teacher_action(
         chain.teacher_status = status
 
     if note is not None:
-        db.add(ChainAnnotation(chain_id=chain.id, text=note))
+        annotation_decision_id = None
+
+        if request.decision_id is not None:
+            node = db.query(Decision).filter(
+                Decision.id == request.decision_id,
+                Decision.chain_id == chain.id,
+            ).first()
+
+            if not node:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The annotated decision is not a node of this chain",
+                )
+
+            annotation_decision_id = node.id
+
+        db.add(ChainAnnotation(
+            chain_id=chain.id,
+            decision_id=annotation_decision_id,
+            text=note,
+        ))
 
     db.commit()
     db.refresh(chain)

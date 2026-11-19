@@ -24,6 +24,15 @@ class ChainAnnotation(Base):
         nullable=False
     )
 
+    # The decision node this annotation is attached to; null for an
+    # annotation on the chain as a whole. The supervisor may annotate
+    # ANY decision on the chain.
+    decision_id = Column(
+        Integer,
+        ForeignKey("decisions.id"),
+        nullable=True
+    )
+
     text = Column(
         Text,
         nullable=False

@@ -299,6 +299,9 @@ export default {
   "teacher.approve": "Approve",
   "teacher.hold": "Hold",
   "teacher.reject": "Reject",
+  "teacher.annotateNode": "Annotate this decision",
+  "teacher.annotateTargetActive": "Annotating this decision",
+  "teacher.annotateTarget": "Annotation targets decision #{id}",
 
   "execution.eyebrow": "EXECUTION",
   "execution.taskCount": "{count} task(s)",

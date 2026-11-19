@@ -296,6 +296,9 @@ export default {
   "teacher.approve": "认可",
   "teacher.hold": "待定",
   "teacher.reject": "否定",
+  "teacher.annotateNode": "标注这个决策",
+  "teacher.annotateTargetActive": "正在标注这个决策",
+  "teacher.annotateTarget": "批注目标:决策 #{id}",
 
   "execution.eyebrow": "执行",
   "execution.taskCount": "{count} 个任务",

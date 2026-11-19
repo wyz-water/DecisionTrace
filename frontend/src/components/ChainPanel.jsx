@@ -234,6 +234,17 @@ export default function ChainPanel({ projectId, decisions }) {
               {comment.text}
             </div>
           ))}
+
+        {detail.annotations
+          .filter((annotation) => annotation.decision_id === node.id)
+          .map((annotation) => (
+            <div className="annotation-row" key={annotation.id}>
+              <span className="annotation-time">
+                {formatDateTime(annotation.created_at)}
+              </span>
+              <p>{annotation.text}</p>
+            </div>
+          ))}
       </div>
     );
   }
@@ -295,18 +306,22 @@ export default function ChainPanel({ projectId, decisions }) {
           </div>
         )}
 
-        {detail.annotations?.length > 0 && (
+        {detail.annotations?.filter(
+          (annotation) => annotation.decision_id == null
+        ).length > 0 && (
           <div className="chain-annotations">
             <p className="eyebrow">{t("teacher.annotations")}</p>
 
-            {detail.annotations.map((annotation) => (
-              <div className="annotation-row" key={annotation.id}>
-                <span className="annotation-time">
-                  {formatDateTime(annotation.created_at)}
-                </span>
-                <p>{annotation.text}</p>
-              </div>
-            ))}
+            {detail.annotations
+              .filter((annotation) => annotation.decision_id == null)
+              .map((annotation) => (
+                <div className="annotation-row" key={annotation.id}>
+                  <span className="annotation-time">
+                    {formatDateTime(annotation.created_at)}
+                  </span>
+                  <p>{annotation.text}</p>
+                </div>
+              ))}
           </div>
         )}
 

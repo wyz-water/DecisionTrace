@@ -4786,3 +4786,28 @@ html[lang="zh-CN"] .severity-badge {
 .stakeholder-row {
   cursor: pointer;
 }
+
+/* ---- Per-node annotation in the teacher review ------------------------ */
+
+.annotate-node {
+  margin-left: 8px;
+  padding: 2px 10px;
+  font-size: 11px;
+}
+
+.annotation-target-note {
+  margin: 6px 0;
+  color: #7d3c98;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.teacher-chain-review {
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eceef2;
+}
+
+.teacher-chain-review:last-child {
+  border-bottom: none;
+}
