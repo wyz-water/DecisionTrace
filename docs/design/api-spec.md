@@ -67,6 +67,10 @@ edits or rejects.
 | `POST` | `/candidates/{id}/confirm` | Create the real decision. (Chains are started from existing decisions, see `/chains`.) |
 | `POST` | `/candidates/{id}/reject` | |
 
+Pending candidates carry a computed `duplicate_of` field (e.g.
+`Decision #3`) when they repeat an existing decision; the title
+matching tolerates the extractor's cleaning ("Use Redis" ≡ "Redis").
+
 ## 5. Decisions
 
 | Method | Path | Notes |
@@ -110,9 +114,13 @@ node.
   (default: the chain's newest node). Annotations with `status: null`
   are pure annotations and may target any node.
 - **Approval is a selection.** Approving one node overrules the chain's
-  other pending/held/approved nodes — they become `REJECTED`; nodes
-  with no verdict are untouched. A chain has at most one approved
-  point, and that point enters the execution phase.
+  other pending/held nodes — they become `REJECTED`; nodes with no
+  verdict are untouched. A chain has at most one approved point, and
+  that point enters the execution phase.
+- **Approval is final.** A verdict on an already-approved chain is
+  refused with 400 (the chain is locked; R4's reopening is a Part III
+  candidate). Pure annotations (`status: null`) remain allowed on any
+  node.
 
 ## 7. Execution (only after approval)
 

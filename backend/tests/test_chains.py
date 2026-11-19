@@ -254,6 +254,30 @@ class ChainTests(unittest.TestCase):
         self.assertEqual(first.teacher_status, "APPROVED")
         self.assertEqual(second.teacher_status, "REJECTED")
 
+    def test_approved_chain_refuses_further_verdicts(self):
+        chain = self._approved_chain()
+
+        with self.assertRaises(HTTPException) as raised:
+            teacher_action(
+                chain.id,
+                TeacherAction(status="HELD"),
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn("approved and locked", str(raised.exception.detail))
+
+    def test_annotation_on_approved_chain_is_allowed(self):
+        chain = self._approved_chain()
+
+        detail = teacher_action(
+            chain.id,
+            TeacherAction(status=None, note="execution is on track"),
+            db=self.db,
+        )
+
+        self.assertEqual(detail.teacher_status, "APPROVED")
+
     def test_submit_sets_pending_and_resubmit_updates(self):
         chain = create_chain(
             ChainCreate(

@@ -118,3 +118,38 @@ Rebuilt after the fixes: `Desktop/DecisionTrace_PartII_Design.pdf` (41 pages),
 `Desktop/DecisionTrace_PartII_Design.docx`, `Desktop/DecisionTrace_设计展示.pptx`
 (16 slides edited in place), and the submission folder/zip
 `Desktop/Project8-DecisionTrace-PartII(.zip)`.
+
+---
+
+# Round 4 (2026-11-19 evening, second teammate audit)
+
+The teammate re-audited the revised files (18 findings: 7 hard
+contradictions + 4 semantic gaps + 4 formatting + 3 notes). All verified
+against the repo and the code; fixes:
+
+| # | Finding | Type | Fix |
+|---|---|---|---|
+| 1 | A17 claimed one chain can be "approved+executing with a revision awaiting choice" — impossible under the lock (A12 / POST nodes 400) | hard | A17 reworded: the seed spans the lifecycle states across chains (locked chain in execution, held chain, submitted chain awaiting choice, drafts) |
+| 2 | Overrule scope had three variants (pending/held vs pending/held/approved vs "the others") | hard | Code is the tiebreaker and now says pending/held: added an API guard — a verdict on an approved chain is refused 400 ("approval is final", A12/R4); the overrule set is `[PENDING, HELD]`; A12, design-summary, §2.2, data-model invariant, api-spec §6, sequence diagram all aligned |
+| 3 | Derived states listed as 4 in the sequence diagram, 5 in data-model/R2 | hard | Sequence diagram note now includes CYCLIC |
+| 4 | A18 and C26 each claimed to be the complete deletion inventory but were mutually non-inclusive | hard | C26 now names the stakeholder view (C25) and the old Overview/plan page (C7), so C26 ⊇ A18's list |
+| 5 | "plan view / plan list" still referenced after being declared deleted | stale | ui-design §2 → "execution-order board"; references §4 → "execution-order view" |
+| 6 | "O3 in the open issues" dangling (only O1/O2 existed) | stale | O3 (scope drift) added to open-issues; architecture §11 → O1–O3 |
+| 7 | PDF cover still said "an AI decision analyst over a dependency graph" (pre-repositioning) while the docx cover uses the repositioned positioning | hard | PDF cover subtitle rewritten to the 决策透明层 positioning; "第8组" added to the cover |
+| 8 | State-mapping table: own DELAYED/BLOCKED fell through to READY; the precedence note ignored CYCLIC | gap | New table row + precedence note: CYCLIC wins over everything; DONE over BLOCKED; own BLOCKED blocks successors, not itself (stored status shown as-is next to the derived state) |
+| 9 | R2 wording "the stored vocabulary is not the derived one" while BLOCKED is in both | hard | Reworded: "overlaps the derived one"; both are shown side by side in the UI |
+| 10 | Re-verdicting an approved chain was undefined (code allowed it; docs said final) | gap | Code guard added + 2 new tests (verdict refused on approved chain; pure annotation still allowed); api-spec documents the 400 |
+| 11 | Class diagram still missed created_at (ChainComment, ChainAnnotation), changed_at (CommitmentHistory), rationale/status/changed_at (DecisionHistory) | stale | All added to the class diagram per the models |
+| 12 | C4's decision dedup had no API/UI counterpart | gap | api-spec §4 documents the computed `duplicate_of`; ui-design lists the duplicate badge |
+| 13 | C26 row was one cell short (Reason held the evidence, Standing empty) | hard | C26 now has a Standing cell ("Current — this entry defines the repositioned system") |
+| 14 | Dangling sentence fragment after reference 4 ("so 'which task may start next'…") | format | Merged into the Cormen annotation |
+| 15 | §5.1 switcher claim vs A7 "every view is project-scoped" — how the supervisor's boards pick a project was unwritten | gap | ui-design §1: the supervisor's boards carry per-group selectors |
+| 16 | "the chip is the only place verdicts are shown" vs the per-node action bar (A14) | hard | Reworded: the chip is the only place a verdict is *shown as a status*; the action bar is where it is set |
+| 17 | Contributions §9.2 didn't attribute the repositioning; 陈昊宗's areas are all superseded | gap | 王耀增's areas now include the repositioning (PR #37); §2 notes the re-balance is the team's to confirm |
+| 18 | PDF side: duplicated section titles; cover missing 第8组; TOC name mismatched the docx; page numbering differs | format | Duplicate doc-title removed from the template; cover fixed; TOC/docx chapter renamed "Updated Requirements (Change Log)"; zip README explains the per-section pagination |
+
+Also: the teammate's note about 43 vs 37 backend tests — the deck was
+already synced in round 3 (slide 15 says 37).
+
+Rebuilt after round 4: PDF (34 pages, 0 blank/sparse pages, 0 mermaid
+errors), docx, submission folder + zip.

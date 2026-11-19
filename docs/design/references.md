@@ -104,7 +104,7 @@ task.
 The standard textbook's graph chapters — adjacency representations,
 depth-first search, and in particular topological sort (§22.4) — are
 the theoretical basis of our execution layer. Topological order is
-what makes the plan view honest: it is the order in which commitments
+what makes the execution-order view honest: it is the order in which commitments
 can be worked on without violating any dependency, computed by the
 same algorithms the textbook describes (Kahn's algorithm in our case,
 `services/graph.py`).
@@ -119,19 +119,16 @@ this chapter. The textbook also gives us the honest limits: topological
 sort says nothing when the graph has a cycle (there is no valid order),
 which is why dependency edge creation — when it returns in Part III
 (R5.5) — refuses cycles before storage, and the read-time checks
-render any cycle as an error instead of drawing a partial order. The
-planned critical-path analysis (Part III) is the same chapter one
-section further.
-
----
-
-so "which task may start next" becomes a single topological sort of
-the current graph. In the repositioned system the same algorithm backs
+render any cycle as an error instead of drawing a partial order. So
+"which task may start next" becomes a single topological sort of the
+current graph. In the repositioned system the same algorithm backs
 the execution phase: the layered SVG columns are literal topological
 depths, and a task missing from the order is the definition of the
 cycle check. Citing the algorithm book matters because our checks are
 not heuristics — they are the standard ones, implemented directly, so
-their correctness does not depend on our own proof.
+their correctness does not depend on our own proof. The planned
+critical-path analysis (Part III) is the same chapter one section
+further.
 
 ## 5. Wan, Z., Cheng, F., Mao, Z., Liu, Q., Song, H., Li, J., & Kurohashi, S. (2023). GPT-RE: In-context learning for relation extraction using large language models. *EMNLP 2023*.
 

@@ -355,6 +355,18 @@ def teacher_action(
                 detail=f"Invalid teacher status: {status}",
             )
 
+        # Approval is final (A12, R4): once a chain has an approved
+        # point it is locked against further verdicts. Pure annotations
+        # (status: null) remain allowed on any node.
+        if _derived_chain_status(db, chain) == "APPROVED":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The chain is approved and locked: the verdict is "
+                    "final. Pure annotations remain allowed."
+                ),
+            )
+
         target_id = request.decision_id
 
         if target_id is None:
@@ -376,14 +388,15 @@ def teacher_action(
 
         # Approval is a selection: at most one node of a chain is the
         # approved one. Choosing a node overrules the chain's other
-        # pending/held/approved points — they become REJECTED (the
-        # supervisor's choice settles the chain).
+        # pending/held points — they become REJECTED (the supervisor's
+        # choice settles the chain). Never-submitted points (null)
+        # stay untouched drafts.
         if status == "APPROVED":
             for node in db.query(Decision).filter(
                 Decision.chain_id == chain.id,
                 Decision.id != target.id,
                 Decision.teacher_status.in_(
-                    ["PENDING", "HELD", "APPROVED"]
+                    ["PENDING", "HELD"]
                 ),
             ).all():
                 node.teacher_status = "REJECTED"

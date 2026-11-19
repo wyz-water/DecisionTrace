@@ -36,8 +36,9 @@ chains inline — every point, its discussion, its annotations — and may
 annotate any point, and approve, hold or reject any point. Approval is
 a **selection**, not a rubber stamp: the supervisor may pick any point
 as the best one, not necessarily the newest; choosing one overrules
-the chain's other pending or held points, and the chain locks — a
-decision in execution cannot keep changing.
+the chain's other pending or held points, and the chain locks against
+revisions and further verdicts — a decision in execution cannot keep
+changing.
 
 **Execution follows approval, never precedes it.** Only an approved
 point enters the execution phase: the group assigns tasks to it, the
