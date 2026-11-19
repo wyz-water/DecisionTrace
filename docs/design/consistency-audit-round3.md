@@ -180,3 +180,24 @@ boundary wordings and PPT-doc alignment; all fixed:
 
 Rebuilt after round 5: PDF (35 pp, 0 mermaid errors), docx, pptx (4
 slides edited in place), submission folder + zip.
+
+---
+
+# Round 6 (2026-11-19 night): handle→name mapping correction
+
+The GitHub handle→name mapping in contributions.md was wrong for three
+members (the team confirmed): `chaojizhu7` = **陈昊宗** (not 李灏文),
+`regretofice` = **农国达** (not 陈昊宗), `domainthefesh` = **李灏文**
+(not 农国达); `wyz-water` = 王耀增 was correct. The PR→work evidence in
+the table was already right (it matched the handles); only the names
+were mis-assigned. Fixed: the mapping line, the three allocation rows
+(陈昊宗 ← PR #16 intake work; 李灏文 ← PR #25 manual forms; 农国达 ←
+PR #22/#24 i18n+snapshot+impact + the SRS-role E2E note), and the
+re-balance note (农国达's areas are the ones replaced by the
+repositioning). The team must still confirm percentages.
+
+Note for the team: `evaluation-protocol.md` §1 also assigns names to
+Part III experiments (Decision extraction: 陈昊宗+王耀增; Human
+verification: 李灏文+农国达) — confirm those assignments still hold.
+
+Packages rebuilt: PDF, docx, submission folder + zip.

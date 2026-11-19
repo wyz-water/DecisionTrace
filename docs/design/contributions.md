@@ -33,24 +33,24 @@ Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 ## 2. Proposed Allocation (CONFIRM / EDIT)
 
 GitHub handles map to names by the SRS role table: `wyz-water` = 王耀增
-(team lead, API, review), `chaojizhu7` = 李灏文 (frontend design),
-`regretofice` = 陈昊宗 (backend logic), `domainthefesh` = 农国达
-(testing, problem discovery). Verify this mapping before submission.
+(team lead, API, review), `chaojizhu7` = 陈昊宗,
+`regretofice` = 农国达, `domainthefesh` = 李灏文.
+Verify this mapping before submission.
 
 Areas marked "superseded" above were real work on the pre-repositioning
 product; the repositioning (branch `feat/decision-chain`, PR #37)
 replaced them, and the percentages below should be re-balanced to
 include it (the table attributes the repositioning to 王耀增 by the
-PR record — the team confirms the split; 陈昊宗's listed areas were
-all replaced by the repositioning and need re-balancing in
-particular).
+PR record — the team confirms the split; 农国达's listed areas
+(snapshot diff, impact detector) were replaced by the repositioning
+and need re-balancing in particular).
 
 | Member | Proposed areas | Part I | Part II | % of total |
 |---|---|---|---|---|
 | 王耀增 | Repo maintenance, PR review & merges of every PR, graph core, AI pipeline, presentation-feedback features, consistency sweeps, deliberation layer, analyst layer, the repositioning (the current system), this document set | SRS coordination | Presentation, design docs, review & merge, repositioning | 40% |
-| 陈昊宗 | Snapshot diff and i18n (PR #22), change impact detector — what-if preview over the dependency graph (PR #24) | | i18n + snapshot diff, impact detector | 20% |
-| 李灏文 | Discussion file upload, prerequisite review panel, project switcher, deletions (PR #16) | | Intake UX, project switcher, prereq panel | 20% |
-| 农国达 | Manual decision/commitment creation forms (PR #25); end-to-end scenario testing and defect reporting per the SRS role | | Manual create forms, E2E verification feedback | 20% |
+| 陈昊宗 | Discussion file upload, prerequisite review panel, project switcher, deletions (PR #16) | | Intake UX, project switcher, prereq panel | 20% |
+| 李灏文 | Manual decision/commitment creation forms (PR #25) | | Manual create forms | 20% |
+| 农国达 | Snapshot diff and i18n (PR #22), change impact detector — what-if preview over the dependency graph (PR #24); end-to-end scenario testing and defect reporting per the SRS role | | i18n + snapshot diff, impact detector, E2E verification feedback | 20% |
 
 ## 3. AI Assistance Disclosure
 
