@@ -37,14 +37,6 @@ class Chain(Base):
         nullable=True
     )
 
-    # Supervisor verdict: PENDING (submitted, awaiting review),
-    # APPROVED, REJECTED, HELD (seen, held for discussion). None while
-    # the chain has never been submitted.
-    teacher_status = Column(
-        String(20),
-        nullable=True
-    )
-
     created_at = Column(
         UTCDateTime(),
         nullable=False,

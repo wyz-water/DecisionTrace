@@ -124,8 +124,9 @@ render any cycle as an error instead of drawing a partial order. So
 "which task may start next" becomes a single topological sort of the
 current graph. In the repositioned system the same algorithm backs
 the execution phase: the layered SVG columns are literal topological
-depths, and a task missing from the order is the definition of the
-cycle check. Citing the algorithm book matters because our checks are
+depths, and a task sitting on a cycle is what the cycle check names
+(a task that merely waits on a cycle member is not cyclic itself).
+Citing the algorithm book matters because our checks are
 not heuristics — they are the standard ones, implemented directly, so
 their correctness does not depend on our own proof. The planned
 critical-path analysis (Part III) is the same chapter one section
@@ -150,9 +151,13 @@ demonstration sensitivity means small prompt changes matter; that is
 why the blind rules-vs-LLM comparison pins the prompt and model in
 advance and why the rule engine remains the offline baseline (A3).
 The honest difference between GPT-RE and our use: their benchmark is
-scientific literature with fixed schemas; our input is messy team
-meeting text in two languages, which is why field accuracy ≥ 80% is
-our target, not the high nineties reported in the paper.
+four datasets with fixed schemas — three general-domain (SemEval,
+TACRED, ACE05) and one scientific (SciERC) — and even the fine-tuned
+GPT-RE_FT reaches micro-F1 of only 68.73–72.14 on three of the four
+(91.90 on SemEval; Table 2 of the paper), not the high nineties
+across the board. Our input is messy team meeting text in two
+languages, which is why we set field accuracy ≥ 80% as our own
+target.
 
 The reference also disciplined our adoption rule: the LLM path stays
 only if the blind comparison shows it beating the rule engine without

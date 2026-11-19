@@ -120,7 +120,7 @@ def build():
          "Bob", 5, None, "2026-11-13T14:10:00+08:00"),
         (1, 1, "Use SQLite for the demo",
          "the demo must run offline on teammates machines",
-         "Alice", 1, "PENDING", "2026-11-15T16:00:00+08:00"),
+         "Bob", 1, "REJECTED", "2026-11-03T10:21:00+08:00"),
         (1, 3, "Use Playwright for E2E tests",
          "it drives a real browser",
          "Eve", None, None, "2026-11-13T14:20:00+08:00"),
@@ -156,7 +156,7 @@ def build():
         insert(
             "chains", project_id=project_id, title=title,
             submitted_at=T(submitted) if submitted else None,
-            teacher_status=None, created_at=T(created),
+            created_at=T(created),
         )
 
     comments = [
@@ -164,10 +164,11 @@ def build():
         (1, 1, "Alice", "They are, but transactions decide it — payments need them.", "2026-11-03T10:25:00+08:00"),
         (1, 1, "Carol", "Agreed, the schema design assumes transactions.", "2026-11-03T10:30:00+08:00"),
         (1, 1, "Bob", "OK, convinced.", "2026-11-03T10:32:00+08:00"),
-        (1, 6, "Alice", "The demo must run offline on teammates machines — SQLite it is.", "2026-11-15T16:10:00+08:00"),
-        (1, 6, "Carol", "Then the schema stays compatible with PostgreSQL?", "2026-11-15T16:15:00+08:00"),
+        (1, 7, "Bob", "What about SQLite for the demo? It runs offline on every machine.", "2026-11-03T10:20:00+08:00"),
+        (1, 7, "Alice", "For the demo, yes — production stays PostgreSQL for the transactions.", "2026-11-03T10:24:00+08:00"),
+        (1, 7, "Carol", "Then the schema stays compatible with PostgreSQL?", "2026-11-03T10:26:00+08:00"),
         (2, 2, "Carol", "What about a WeChat mini program? Our users are all on WeChat.", "2026-11-04T15:00:00+08:00"),
-        (2, 11, "Carol", "The comparison shows most users are on WeChat — mini program first, web later.", "2026-11-07T16:10:00+08:00"),
+        (2, 4, "Carol", "The comparison shows most users are on WeChat — mini program first, web later.", "2026-11-07T16:10:00+08:00"),
         (2, 2, "Alice", "A browser version reaches everyone, not just WeChat users.", "2026-11-04T15:10:00+08:00"),
         (2, 2, "Carol", "Fair, but a mini program is easier to demo.", "2026-11-04T15:12:00+08:00"),
         (3, 3, "Bob", "What about the ops cost of Redis?", "2026-11-10T10:00:00+08:00"),
@@ -176,8 +177,8 @@ def build():
         (4, 4, "Eve", "Utility classes everywhere look messy.", "2026-11-13T14:20:00+08:00"),
         (4, 4, "Alice", "It ships fast — we can refactor the CSS later.", "2026-11-13T14:30:00+08:00"),
         (5, 5, "Carol", "Refresh tokens add complexity — do we need them?", "2026-11-13T15:00:00+08:00"),
-        (6, 9, "李静", "规则先跑,LLM 只在配置了密钥时启用,这样演示永远可用。", "2026-11-17T10:20:00+08:00"),
-        (6, 10, "李静", "每条记录都锚定原文句子,追溯才站得住。", "2026-11-17T10:25:00+08:00"),
+        (6, 10, "李静", "规则先跑,LLM 只在配置了密钥时启用,这样演示永远可用。", "2026-11-17T10:20:00+08:00"),
+        (6, 11, "李静", "每条记录都锚定原文句子,追溯才站得住。", "2026-11-17T10:25:00+08:00"),
     ]
     for chain_id, node_id, author, text, created in comments:
         insert(
@@ -187,7 +188,7 @@ def build():
 
     insert(
         "chain_annotations", chain_id=1, decision_id=1,
-        text="Solid reasoning — the transaction requirement settles it. Proceed.",
+        text="Solid reasoning — the transaction requirement settles it; the SQLite revision is overruled. Proceed.",
         created_at=T("2026-11-05T19:00:00+08:00"),
     )
     insert(
@@ -286,43 +287,43 @@ def build():
     insert(
         "chains", project_id=2, title="Use React Native",
         submitted_at=T("2026-11-12T19:00:00+08:00"),
-        teacher_status=None, created_at=T("2026-11-10T09:00:00+08:00"),
+        created_at=T("2026-11-10T09:00:00+08:00"),
     )
     insert(
         "chains", project_id=2, title="Use Mapbox for the maps",
         submitted_at=T("2026-11-13T20:00:00+08:00"),
-        teacher_status=None, created_at=T("2026-11-10T09:05:00+08:00"),
+        created_at=T("2026-11-10T09:05:00+08:00"),
     )
 
     insert(
-        "chain_comments", chain_id=7, decision_id=11,
+        "chain_comments", chain_id=7, decision_id=12,
         author="Nina", text="React Native vs Flutter — did we compare?",
         created_at=T("2026-11-10T10:00:00+08:00"),
     )
     insert(
-        "chain_comments", chain_id=7, decision_id=11,
+        "chain_comments", chain_id=7, decision_id=12,
         author="Mia", text="Flutter needs Dart, the team already knows JS.",
         created_at=T("2026-11-10T10:10:00+08:00"),
     )
     insert(
-        "chain_comments", chain_id=8, decision_id=12,
+        "chain_comments", chain_id=8, decision_id=13,
         author="Omar", text="Mapbox pricing for campus scale?",
         created_at=T("2026-11-12T14:00:00+08:00"),
     )
 
     insert(
-        "chain_annotations", chain_id=7, decision_id=11,
+        "chain_annotations", chain_id=7, decision_id=12,
         text="Good — keep the JS ecosystem. Proceed with the scaffold.",
         created_at=T("2026-11-12T20:00:00+08:00"),
     )
 
     insert(
-        "commitments", project_id=2, decision_id=11, chain_id=7,
+        "commitments", project_id=2, decision_id=12, chain_id=7,
         owner="Mia", description="Set up the project scaffold",
         due_date=None, status="COMPLETED",
     )
     insert(
-        "commitments", project_id=2, decision_id=11, chain_id=7,
+        "commitments", project_id=2, decision_id=12, chain_id=7,
         owner="Leo", description="Build the map screen",
         due_date=None, status="IN_PROGRESS",
     )

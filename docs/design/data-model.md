@@ -22,6 +22,7 @@ erDiagram
     CHAIN ||--o{ CHAIN_COMMENT : has
     CHAIN ||--o{ CHAIN_ANNOTATION : has
     CHAIN ||--o{ COMMITMENT : executes-via
+    DECISION |o--o{ COMMITMENT : anchors
 
     COMMITMENT ||--o{ DEPENDENCY : blocks
     DEPENDENCY }o--|| COMMITMENT : successor

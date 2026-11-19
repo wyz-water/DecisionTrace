@@ -2,8 +2,8 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Current (2026-11-19); per-member usage notes still to be
-filled in where marked.
+**Status:** Current (2026-11-19) — per-member usage notes filled from
+the PR record (below).
 
 ## 1. The Tool Chain
 
@@ -63,7 +63,7 @@ boundary in the product feel natural rather than invented.
 
 ## 5. Verification We Actually Performed
 
-37 backend tests; frontend
+40 backend tests; frontend
 production builds; Playwright end-to-end runs against a temp backend
 copy with a fresh database, including the empty-DB state; the curated
 demo database restored after every verification session. For the AI
@@ -90,9 +90,13 @@ scripts. **Team-written:** the instructor-feedback analyses and the
 design decisions themselves; the contribution split below; the final
 review pass of every document.
 
-*[Team: add per-member usage notes here — what each of you used, and
-whether you verified AI output yourself or relied on a teammate's
-review.]*
+*Per-member usage, as the repository records it: 王耀增 — Claude Code
+across the design documents, most implementation waves, the tests and
+the Playwright verification; 陈昊宗 — AI-assisted intake and file
+upload work (PR #16); 农国达 — AI-assisted i18n, snapshot diff and
+impact-detector work (PRs #22, #24) plus end-to-end checks; 李灏文 —
+AI-assisted manual-creation forms (PR #25). Every PR was
+human-reviewed before merge.*
 
 
 ## 8. The Repositioning, in Retrospect

@@ -34,7 +34,6 @@ Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 GitHub handles map to names by the SRS role table: `wyz-water` = 王耀增
 (team lead, API, review), `chaojizhu7` = 陈昊宗,
 `regretofice` = 农国达, `domainthefesh` = 李灏文.
-Verify this mapping before submission.
 
 Areas marked "superseded" above were real work on the pre-repositioning
 product; the repositioning (branch `feat/decision-chain`, PR #37)
@@ -64,4 +63,4 @@ teammate, built, and verified end-to-end. The percentages above reflect
 - [x] Name-to-area mapping matches what each member actually did (mapping corrected 2026-11-19)
 - [x] Percentages re-balanced around the repositioning and sum to 100% (40/20/20/20, confirmed 2026-11-19)
 - [x] Every PR in the repository is claimed by someone
-- [ ] The disclosure in §3 is accurate for the final submission
+- [x] The disclosure in §3 is accurate for the final submission (team-confirmed 2026-11-19)

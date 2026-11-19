@@ -646,7 +646,7 @@ def get_chain_execution(
 
     return {
         "chain_id": chain.id,
-        "teacher_status": chain.teacher_status,
+        "teacher_status": _derived_chain_status(db, chain),
         "has_cycles": has_cycles,
         "tasks": task_views,
         "edges": [
