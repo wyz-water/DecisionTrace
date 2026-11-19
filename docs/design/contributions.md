@@ -2,12 +2,11 @@
 
 Part II design document — DecisionTrace
 
-**Status:** PROPOSED ALLOCATION — updated 2026-11-19 with the
-repositioning work; the team must still confirm the percentages. Work areas and
-percentages below come from the git history and the PR record; the
+**Status:** TEAM-CONFIRMED (2026-11-19) — handle→name mapping corrected
+and the percentages (40/20/20/20) confirmed by the team. Work areas
+and percentages come from the git history and the PR record; the
 mapping of GitHub handles to student names follows the role table in
-the SRS. Adjust the mapping and percentages to match what each member
-actually did before submission.
+the SRS.
 
 Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 陈昊宗 2453197.
@@ -30,7 +29,7 @@ Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 | Design documents (Part II) | Architecture, data model, UI design, API spec, change log, summary, models, issues, references, plus the AI reflection and this contributions page — AI-drafted, team-reviewed | `docs/design/` |
 | Presentation | Week 9 deck + script | `Desktop/DecisionTrace_设计展示.pptx` |
 
-## 2. Proposed Allocation (CONFIRM / EDIT)
+## 2. Allocation (team-confirmed 2026-11-19)
 
 GitHub handles map to names by the SRS role table: `wyz-water` = 王耀增
 (team lead, API, review), `chaojizhu7` = 陈昊宗,
@@ -62,7 +61,7 @@ teammate, built, and verified end-to-end. The percentages above reflect
 
 ## 4. Confirmation Checklist
 
-- [ ] Name-to-area mapping matches what each member actually did
-- [ ] Percentages re-balanced around the repositioning and sum to 100%
-- [ ] Every PR in the repository is claimed by someone
+- [x] Name-to-area mapping matches what each member actually did (mapping corrected 2026-11-19)
+- [x] Percentages re-balanced around the repositioning and sum to 100% (40/20/20/20, confirmed 2026-11-19)
+- [x] Every PR in the repository is claimed by someone
 - [ ] The disclosure in §3 is accurate for the final submission
