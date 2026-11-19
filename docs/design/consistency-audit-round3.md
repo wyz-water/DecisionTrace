@@ -201,3 +201,37 @@ Part III experiments (Decision extraction: 陈昊宗+王耀增; Human
 verification: 李灏文+农国达) — confirm those assignments still hold.
 
 Packages rebuilt: PDF, docx, submission folder + zip.
+
+---
+
+# Round 7 (2026-11-19 night): demo-data fix + full self-review
+
+Two more reviews arrived (Desktop `4642e821...png` doc-review with 6
+clarifications, `5142d06a...png` submission-folder audit with 4
+priorities). All fixed, then a full self-review pass (docs ↔ docs ↔
+code ↔ demo data) ran on top.
+
+| # | Finding | Fix |
+|---|---|---|
+| A1 | PPT p3 "一切状态实时计算" vs p9 manual status updates | Slides 3 AND 4 now say it precisely: verdicts + task progress are stored; chain/node states, order, checks are computed on read |
+| A2 | "Partially... not agentic" + when DeepSeek is called + who makes the privacy choice | architecture §5 rewritten: never acts on records; no external call unless the operator sets DEEPSEEK_API_KEY (that config is the privacy choice); Part III picks the default path, not the agentic boundary |
+| A3 | ERD/class diagram missing the task→decision-point anchor | `DECISION |o--o{ COMMITMENT : anchors` added to both diagrams (the GET-execution arrow was checked — it is already student→API) |
+| A4 | "no topological position" conflated with "on a cycle" | ui-design + references: CYCLIC names the cycle members; a task waiting on a cycle member is not cyclic |
+| A5 | GPT-RE annotation factually wrong ("scientific literature", "high nineties") | Verified against the paper (Table 2): SemEval/TACRED/ACE05/SciERC, GPT-RE_FT micro-F1 91.90/72.14/69.00/68.73; annotation rewritten, 80% restated as our own target |
+| B1 | **Demo contradicted approval-is-selection: chain #1 had PostgreSQL APPROVED + SQLite PENDING** | Seed story fixed: SQLite revision proposed 11-03 (Bob's thread), supervisor chose PostgreSQL 11-05 → SQLite REJECTED. Also fixed misplaced comment ids (chain 6 中文 thread, project-2 comments off-by-one) and the wrong-node SQLite comments. PPT slide-6 screenshot re-captured; video re-recorded (2:45, verified) |
+| B2 | "[Team: add per-member usage notes]" placeholder + unchecked disclosure | ai-reflection placeholder replaced with per-member notes from the PR record; contributions checklist fully ticked |
+| B3 | Cover promised per-section PDFs + markdown sources not present in the submission directory | Submission folder now ships `pdf/` (12 section PDFs) + `markdown/` (11 artifacts + 2 appendices + evaluation-protocol + demo-script); zip rebuilt |
+| B4 | Video labeled 3.5 min / .mp4 but actually 2:45 WebM | Renamed to `DecisionTrace_视频展示.webm`; PPT p17 updated (2 分 45 秒, WebM/VP9, transcode note) |
+| S1 | **Self-review: Chain model still had a stored teacher_status column + one raw read** | Column removed from the model, seed and the execution response (now derived); 40 tests pass; "derived, never stored" is now literally true |
+| S2 | Test counts drifted (37 vs 40) | ai-reflection + PPT p15 → 40 |
+
+Self-review pass also verified: every api-spec endpoint exists in the
+routes (incl. teacher-action); chain guards (append/submit/verdict
+400s) match the docs; the decisions view really hides APPROVED and
+REJECTED points (demo-script scene 3); the seed story matches every
+demo-script scene; the final PDF = 35 pages, 0 mermaid errors, 0
+sparse pages; PPT final dump consistent across slides.
+
+Known limitation (accepted): the Word version shows Mermaid diagrams
+as source blocks — the PDF is the primary submission with rendered
+diagrams, and the package ships the sources + section PDFs.

@@ -55,8 +55,10 @@ Alice decided to use Vue for the dashboard because the team already knows it. Bo
 **操作:** 侧边栏 → 「决策链」 → 点开 `#1 Use PostgreSQL`(已认可)。
 
 **预期:** 链上有两个决策点:**PostgreSQL(已认可)** 和
-**SQLite(待确认)** —— 团队的修订。每个节点下都有自己的讨论线程
-(Bob 质疑 → Alice 回应 → 众人附议),导师批注挂在 PostgreSQL 节点上。
+**SQLite(已否决)** —— 认可即选择:导师选 PostgreSQL 时,团队的
+SQLite 修订被自动否决,完整保留在链上。每个节点下都有自己的讨论
+线程(Bob 质疑 → Alice 回应 → 众人附议),导师批注挂在 PostgreSQL
+节点上。
 
 **操作:** 点开 `#4 Use Tailwind for styling`(讨论中)→ 在节点下用
 「署名 + 留言」发一条讨论;再演示「下一个决策」表单(输入修订标题)。

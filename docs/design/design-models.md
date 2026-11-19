@@ -112,6 +112,7 @@ classDiagram
     Decision "0..1" --> "*" ChainComment : discussed under
     Decision "0..1" --> "*" ChainAnnotation : annotated
     Chain "1" --> "*" Commitment : executes via
+    Decision "1" --> "*" Commitment : anchors
     Commitment "1" --> "*" Dependency : blocks
     Commitment "1" --> "*" CommitmentHistory : logs
     Decision "1" --> "*" DecisionHistory : logs

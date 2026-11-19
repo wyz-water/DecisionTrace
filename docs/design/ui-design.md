@@ -47,8 +47,11 @@ count).
   已否决 = `REJECTED`, 讨论中 / 未建链 = `null`.
 - **Mermaid-free diagrams** — the execution graph is a hand-laid SVG
   layered by topological depth; tasks without a topological position
-  (on a cycle) carry a CYCLIC state on the execution-order board and
-  the Problems section names the CYCLE check, so a loop is never drawn as a broken
+  on a dependency cycle carry a CYCLIC state on the execution-order
+  board and the Problems section names the CYCLE check (the check
+  names the cycle members; a task that merely waits on a cycle member
+  is not cyclic itself — it shows the cycle member as its waiting
+  predecessor), so a loop is never drawn as a broken
   picture. The check is defensive today: the edges ship with the
   seeded demo data (acyclic); edge creation — and with it cycle
   refusal before storage — returns in Part III (R5.5).

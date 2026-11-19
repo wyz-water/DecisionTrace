@@ -107,11 +107,16 @@ annotations) is laid out inline.
 
 ### Is the system agentic?
 
-Partially, and the boundary is deliberate. DecisionTrace is
-AI-assisted, not agentic: the AI component is the extraction pipeline
-(rules first, optional LLM) plus the computed checks — it proposes
-and it observes, but it never acts on records. The agent-specific
-concerns the assignment names map onto this smaller surface:
+DecisionTrace is AI-assisted, not agentic: the AI component is the
+extraction pipeline (rules first, optional LLM) plus the computed
+checks — it proposes and it observes, but it never acts on records,
+and no text is sent to an external model unless the operator
+configures `DEEPSEEK_API_KEY` (that configuration, made by whoever
+runs the deployment, is the privacy choice — without the key the
+system runs on rules only). Part III's blind comparison decides which
+extraction path becomes the default; it does not change the agentic
+boundary. The agent-specific concerns the assignment names map onto
+this smaller surface:
 
 - **Agent roles** — two roles: a *candidate proposer* for decision
   extraction, and a *checker* computed on read (cycles, blockers,
@@ -197,8 +202,11 @@ The evaluation protocol document
 of the extraction pipeline: precision/recall per entity, an error
 taxonomy, a blind rules-vs-LLM comparison with a pre-fixed adoption
 rule, and an end-to-end comparison against hand-written minutes. The
-rest of the system is deterministic (rules + computed-on-read views),
-so the pipeline is the only part that still needs proving.
+adoption rule, fixed in advance: the LLM path becomes the default only
+if the blind comparison shows it beating the rule engine without
+losing any target. The rest of the system is deterministic (rules +
+computed-on-read views), so the pipeline is the only part that still
+needs proving.
 
 ## 11. Open Issues & Risks (to test in Part III)
 
