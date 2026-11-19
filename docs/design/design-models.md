@@ -29,6 +29,7 @@ classDiagram
         +str source_text
         +str status
         +str review_comment
+        +datetime created_at
     }
     class Decision {
         +int id
@@ -38,6 +39,7 @@ classDiagram
         +str rationale
         +str decided_by
         +str status
+        +int superseded_by_decision_id
         +str teacher_status
         +int chain_id
         +datetime created_at
@@ -47,6 +49,7 @@ classDiagram
         +int project_id
         +str title
         +datetime submitted_at
+        +datetime created_at
         +str teacher_status <<derived>>
     }
     class ChainComment {
@@ -69,10 +72,12 @@ classDiagram
         +int decision_id
         +str owner
         +str description
+        +datetime due_date
         +str status
     }
     class Dependency {
         +int id
+        +int project_id
         +int predecessor_commitment_id
         +int successor_commitment_id
         +str dependency_type
@@ -95,14 +100,18 @@ classDiagram
     Candidate "0..1" --> "0..1" Decision : confirmed to
     Project "1" --> "*" Decision : has
     Project "1" --> "*" Chain : has
-    Chain "1" --> "*" Decision : nodes
-    Decision "1" --> "*" ChainComment : discussed under
-    Decision "1" --> "*" ChainAnnotation : annotated
+    Chain "0..1" --> "*" Decision : nodes
+    Decision "0..1" --> "*" ChainComment : discussed under
+    Decision "0..1" --> "*" ChainAnnotation : annotated
     Chain "1" --> "*" Commitment : executes via
     Commitment "1" --> "*" Dependency : blocks
     Commitment "1" --> "*" CommitmentHistory : logs
     Decision "1" --> "*" DecisionHistory : logs
 ```
+
+`superseded_by_decision_id` is a legacy column: it stays in the schema
+for rows created before the repositioning, and the current system never
+writes it (the chain itself is the revision relationship — data-model.md).
 
 ## 2. Sequence Diagram: Discussion → Chain → Verdict → Execution
 
@@ -115,18 +124,18 @@ sequenceDiagram
 
     S->>UI: paste meeting text (or import file)
     UI->>API: POST /discussions
-    S->>UI: run extraction
+    S->>UI: run extraction (an import triggers it automatically)
     API-->>UI: decision candidates (with source sentences)
     S->>UI: confirm / edit / reject (per maker)
     API-->>UI: decisions created
-    S->>UI: start a chain from a decision; discuss per node; append revisions
+    S->>UI: start a chain from a decision, discuss per node, append revisions
     API-->>UI: chain detail (nodes + threads)
     S->>UI: submit the chain
     API-->>UI: latest verdict-less node → PENDING
     T->>UI: awaiting view shows the whole chain inline
     T->>UI: annotate a node / approve node X
     API-->>API: other pending/held/approved nodes → REJECTED
-    API-->>UI: node X APPROVED; chain locked
+    API-->>UI: node X APPROVED, chain locked
     S->>UI: execution: add tasks to node X
     API-->>UI: tasks, topological order, AI checks
     T->>UI: in-progress view: read-only boards per group

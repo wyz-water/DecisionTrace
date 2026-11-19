@@ -13,11 +13,11 @@ erDiagram
     PROJECT ||--o{ CHAIN : has
 
     DISCUSSION ||--o{ CANDIDATE : extracted-from
-    CANDIDATE ||--o| DECISION : confirmed-to
+    CANDIDATE }o--o| DECISION : confirmed-to
 
-    DECISION }o--|| CHAIN : node-of
-    DECISION ||--o{ CHAIN_COMMENT : discussed-under
-    DECISION ||--o{ CHAIN_ANNOTATION : annotated
+    DECISION }o--o| CHAIN : node-of
+    DECISION |o--o{ CHAIN_COMMENT : discussed-under
+    DECISION |o--o{ CHAIN_ANNOTATION : annotated
 
     CHAIN ||--o{ CHAIN_COMMENT : has
     CHAIN ||--o{ CHAIN_ANNOTATION : has
@@ -56,13 +56,17 @@ decisions; tasks come from the chain discussion, not extraction.
 - `decided_by` — named-person patterns (EN + ZH); team decisions stay
   null. Per-maker color coding and the "review only mine" filter hang on
   this field.
-- `chain_id` — a decision either stands alone or is a node of one chain.
+- `chain_id` — a decision either stands alone (*free decision*, the
+  drafting state before supervision) or is a node of one chain. Only
+  chain points are submitted and can be approved; starting a chain from
+  a free decision is the step that brings it under supervision.
 - **`teacher_status`** — the supervisor's verdict on this point:
   `null` (no verdict), `PENDING` (submitted, awaiting), `APPROVED`
   (the selected point — it enters execution), `HELD`, `REJECTED`
   (overruled by the approval of another point). Students never write it.
-- `superseded_by_decision_id` — kept for history but unused by the chain
-  model (the chain itself is the revision relationship).
+- `superseded_by_decision_id` — kept in the schema for rows created
+  before the repositioning; the current system never writes it (the
+  chain itself is the revision relationship).
 
 ### Chain (one topic's decision history)
 
@@ -70,7 +74,10 @@ decisions; tasks come from the chain discussion, not extraction.
 
 `teacher_status` is **derived on read, never stored**:
 - `APPROVED` — some node is approved (the supervisor chose it);
-- `PENDING` — submitted but no approval yet;
+- `PENDING` — submitted but no approval yet. This includes chains whose
+  nodes all carry `HELD`/`REJECTED` verdicts: they stay in the awaiting
+  queue until the group appends a revision and re-submits
+  (re-submission is allowed — the chain is never frozen);
 - `null` — a draft in discussion.
 
 Invariants:
@@ -107,8 +114,20 @@ anchor, `chain_id` keeps the provenance.
 
 ## 3. Derived, Never Stored
 
-- **Node state** (`WAITING` / `READY` / `BLOCKED` / `DONE`) — computed
-  from the dependency edges and statuses.
+- **Node state** (`WAITING` / `READY` / `BLOCKED` / `DONE` / `CYCLIC`) —
+  computed from the dependency edges and statuses. The mapping from the
+  stored `Commitment.status` vocabulary to the derived node state:
+
+  | Stored status (own or predecessors') | Derived node state |
+  |---|---|
+  | on a dependency cycle | `CYCLIC` |
+  | own status `COMPLETED` | `DONE` |
+  | a predecessor is `DELAYED`/`BLOCKED` | `BLOCKED` |
+  | predecessors exist, none done, none risky | `WAITING` |
+  | nothing stands in the way | `READY` |
+
+  (`DONE` wins over `BLOCKED`: a completed task is done even when a
+  delayed predecessor exists.)
 - **Topological order, cycles** — computed from the edges.
 - **AI checks** — cycle / blocked-chain / out-of-order, computed on
   read.
@@ -120,6 +139,9 @@ anchor, `chain_id` keeps the provenance.
 ## 4. What Was Removed
 
 The repositioning deleted the `Argument`, `Snapshot` and `Impact`
-concepts (and their tables): the supervisor/chain/execution model
-replaced the deliberation layer, and the chain itself is the meeting
-artifact — no graph snapshots.
+concepts (and their tables). The health metrics, pre-check gate,
+reversal trace, stakeholder view, batch confirmation and meeting
+summaries had no dedicated tables and were removed with their
+endpoints and UI. The complete per-feature inventory is changelog C26;
+the supervisor/chain/execution model replaced the deliberation layer,
+and the chain itself is the meeting artifact — no graph snapshots.

@@ -2,15 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.project import Project
-from app.models.decision import Decision
 from app.models.commitment import Commitment
-from app.models.dependency import Dependency
 from app.models.commitment_history import CommitmentHistory
 from app.schemas.commitment_history import CommitmentHistoryResponse
 from app.schemas.page import Page
 from app.schemas.commitment import (
-    CommitmentCreate,
     CommitmentResponse,
     CommitmentStatusUpdate,
 )
@@ -21,22 +17,6 @@ router = APIRouter(
     prefix="/commitments",
     tags=["Commitments"]
 )
-
-
-@router.get(
-    "",
-    response_model=list[CommitmentResponse]
-)
-def get_commitments(
-    project_id: int | None = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(Commitment)
-
-    if project_id is not None:
-        query = query.filter(Commitment.project_id == project_id)
-
-    return query.all()
 
 
 @router.patch(
@@ -129,36 +109,3 @@ def get_commitment_history(
     rows, total = paginate(query, page)
 
     return page_response(rows, total, page)
-@router.delete(
-    "/{commitment_id}",
-    response_model=CommitmentResponse
-)
-def delete_commitment(
-    commitment_id: int,
-    db: Session = Depends(get_db)
-):
-    commitment = db.query(Commitment).filter(
-        Commitment.id == commitment_id
-    ).first()
-
-    if not commitment:
-        raise HTTPException(
-            status_code=404,
-            detail="Commitment not found"
-        )
-
-    # Remove everything that only makes sense with the commitment:
-    # its audit entries and any dependency edges that touch it.
-    db.query(CommitmentHistory).filter(
-        CommitmentHistory.commitment_id == commitment.id
-    ).delete(synchronize_session=False)
-
-    db.query(Dependency).filter(
-        (Dependency.predecessor_commitment_id == commitment.id)
-        | (Dependency.successor_commitment_id == commitment.id)
-    ).delete(synchronize_session=False)
-
-    db.delete(commitment)
-    db.commit()
-
-    return commitment

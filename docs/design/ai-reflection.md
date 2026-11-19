@@ -2,8 +2,8 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Draft for team review (2026-11-12) — team members fill in
-their own usage notes where marked.
+**Status:** Current (2026-11-19); per-member usage notes still to be
+filled in where marked.
 
 ## 1. The Tool Chain
 
@@ -11,7 +11,7 @@ their own usage notes where marked.
 |---|---|---|
 | Claude Code | Drafting all SRS sections; drafting and revising these design documents; implementing every feature wave (graph core, candidate pipeline, deliberation layer, and — after the instructor's repositioning feedback — the two-sided supervisor/group system with decision chains, per-node verdicts, the execution phase and the final dead-code sweep); writing backend tests; driving Playwright verification | ChatGPT/Claude subscription, $20/mo (from SRS §11) |
 | DeepSeek API (`deepseek-chat`) | Optional LLM path for candidate extraction; falls back to the rule engine on any failure or when no key is set | ≈ ¥30–45 for the ~12M tokens used so far (SRS §11 estimate) |
-| Rule engine (own regex patterns, EN + ZH) | The default, offline extraction baseline — decisions, commitments, dependencies, arguments | Free, deterministic |
+| Rule engine (own regex patterns, EN + ZH) | The default, offline extraction baseline — decision candidates (the pre-repositioning system also extracted commitments, dependencies and arguments; those were removed in the cleanup) | Free, deterministic |
 | Mermaid + python-docx | Diagrams and the Word conversion of the SRS | Free |
 | Playwright (in the backend venv) | End-to-end verification against a temp database copy | Free |
 
@@ -33,9 +33,10 @@ boundary in the product feel natural rather than invented.
 ## 3. What the AI Was Good At
 
 - **Volume with consistency.** Drafting all 11 SRS sections, then keeping
-  five design documents mutually consistent (ADR numbers, change-log
-  entries, section references) after every revision — the kind of
-  bookkeeping a four-person team would otherwise spend an evening on.
+  this document set (nine artifacts plus the data model and API
+  appendices) mutually consistent (ADR numbers, change-log entries,
+  section references) after every revision — the kind of bookkeeping a
+  four-person team would otherwise spend an evening on.
 - **The mechanical half of implementation.** Graph algorithms, schema
   changes, i18n key pairs (EN/ZH), test cases: written fast and mostly
   right the first time.
@@ -62,7 +63,7 @@ boundary in the product feel natural rather than invented.
 
 ## 5. Verification We Actually Performed
 
-43 backend tests; frontend
+37 backend tests; frontend
 production builds; Playwright end-to-end runs against a temp backend
 copy with a fresh database, including the empty-DB state; the curated
 demo database restored after every verification session. For the AI
@@ -108,9 +109,10 @@ largest AI-assisted change of the project. The workflow that worked:
 3. **Verify, don't assume.** Every change was checked end-to-end with
    Playwright against a temp database; the seed script rebuilt the demo
    state after destructive demos.
-4. **Delete what was replaced.** The old deliberation layer, snapshots
-   and impact previews were removed — models, routes, services, i18n —
-   so the code and the docs describe one system.
+4. **Delete what was replaced.** The old deliberation layer, snapshots,
+   impact previews, health metrics, pre-check gate and reversal trace
+   were removed — models, routes, services, i18n (full inventory in
+   C26) — so the code and the docs describe one system.
 
 The lesson for Part III: the AI is strong at executing a
 well-negotiated design and at sweeping cleanup; the design decisions

@@ -49,7 +49,7 @@ The frontend consumes this through one hook (`usePagedList`).
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/discussions` | Paste a meeting text (title, content). |
-| `POST` | `/discussions/import` | `.txt/.md/.docx/.pdf` import, UTF-8 with GBK fallback. |
+| `POST` | `/discussions/import` | `.txt/.md/.docx/.pdf` import, UTF-8 with GBK fallback; the frontend triggers extraction on the imported discussion immediately (one flow). |
 | `GET` | `/discussions?project_id=` | Paged. |
 | `DELETE` | `/discussions/{id}` | |
 
@@ -61,7 +61,7 @@ edits or rejects.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/candidates/extract/{discussion_id}` | Run extraction on one discussion. Returns DECISION candidates with source sentences. |
+| `POST` | `/candidates/extract/{discussion_id}` | Run extraction on one discussion. Returns DECISION candidates with source sentences. Pasted discussions use this explicit action; imported files extract automatically. |
 | `GET` | `/candidates?project_id=&status=` | Paged; `status=PENDING` or `CONFIRMED,REJECTED`. |
 | `PATCH` | `/candidates/{id}` | Edit a candidate before confirming. |
 | `POST` | `/candidates/{id}/confirm` | Create the real decision. (Chains are started from existing decisions, see `/chains`.) |
@@ -78,7 +78,10 @@ edits or rejects.
 
 `Decision.teacher_status` is the **supervisor's verdict on this decision
 point** (null until the chain is submitted, then `PENDING` /
-`APPROVED` / `HELD` / `REJECTED`). It is never set by the students.
+`APPROVED` / `HELD` / `REJECTED`). It is never set by the students. A
+free decision keeps `teacher_status = null` until it is chained.
+`superseded_by_decision_id` is kept in stored rows for
+pre-repositioning history and is no longer writable.
 
 ## 6. Chains (decision discussion + submission)
 
@@ -93,7 +96,7 @@ node.
 | `GET` | `/chains/{id}` | Detail: nodes (with `teacher_status`), comments, annotations. |
 | `POST` | `/chains/{id}/nodes` | Append a revision decision. Refused 400 once the chain has an approved node (it is in execution and locked). |
 | `POST` | `/chains/{id}/comments` | Add a discussion message under a node (`decision_id` optional). |
-| `POST` | `/chains/{id}/submit` | Submit to the supervisor: the latest verdict-less node becomes `PENDING`. |
+| `POST` | `/chains/{id}/submit` | Submit to the supervisor: the latest verdict-less node becomes `PENDING`. Re-submission is allowed (the chain is never frozen) and updates the timestamp; when every node already carries a verdict, nothing becomes `PENDING` and the chain stays `PENDING` until a revision is appended and submitted. |
 
 ### `POST /chains/{id}/teacher-action` — the supervisor's verdict
 
@@ -107,9 +110,9 @@ node.
   (default: the chain's newest node). Annotations with `status: null`
   are pure annotations and may target any node.
 - **Approval is a selection.** Approving one node overrules the chain's
-  other pending/held/approved nodes — they become `REJECTED`. A chain
-  has at most one approved point, and that point enters the execution
-  phase.
+  other pending/held/approved nodes — they become `REJECTED`; nodes
+  with no verdict are untouched. A chain has at most one approved
+  point, and that point enters the execution phase.
 
 ## 7. Execution (only after approval)
 
@@ -126,6 +129,8 @@ Endpoints for the old single-project system no longer exist:
 `/dependencies`, `/commitments` (create/list/delete), `/arguments`,
 `/projects/{id}/snapshots*`, `/projects/{id}/health`,
 `/commitments/{id}/impact` and `/what-if`,
-`/decisions/{id}/reversal` and `/decisions/{id}/dependencies`. The
-argument, snapshot and impact models were deleted with them — the
+`/decisions/{id}/reversal` and `/decisions/{id}/dependencies`,
+`/projects/{id}/stakeholder`, `/candidates/confirm-batch` (batch
+confirmation) and `/candidates/{id}/challenges` (the pre-check gate).
+The argument, snapshot and impact models were deleted with them — the
 supervisor/chain/execution model replaced the deliberation layer.

@@ -55,7 +55,9 @@ source sentence, and nothing becomes a record without confirmation.
 
 **What connects to what?** A decision point belongs to a chain; a chain
 belongs to a project (group); a thread and an annotation belong to a
-decision point; a task belongs to an approved decision point. The
+decision point; a task belongs to an approved decision point. A free
+decision (no chain yet) is the drafting state: it becomes supervised —
+and only then approvable — once a chain is started from it. The
 supervisor's dashboard groups by project — the one-to-many relation is
 the backbone of every view.
 
@@ -78,20 +80,20 @@ the backbone of every view.
 | A2 | AI output is always a *candidate* | Extraction can never create authoritative records; a human confirms, edits, or rejects. The trust boundary is explicit (`candidates.status`). |
 | A3 | Rule-based extraction by default; DeepSeek LLM only when `DEEPSEEK_API_KEY` is set, falling back to rules on failure | The demo always works offline; the LLM is an upgrade, not a dependency. |
 | A4 | Offset pagination with a shared envelope | One client contract (`usePagedList`) for every list. |
-| A5 | Records are immutable; changes append history rows | `decision_history` / `commitment_history` store old→new pairs with a reason; delete endpoints cascade dependents. |
+| A5 | Every edit is audited; the history is append-only | `PATCH` updates the current record in place and appends an old→new pair to `decision_history` / `commitment_history` with a reason; the audit trail is never rewritten; delete endpoints cascade dependents. |
 | A6 | Hash-based view routing | The sidebar, URL and back button stay in agreement. |
 | A7 | Projects are first-class; every view is project-scoped | The one-to-many supervisor/group relation is the backbone; the supervisor's dashboard groups by project. |
 | A8 | Derived values are computed on read, never stored | Chain status, node states, topological order, cycles and checks all derive from the current records — no caches to drift. |
 | A9 | Automation-first intake; manual forms are the fallback | Pasting a meeting is cheaper than minutes; the review queue shows every candidate with its source sentence, per-maker colors and a "review only mine" filter, so each member verifies their own statements. |
 | A10 | The discussion text is the system of record | Every decision links to its source discussion; the trace is a derived view over the text. |
-| A11 | **The decision chain replaces the single record** | One topic = one chain; revisions are new nodes, history is preserved; per-node threads keep the reasoning under the decision it reasons about. This is the structural answer to "recording conclusions throws away the reasoning". |
-| A12 | **Approval is a selection, per decision point** | The supervisor may approve any point, not necessarily the newest; choosing one overrules the chain's other points (they become `REJECTED`), and an approved chain locks against further revisions. One chain has at most one executing decision — conflicting points can never both run. |
+| A11 | **The decision chain replaces the single record** | One topic = one chain; revisions are new nodes, history is preserved; per-node threads keep the reasoning under the decision it reasons about. A decision may start free-standing — a *free decision*, the drafting state — and enters supervised life when a chain is started from it. This is the structural answer to "recording conclusions throws away the reasoning". |
+| A12 | **Approval is a selection, per decision point** | The supervisor may approve any point, not necessarily the newest; choosing one overrules the chain's other pending/held points (they become `REJECTED`; never-submitted points stay untouched drafts), and an approved chain locks against further revisions. One chain has at most one executing decision — conflicting points can never both run. |
 | A13 | **Execution follows approval, never precedes it** | Tasks bind to an approved decision point; the backend refuses tasks elsewhere. The supervisor watches the same boards read-only. |
 | A14 | **The supervisor acts inline, not through a form** | The awaiting view renders the whole chain — nodes, threads, annotations — and the verdict/annotation bar sits under each node, so annotating "this decision" is one click, not a navigation. |
-| A15 | **Display numbering is project-scoped** | Chains are `#1..#N`, nodes render `#chain-node`, free decisions `#1..#M`; global database ids never surface. Numbers restart per project so the second group reads `#1`, not `#7`. |
+| A15 | **Display numbering is project-scoped** | Chains are `#1..#N`, nodes render `#chain-node`, free decisions `#1..#M`; chains and free decisions share the numbering but appear in different lists (chain view vs decisions view), so a bare `#N` is unambiguous in its view; global database ids never surface. Numbers restart per project so the second group reads `#1`, not `#7`. |
 | A16 | Bilingual UI (中文/EN) with persisted preference | Team and course audience are Chinese-speaking; demo readability. |
 | A17 | The seed script is a full scenario, not fixtures | Two groups, three weeks, every state (approved+executing with a revision awaiting choice, held, submitted, drafts EN+ZH, two pending candidates from two makers) — one command rebuilds the demo and its pristine backup. |
-| A18 | Post-repositioning sweep: dead features are deleted, not kept around | The argument/deliberation layer, snapshots, impact/what-if previews, decision health and the old plan page were replaced by the supervisor/chain/execution model; their models, routes, services and i18n keys were removed so the code and the docs describe the same system. |
+| A18 | Post-repositioning sweep: dead features are deleted, not kept around | The argument/deliberation layer, snapshots, impact/what-if previews, decision health, the pre-check gate, the reversal trace (the `superseded_by` column stays only for pre-repositioning rows), the stakeholder view, batch confirmation, meeting summaries, overdue highlighting and the old plan page were replaced by the supervisor/chain/execution model; their models, routes, services and i18n keys were removed so the code and the docs describe the same system. The full per-feature inventory is changelog C26. |
 
 ## 5. Automation: Reducing Manual Effort
 
@@ -111,9 +113,9 @@ AI-assisted, not agentic: the AI component is the extraction pipeline
 and it observes, but it never acts on records. The agent-specific
 concerns the assignment names map onto this smaller surface:
 
-- **Agent roles** — one role only: a *candidate proposer* for
-  decision extraction, with a separate *checker* role computed on
-  read (cycles, blockers, ordering).
+- **Agent roles** — two roles: a *candidate proposer* for decision
+  extraction, and a *checker* computed on read (cycles, blockers,
+  ordering).
 - **Tool interfaces** — none: the pipeline has no external tools to
   call; its only output is candidates.
 - **Memory and state** — no learned state: every run reads the
@@ -167,11 +169,12 @@ this same setup — no server or account anywhere.
 - No authentication in this milestone (course scope); the two-sided
   split is a UX/role split, not an authorization boundary yet.
 - Append-only histories and derived states (A8) keep the trace
-  self-consistent; the execution checks (cycle / blocked /
-  out-of-order) run on every read against the current edges. Task
-  edges ship with the demo data — dependency creation/removal
-  endpoints were dropped in the repositioning cleanup and are a
-  Part III item (see open issues).
+  self-consistent; the execution checks (blocked / out-of-order, plus
+  a defensive cycle check) run on every read against the current
+  edges. Task edges ship with the demo data (acyclic) — dependency
+  creation/removal endpoints were dropped in the repositioning
+  cleanup and are a Part III item; when they return, cycle refusal
+  before storage applies again (see open issues).
 - The optional LLM path sends only the discussion text and never runs
   without the key; rules are the fallback (A3).
 
@@ -199,6 +202,10 @@ so the pipeline is the only part that still needs proving.
 
 ## 11. Open Issues & Risks (to test in Part III)
 
-See `docs/design/open-issues.md`. Headlines: no authentication yet; the
-transition vocabulary for tasks has no formal matrix; the extraction
-quality of the LLM path is unmeasured until the Part III protocol runs.
+See `docs/design/open-issues.md`. Part III headlines: R1 no
+authentication yet; R2 no formal status-transition matrix; R3 the LLM
+extraction path unmeasured until the Part III protocol runs; R4 the
+chain lock is one-way; R5.5 dependency edge creation/removal to
+restore, with cycle refusal before storage; R7 held/rejected chains
+stay in the awaiting queue. The full table (also R5, R6, O1, O2 and
+the issue log I1–I7) lives in that document.

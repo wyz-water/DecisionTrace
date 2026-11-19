@@ -31,14 +31,6 @@ ENTITY_FIELDS = {
     "ARGUMENT": ("stance", "claim", "author", "target_title"),
 }
 
-# The display name of an entity, used by coverage/faithfulness checks.
-DISPLAY_NAME_FIELD = {
-    "DECISION": "title",
-    "COMMITMENT": "description",
-    "DEPENDENCY": None,  # represented as "A -> B", see _display_name
-    "ARGUMENT": "claim",
-}
-
 
 def _norm(value):
     """Whitespace- and case-insensitive text comparison."""
@@ -236,104 +228,6 @@ def score_all(gold_entities, predicted_entities, discussion_text=None):
         "wrong_type": wrong_type_count(
             gold_entities, predicted_entities, discussion_text
         ),
-    }
-
-
-def _display_name(entity):
-    entity_type = entity.get("type")
-    field = DISPLAY_NAME_FIELD.get(entity_type)
-
-    if field:
-        return _norm(entity.get("fields", {}).get(field))
-
-    if entity_type == "DEPENDENCY":
-        fields = entity.get("fields", {})
-        predecessor = _norm(fields.get("predecessor_owner"))
-        successor = _norm(fields.get("successor_owner"))
-
-        if predecessor and successor:
-            return f"{predecessor} -> {successor}"
-
-    return None
-
-
-def summary_coverage(gold_entities, summary_names):
-    """Fraction of gold entities whose display name appears in the
-    summary's name list (cheap proxy; the gold-set protocol is the
-    authoritative measure, architecture §10)."""
-    names = {_norm(name) for name in (summary_names or [])}
-    covered = 0
-    total = 0
-
-    for entity in gold_entities:
-        name = _display_name(entity)
-
-        if not name:
-            continue
-
-        total += 1
-
-        if name in names or any(name in existing for existing in names):
-            covered += 1
-
-    return {
-        "covered": covered,
-        "total": total,
-        "coverage": round(covered / total, 3) if total else None,
-    }
-
-
-def summary_faithfulness(summary_names, discussion_text):
-    """Fraction of summary names that occur in the discussion text —
-    nothing in the summary may lack support (proxy for the human
-    faithfulness check)."""
-    text = _norm(discussion_text)
-    faithful = 0
-    total = 0
-
-    for name in summary_names or []:
-        normalized = _norm(name)
-
-        if not normalized:
-            continue
-
-        total += 1
-
-        if normalized in text:
-            faithful += 1
-
-    return {
-        "faithful": faithful,
-        "total": total,
-        "faithfulness": round(faithful / total, 3) if total else None,
-    }
-
-
-def snapshot_agreement(gold_nodes, gold_edges, snapshot_nodes, snapshot_edges):
-    """Node/edge agreement between the gold graph and a saved snapshot
-    (target: >= 80%, architecture §10)."""
-    gold_node_ids = {_norm(node) for node in (gold_nodes or [])}
-    snapshot_node_ids = {_norm(node) for node in (snapshot_nodes or [])}
-
-    gold_edge_ids = {(_norm(a), _norm(b)) for a, b in (gold_edges or [])}
-    snapshot_edge_ids = {
-        (_norm(a), _norm(b)) for a, b in (snapshot_edges or [])
-    }
-
-    def agreement(gold_set, snapshot_set):
-        intersection = len(gold_set & snapshot_set)
-        union = len(gold_set | snapshot_set)
-
-        return {
-            "agreed": intersection,
-            "gold_total": len(gold_set),
-            "snapshot_total": len(snapshot_set),
-            "agreement": round(intersection / union, 3) if union else None,
-        }
-
-    return {
-        "nodes": agreement(gold_node_ids, snapshot_node_ids),
-        "edges": agreement(gold_edge_ids, snapshot_edge_ids),
     }
 
 
