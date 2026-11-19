@@ -109,6 +109,9 @@ def build():
         (1, 2, "Use Redis for caching",
          "it scales well",
          None, 3, "PENDING", "2026-11-10T09:30:00+08:00"),
+        (1, 2, "Build a WeChat mini program first",
+         "the comparison shows most users are on WeChat",
+         "Carol", 2, "PENDING", "2026-11-07T16:00:00+08:00"),
         (1, 3, "Use Tailwind for styling",
          "it ships fast",
          "Alice", 4, None, "2026-11-13T14:00:00+08:00"),
@@ -143,7 +146,7 @@ def build():
 
     chains = [
         (1, 1, "Use PostgreSQL", "2026-11-05T18:00:00+08:00", "2026-11-03T10:00:00+08:00"),
-        (1, 2, "Build a web app", "2026-11-06T17:30:00+08:00", "2026-11-03T10:05:00+08:00"),
+        (1, 2, "Build a web app", "2026-11-07T18:30:00+08:00", "2026-11-03T10:05:00+08:00"),
         (1, 3, "Use Redis for caching", "2026-11-11T20:00:00+08:00", "2026-11-10T09:30:00+08:00"),
         (1, 4, "Use Tailwind for styling", None, "2026-11-13T14:00:00+08:00"),
         (1, 5, "Use JWT for authentication", None, "2026-11-13T14:10:00+08:00"),
@@ -164,6 +167,7 @@ def build():
         (1, 6, "Alice", "The demo must run offline on teammates machines — SQLite it is.", "2026-11-15T16:10:00+08:00"),
         (1, 6, "Carol", "Then the schema stays compatible with PostgreSQL?", "2026-11-15T16:15:00+08:00"),
         (2, 2, "Carol", "What about a WeChat mini program? Our users are all on WeChat.", "2026-11-04T15:00:00+08:00"),
+        (2, 11, "Carol", "The comparison shows most users are on WeChat — mini program first, web later.", "2026-11-07T16:10:00+08:00"),
         (2, 2, "Alice", "A browser version reaches everyone, not just WeChat users.", "2026-11-04T15:10:00+08:00"),
         (2, 2, "Carol", "Fair, but a mini program is easier to demo.", "2026-11-04T15:12:00+08:00"),
         (3, 3, "Bob", "What about the ops cost of Redis?", "2026-11-10T10:00:00+08:00"),
