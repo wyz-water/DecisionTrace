@@ -40,13 +40,28 @@ router = APIRouter(
 )
 
 
+def _derived_chain_status(db, chain):
+    """A chain is APPROVED when any of its nodes is approved (the
+    chain entered execution), PENDING when submitted with no approval
+    yet, None while it is still a draft."""
+    nodes = db.query(Decision).filter(Decision.chain_id == chain.id).all()
+
+    if any(node.teacher_status == "APPROVED" for node in nodes):
+        return "APPROVED"
+
+    if chain.submitted_at is not None:
+        return "PENDING"
+
+    return None
+
+
 def _chain_response(db, chain):
     return ChainResponse(
         id=chain.id,
         project_id=chain.project_id,
         title=chain.title,
         submitted_at=chain.submitted_at,
-        teacher_status=chain.teacher_status,
+        teacher_status=_derived_chain_status(db, chain),
         node_count=db.query(Decision).filter(
             Decision.chain_id == chain.id
         ).count(),
@@ -80,7 +95,7 @@ def _chain_detail(db, chain):
         project_id=chain.project_id,
         title=chain.title,
         submitted_at=chain.submitted_at,
-        teacher_status=chain.teacher_status,
+        teacher_status=_derived_chain_status(db, chain),
         created_at=chain.created_at,
         nodes=nodes,
         comments=comments,
@@ -274,7 +289,12 @@ def submit_chain(
         raise HTTPException(status_code=404, detail="Chain not found")
 
     chain.submitted_at = datetime.now(timezone.utc)
-    chain.teacher_status = "PENDING"
+
+    nodes = db.query(Decision).filter(Decision.chain_id == chain.id).all()
+
+    for node in nodes:
+        if node.teacher_status is None:
+            node.teacher_status = "PENDING"
 
     db.commit()
     db.refresh(chain)
@@ -314,7 +334,30 @@ def teacher_action(
                 status_code=400,
                 detail=f"Invalid teacher status: {status}",
             )
-        chain.teacher_status = status
+
+        target_id = request.decision_id
+
+        if target_id is None:
+            latest = (
+                db.query(Decision)
+                .filter(Decision.chain_id == chain.id)
+                .order_by(Decision.created_at.desc(), Decision.id.desc())
+                .first()
+            )
+            target_id = latest.id if latest else None
+
+        target = db.query(Decision).filter(
+            Decision.id == target_id,
+            Decision.chain_id == chain.id,
+        ).first()
+
+        if not target:
+            raise HTTPException(
+                status_code=400,
+                detail="The verdict decision is not a node of this chain",
+            )
+
+        target.teacher_status = status
 
     if note is not None:
         annotation_decision_id = None
@@ -362,12 +405,12 @@ def add_chain_task(
     if not chain:
         raise HTTPException(status_code=404, detail="Chain not found")
 
-    if chain.teacher_status != "APPROVED":
+    if _derived_chain_status(db, chain) != "APPROVED":
         raise HTTPException(
             status_code=400,
             detail=(
                 "Tasks can only be added after the supervisor "
-                "approves the chain"
+                "approves a decision of the chain"
             ),
         )
 
@@ -377,17 +420,42 @@ def add_chain_task(
             detail="Task owner and description are required",
         )
 
-    latest_node = (
-        db.query(Decision)
-        .filter(Decision.chain_id == chain.id)
-        .order_by(Decision.created_at.desc(), Decision.id.desc())
-        .first()
-    )
+    decision_id = request.decision_id
+
+    if decision_id is None:
+        latest_node = (
+            db.query(Decision)
+            .filter(Decision.chain_id == chain.id)
+            .order_by(Decision.created_at.desc(), Decision.id.desc())
+            .first()
+        )
+        decision_id = latest_node.id if latest_node else None
+    else:
+        node = db.query(Decision).filter(
+            Decision.id == decision_id,
+            Decision.chain_id == chain.id,
+        ).first()
+
+        if not node:
+            raise HTTPException(
+                status_code=400,
+                detail="The task decision is not a node of this chain",
+            )
+
+    target_node = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
+
+    if not target_node or target_node.teacher_status != "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail="Tasks can only be added to an approved decision",
+        )
 
     task = Commitment(
         project_id=chain.project_id,
         chain_id=chain.id,
-        decision_id=latest_node.id if latest_node else None,
+        decision_id=decision_id,
         owner=request.owner.strip(),
         description=request.description.strip(),
         due_date=request.due_date,
@@ -438,6 +506,7 @@ def _execution_task(db, task, analysis, position, owners):
 )
 def get_chain_execution(
     chain_id: int,
+    decision_id: int | None = None,
     db: Session = Depends(get_db)
 ):
     """The execution board of a chain: its tasks in topological order,
@@ -451,7 +520,12 @@ def get_chain_execution(
 
     tasks = db.query(Commitment).filter(
         Commitment.chain_id == chain.id
-    ).all()
+    )
+
+    if decision_id is not None:
+        tasks = tasks.filter(Commitment.decision_id == decision_id)
+
+    tasks = tasks.all()
 
     task_ids = {task.id for task in tasks}
 

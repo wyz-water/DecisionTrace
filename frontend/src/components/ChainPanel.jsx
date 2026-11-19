@@ -212,6 +212,16 @@ export default function ChainPanel({ projectId, decisions }) {
           <span className="chain-node-time">
             {formatDateTime(node.created_at)}
           </span>
+
+          {node.teacher_status && (
+            <span className="chain-status-chip">
+              {t(
+                `chains.status.${node.teacher_status}`,
+                {},
+                node.teacher_status.toLowerCase()
+              )}
+            </span>
+          )}
         </div>
 
         <p className="chain-node-title">

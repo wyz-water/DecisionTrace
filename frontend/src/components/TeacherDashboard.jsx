@@ -24,7 +24,7 @@ export default function TeacherDashboard({ section = "awaiting" }) {
   const [busyChain, setBusyChain] = useState(null);
   const [notes, setNotes] = useState({});
   const [targets, setTargets] = useState({});
-  const [progressChainId, setProgressChainId] = useState(null);
+  const [progressDecisionId, setProgressDecisionId] = useState(null);
 
   async function loadGroups() {
     setError("");
@@ -55,11 +55,6 @@ export default function TeacherDashboard({ section = "awaiting" }) {
         const withDetails = [];
 
         for (const chain of chains) {
-          if (chain.teacher_status === "APPROVED") {
-            withDetails.push({ ...chain, detail: null });
-            continue;
-          }
-
           const detailResponse = await fetch(
             `${API_URL}/chains/${chain.id}`
           );
@@ -74,16 +69,19 @@ export default function TeacherDashboard({ section = "awaiting" }) {
       }
 
       setGroups(entries);
-      setProgressChainId((current) => {
-        const approvedIds = entries.flatMap(
-          ({ chains }) =>
-            chains
-              .filter((chain) => chain.teacher_status === "APPROVED")
-              .map((chain) => chain.id)
+      setProgressDecisionId((current) => {
+        const decisionIds = entries.flatMap(({ chains }) =>
+          chains
+            .filter((chain) => chain.teacher_status === "APPROVED")
+            .flatMap((chain) =>
+              (chain.detail?.nodes ?? [])
+                .filter((node) => node.teacher_status === "APPROVED")
+                .map((node) => node.id)
+            )
         );
-        return approvedIds.includes(current)
+        return decisionIds.includes(current)
           ? current
-          : approvedIds[0] ?? null;
+          : decisionIds[0] ?? null;
       });
     } catch (err) {
       setError(te(err.message) || t("teacher.loadFailed"));
@@ -108,7 +106,10 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           body: JSON.stringify({
             status,
             note: (notes[chain.id] || "").trim() || null,
-            decision_id: targets[chain.id] ?? null,
+            decision_id:
+              targets[chain.id] ??
+              chain.detail?.nodes?.[chain.detail.nodes.length - 1]?.id ??
+              null,
           }),
         }
       );
@@ -191,6 +192,16 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                 <span className="chain-node-time">
                   {formatDateTime(node.created_at)}
                 </span>
+
+                {node.teacher_status && (
+                  <span className="chain-status-chip">
+                    {t(
+                      `chains.status.${node.teacher_status}`,
+                      {},
+                      node.teacher_status.toLowerCase()
+                    )}
+                  </span>
+                )}
 
                 <button
                   type="button"
@@ -333,6 +344,21 @@ export default function TeacherDashboard({ section = "awaiting" }) {
           );
 
           if (section === "progress") {
+            const progressOptions = [];
+
+            for (const chain of approved) {
+              for (const node of chain.detail?.nodes ?? []) {
+                if (node.teacher_status !== "APPROVED") {
+                  continue;
+                }
+                progressOptions.push({
+                  decisionId: node.id,
+                  title: node.title,
+                  chainId: chain.id,
+                });
+              }
+            }
+
             return (
               <div className="teacher-group" key={project.id}>
                 <div className="teacher-group-head">
@@ -353,25 +379,34 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                     <>
                       <div className="chain-create">
                         <select
-                          value={progressChainId ?? ""}
-                          aria-label={t("execute.pickChain")}
+                          value={progressDecisionId ?? ""}
+                          aria-label={t("execute.pickDecision")}
                           onChange={(event) =>
-                            setProgressChainId(
+                            setProgressDecisionId(
                               Number(event.target.value)
                             )
                           }
                         >
-                          {approved.map((chain) => (
-                            <option key={chain.id} value={chain.id}>
-                              #{chain.id} {chain.title}
+                          {progressOptions.map((option) => (
+                            <option
+                              key={option.decisionId}
+                              value={option.decisionId}
+                            >
+                              #{option.decisionId} {option.title}
                             </option>
                           ))}
                         </select>
                       </div>
 
-                      {progressChainId != null && (
+                      {progressDecisionId != null && (
                         <ExecutionBoard
-                          chainId={progressChainId}
+                          chainId={
+                            progressOptions.find(
+                              (option) =>
+                                option.decisionId === progressDecisionId
+                            )?.chainId ?? null
+                          }
+                          decisionId={progressDecisionId}
                           readOnly
                         />
                       )}

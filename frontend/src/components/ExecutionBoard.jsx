@@ -85,6 +85,7 @@ function computeLayout(graph) {
  */
 export default function ExecutionBoard({
   chainId,
+  decisionId = null,
   readOnly = false,
   section = null,
 }) {
@@ -103,7 +104,11 @@ export default function ExecutionBoard({
     setError("");
 
     try {
-      const response = await fetch(`${API_URL}/chains/${chainId}/execution`);
+      const response = await fetch(
+        `${API_URL}/chains/${chainId}/execution${
+          decisionId != null ? `?decision_id=${decisionId}` : ""
+        }`
+      );
 
       if (!response.ok) {
         throw new Error(t("execution.loadFailed"));
@@ -122,7 +127,7 @@ export default function ExecutionBoard({
       reload();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainId]);
+  }, [chainId, decisionId]);
 
   async function addTask() {
     if (!owner.trim() || !description.trim()) {
@@ -139,6 +144,7 @@ export default function ExecutionBoard({
         body: JSON.stringify({
           owner: owner.trim(),
           description: description.trim(),
+          decision_id: decisionId,
         }),
       });
 

@@ -34,6 +34,7 @@ class DecisionResponse(BaseModel):
     rationale: str | None
     decided_by: str | None = None
     status: str
+    teacher_status: str | None = None
     superseded_by_decision_id: int | None = None
     chain_id: int | None = None
 

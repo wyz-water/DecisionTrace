@@ -88,6 +88,7 @@ def build():
         title="Use PostgreSQL",
         rationale="payment transactions require transaction support",
         decided_by="Alice", status="CONFIRMED",
+        teacher_status="APPROVED",
         created_at=T("2026-11-05T10:00:00+08:00"),
         chain_id=1, superseded_by_decision_id=None,
     )
@@ -97,6 +98,7 @@ def build():
         title="Build a web app",
         rationale="a browser version reaches everyone",
         decided_by="Alice", status="CONFIRMED",
+        teacher_status="HELD",
         created_at=T("2026-11-05T10:05:00+08:00"),
         chain_id=2, superseded_by_decision_id=None,
     )
@@ -106,6 +108,7 @@ def build():
         title="Use Redis for caching",
         rationale="it scales well",
         decided_by=None, status="CONFIRMED",
+        teacher_status="PENDING",
         created_at=T("2026-11-12T09:30:00+08:00"),
         chain_id=3, superseded_by_decision_id=None,
     )
@@ -115,6 +118,7 @@ def build():
         title="Use Tailwind for styling",
         rationale="it ships fast",
         decided_by="Alice", status="CONFIRMED",
+        teacher_status=None,
         created_at=T("2026-11-15T14:00:00+08:00"),
         chain_id=4, superseded_by_decision_id=None,
     )
@@ -124,8 +128,20 @@ def build():
         title="Use GitHub Actions for CI",
         rationale="the build should fail loudly",
         decided_by="Carol", status="CONFIRMED",
+        teacher_status=None,
         created_at=T("2026-11-16T11:00:00+08:00"),
         chain_id=None, superseded_by_decision_id=None,
+    )
+    # d6: a second decision point on the PostgreSQL chain — approved
+    # node-by-node by the supervisor.
+    insert(
+        "decisions", project_id=1, source_discussion_id=1,
+        title="Use SQLite for the demo",
+        rationale="the demo must run offline on teammates machines",
+        decided_by="Alice", status="CONFIRMED",
+        teacher_status="APPROVED",
+        created_at=T("2026-11-14T16:00:00+08:00"),
+        chain_id=1, superseded_by_decision_id=None,
     )
 
     # ---------- chains ----------
@@ -179,12 +195,12 @@ def build():
 
     # ---------- teacher annotations ----------
     insert(
-        "chain_annotations", chain_id=1,
+        "chain_annotations", chain_id=1, decision_id=1,
         text="Solid reasoning — the transaction requirement settles it. Proceed.",
         created_at=T("2026-11-08T19:00:00+08:00"),
     )
     insert(
-        "chain_annotations", chain_id=2,
+        "chain_annotations", chain_id=2, decision_id=2,
         text="Bring a mini-program comparison to the next meeting — reach is not everything.",
         created_at=T("2026-11-09T18:00:00+08:00"),
     )
@@ -253,6 +269,13 @@ def build():
         source_text="Bob decided to use JWT for authentication.",
         status="PENDING", review_comment=None,
         created_at=T("2026-11-15T15:00:00+08:00"),
+    )
+
+    # a comment under the SQLite node (the second decision point)
+    insert(
+        "chain_comments", chain_id=1, decision_id=6,
+        author="Alice", text="The demo must run offline — SQLite it is.",
+        created_at=T("2026-11-14T16:10:00+08:00"),
     )
 
     conn.commit()

@@ -12,8 +12,8 @@ const API_URL = "http://127.0.0.1:8000";
  */
 export default function ExecutePanel({ projectId, section = null }) {
   const { t, te } = useI18n();
-  const [chains, setChains] = useState([]);
-  const [selectedChainId, setSelectedChainId] = useState(null);
+  const [selectedDecisionId, setSelectedDecisionId] = useState(null);
+  const [decisionOptions, setDecisionOptions] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -23,20 +23,30 @@ export default function ExecutePanel({ projectId, section = null }) {
 
     let cancelled = false;
 
-    fetch(`${API_URL}/chains?project_id=${projectId}`)
+    fetch(`${API_URL}/decisions?project_id=${projectId}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (cancelled) {
           return;
         }
+
         const approved = (data ?? []).filter(
-          (chain) => chain.teacher_status === "APPROVED"
+          (decision) =>
+            decision.teacher_status === "APPROVED" &&
+            decision.chain_id != null
         );
-        setChains(approved);
-        setSelectedChainId((current) =>
-          approved.some((chain) => chain.id === current)
+
+        const options = approved.map((decision) => ({
+          decisionId: decision.id,
+          title: decision.title,
+          chainId: decision.chain_id,
+        }));
+
+        setDecisionOptions(options);
+        setSelectedDecisionId((current) =>
+          options.some((option) => option.decisionId === current)
             ? current
-            : approved[0]?.id ?? null
+            : options[0]?.decisionId ?? null
         );
       })
       .catch(() => {
@@ -58,29 +68,34 @@ export default function ExecutePanel({ projectId, section = null }) {
 
       {error && <p className="pipeline-error">{te(error)}</p>}
 
-      {chains.length === 0 ? (
+      {decisionOptions.length === 0 ? (
         <p className="muted">{t("execute.none")}</p>
       ) : (
         <>
           <div className="chain-create">
             <select
-              value={selectedChainId ?? ""}
-              aria-label={t("execute.pickChain")}
+              value={selectedDecisionId ?? ""}
+              aria-label={t("execute.pickDecision")}
               onChange={(event) =>
-                setSelectedChainId(Number(event.target.value))
+                setSelectedDecisionId(Number(event.target.value))
               }
             >
-              {chains.map((chain) => (
-                <option key={chain.id} value={chain.id}>
-                  #{chain.id} {chain.title}
+              {decisionOptions.map((option) => (
+                <option key={option.decisionId} value={option.decisionId}>
+                  #{option.decisionId} {option.title}
                 </option>
               ))}
             </select>
           </div>
 
-          {selectedChainId != null && (
+          {selectedDecisionId != null && (
             <ExecutionBoard
-              chainId={selectedChainId}
+              chainId={
+                decisionOptions.find(
+                  (option) => option.decisionId === selectedDecisionId
+                )?.chainId ?? null
+              }
+              decisionId={selectedDecisionId}
               readOnly={false}
               section={section}
             />

@@ -316,8 +316,7 @@ function App() {
   const [decisionId, setDecisionId] = useState(null);
   const [decisionImpact, setDecisionImpact] = useState(null);
   const [decisionReversal, setDecisionReversal] = useState(null);
-  const [approvedChainIds, setApprovedChainIds] = useState(new Set());
-  const [chainsData, setChainsData] = useState([]);
+
   const [reversalError, setReversalError] = useState("");
   const [decisionDependencies, setDecisionDependencies] = useState(null);
   const [dependenciesError, setDependenciesError] = useState("");
@@ -398,35 +397,33 @@ function App() {
 
   const projectId = project?.id ?? null;
 
-  // Unapproved decisions stay in the Decisions view; approved ones move
-  // to the execution group's decision list.
+  // Unapproved decision points stay in the Decisions view; approved
+  // ones move to the execution group's decision list.
   const visibleDecisions = decisions.filter(
-    (decision) => !approvedChainIds.has(decision.chain_id)
+    (decision) => decision.teacher_status !== "APPROVED"
   );
   const visibleDecision =
     visibleDecisions.find((item) => item.id === decisionId) ?? null;
 
-  const chainsById = new Map(
-    chainsData.map((chain) => [chain.id, chain])
-  );
-
   function supervisorStatusLabel(decision) {
-    const chain = chainsById.get(decision.chain_id);
-
-    if (!chain) {
-      return t("decisions.noChain");
-    }
-
-    if (chain.teacher_status === "PENDING") {
+    if (decision.teacher_status === "PENDING") {
       return t("chains.statusPending");
     }
 
-    if (chain.teacher_status) {
-      return t(
-        `chains.status.${chain.teacher_status}`,
-        {},
-        chain.teacher_status.toLowerCase()
-      );
+    if (decision.teacher_status === "APPROVED") {
+      return t("chains.status.APPROVED");
+    }
+
+    if (decision.teacher_status === "HELD") {
+      return t("chains.status.HELD");
+    }
+
+    if (decision.teacher_status === "REJECTED") {
+      return t("chains.status.REJECTED");
+    }
+
+    if (decision.chain_id == null) {
+      return t("decisions.noChain");
     }
 
     return t("chains.statusDraft");
@@ -443,7 +440,7 @@ function App() {
       setDecisionId(visibleDecisions[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleDecisions.length, decisionId, approvedChainIds]);
+  }, [visibleDecisions.length, decisionId]);
 
   const discussions = usePagedList(
     projectId ? `${API_URL}/discussions?project_id=${projectId}` : null,
@@ -602,35 +599,6 @@ function App() {
 
   // Reload everything after a write. `loadDashboard` alone would leave
   // the paginated lists and the impact cards showing pre-write data.
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    fetch(`${API_URL}/chains?project_id=${projectId}`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-        setChainsData(data ?? []);
-        setApprovedChainIds(
-          new Set(
-            (data ?? [])
-              .filter((chain) => chain.teacher_status === "APPROVED")
-              .map((chain) => chain.id)
-          )
-        );
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, refreshTick]);
-
   async function reloadData(keepSelected = null, preferProjectId = null) {
     const refreshed = await loadDashboard(keepSelected, preferProjectId);
 
@@ -2011,10 +1979,7 @@ function App() {
         )}
 
         {view === "execute-decisions" && (
-          <ExecuteDecisions
-            decisions={decisions}
-            approvedChainIds={approvedChainIds}
-          />
+          <ExecuteDecisions decisions={decisions} />
         )}
 
         {view === "execute-tasks" && (

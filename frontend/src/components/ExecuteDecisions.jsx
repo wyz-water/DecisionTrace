@@ -6,11 +6,11 @@ import { personColor } from "../personColors";
  * supervisor approved. Unapproved decisions stay in the Decisions
  * view; approved ones live here.
  */
-export default function ExecuteDecisions({ decisions, approvedChainIds }) {
+export default function ExecuteDecisions({ decisions }) {
   const { t } = useI18n();
 
-  const approved = (decisions ?? []).filter((decision) =>
-    approvedChainIds.has(decision.chain_id)
+  const approved = (decisions ?? []).filter(
+    (decision) => decision.teacher_status === "APPROVED"
   );
 
   return (

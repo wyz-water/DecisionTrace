@@ -4,10 +4,12 @@ from pydantic import BaseModel
 
 
 class ExecutionTaskCreate(BaseModel):
-    """A task from the chain discussion: who does what by when."""
+    """A task from the chain discussion: who does what by when. Binds
+    to a specific decision node of the chain (default: the latest)."""
     owner: str
     description: str
     due_date: date | None = None
+    decision_id: int | None = None
 
 
 class ExecutionTask(BaseModel):

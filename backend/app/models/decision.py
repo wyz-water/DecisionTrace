@@ -46,6 +46,13 @@ class Decision(Base):
         default="CONFIRMED"
     )
 
+    # The supervisor's verdict on THIS decision point (node). Approval
+    # is per node: an approved node enters the execution phase.
+    teacher_status = Column(
+        String(20),
+        nullable=True
+    )
+
     # The decision that replaced this one, when this one was SUPERSEDED.
     # Reversal is a first-class relationship (not just a status): the
     # reversal trace can then name the successor instead of guessing.
