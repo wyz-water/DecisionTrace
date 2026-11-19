@@ -8,8 +8,9 @@ Part II design document — DecisionTrace
 
 One React app, two sides, three nav groups, nine views. The topbar
 carries the project switcher (student side: pick your group; supervisor
-side: the switcher is not needed — the dashboard shows every group) and
-the 中文/EN toggle.
+side: the switcher is not needed — the dashboard shows every group,
+and its boards carry per-group selectors, so every view stays
+project-scoped per A7) and the 中文/EN toggle.
 
 ```text
 SUPERVISOR   Awaiting decision     待确认的决策
@@ -40,11 +41,12 @@ count).
   ids never appear.
 - **Supervisor status chips** — each decision point carries its verdict
   (待确认 / 已认可 / 待定 / 已否决 / 讨论中 / 未建链); the chip is the
-  only place verdicts are shown.
+  only place a point's verdict is *shown as a status* — the per-node
+  action bar (A14) is where the supervisor sets it.
 - **Mermaid-free diagrams** — the execution graph is a hand-laid SVG
   layered by topological depth; tasks without a topological position
-  (on a cycle) carry a CYCLIC state in the plan list and the Problems
-  section names the CYCLE check, so a loop is never drawn as a broken
+  (on a cycle) carry a CYCLIC state on the execution-order board and
+  the Problems section names the CYCLE check, so a loop is never drawn as a broken
   picture. The check is defensive today: the edges ship with the
   seeded demo data (acyclic); edge creation — and with it cycle
   refusal before storage — returns in Part III (R5.5).
@@ -71,7 +73,7 @@ count).
 | `Sidebar.jsx` / `views.js` | Nav groups and badges |
 | `ProjectSwitcher.jsx` | Group creation/switching/deletion |
 | `DiscussionsPanel.jsx` | Paste/import meeting texts; extraction trigger (import extracts automatically, pasted text has an explicit action) |
-| `CandidatesPanel.jsx` | Pending/reviewed queues, per-maker filter, confirm/edit/reject |
+| `CandidatesPanel.jsx` | Pending/reviewed queues, per-maker filter, confirm/edit/reject; duplicate badge (computed `duplicate_of`) |
 | `ChainPanel.jsx` | Chain list + detail: nodes with per-node threads, append revision, submit; execution board when approved |
 | `TeacherDashboard.jsx` | Awaiting (inline chains, per-node verdicts/annotations; held/rejected chains stay in the queue until the group revises and re-submits) and In-progress (per-group selectors, read-only boards) |
 | `ExecuteDecisions.jsx` | The approved decisions list |

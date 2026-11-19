@@ -82,7 +82,9 @@ decisions; tasks come from the chain discussion, not extraction.
 
 Invariants:
 1. A chain has at most one approved node. Approving a node sets the
-   chain's other `PENDING`/`HELD`/`APPROVED` nodes to `REJECTED`.
+   chain's other `PENDING`/`HELD` nodes to `REJECTED`; never-submitted
+   points stay untouched drafts. An approved chain refuses further
+   verdicts — the verdict is final (pure annotations stay allowed).
 2. An approved chain is locked: no further nodes can be appended.
 
 ### ChainComment (the discussion under one node)
@@ -123,11 +125,16 @@ anchor, `chain_id` keeps the provenance.
   | on a dependency cycle | `CYCLIC` |
   | own status `COMPLETED` | `DONE` |
   | a predecessor is `DELAYED`/`BLOCKED` | `BLOCKED` |
+  | own status `DELAYED`/`BLOCKED` (no such predecessor) | stored status shown as-is; the derived state stays `READY` |
   | predecessors exist, none done, none risky | `WAITING` |
   | nothing stands in the way | `READY` |
 
-  (`DONE` wins over `BLOCKED`: a completed task is done even when a
-  delayed predecessor exists.)
+  Precedence: `CYCLIC` wins over everything (a completed task on a
+  cycle is still `CYCLIC`); `DONE` wins over `BLOCKED` (a completed
+  task is done even when a delayed predecessor exists). A task marked
+  `BLOCKED` by its owner blocks its successors, not itself — its own
+  stored status is displayed next to the derived state, never replaced
+  by it.
 - **Topological order, cycles** — computed from the edges.
 - **AI checks** — cycle / blocked-chain / out-of-order, computed on
   read.

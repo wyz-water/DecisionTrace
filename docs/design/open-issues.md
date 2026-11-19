@@ -9,7 +9,7 @@ Part II design document — DecisionTrace
 | # | Risk | Consequence if it materialises | Mitigation / plan |
 |---|---|---|---|
 | R1 | No authentication: the student/supervisor split is a UX split, not an authorization boundary | Anyone could act as the supervisor in a shared deployment | Course scope accepts it; the role split is enforced in the API's business rules (verdicts, approvals), and Part III can add a single login |
-| R2 | Task-status vocabulary has no formal transition matrix — and the stored vocabulary (`OPEN`/`IN_PROGRESS`/`COMPLETED`/`DELAYED`/`BLOCKED`) is not the derived one (`WAITING`/`READY`/`BLOCKED`/`DONE`/`CYCLIC`); the mapping is documented in data-model.md §3 | An odd jump (e.g. `COMPLETED → OPEN`) can confuse the computed states | Only the vocabulary and the mapping are defined today; the legal transition matrix is a Part III PoC item, same as before |
+| R2 | Task-status vocabulary has no formal transition matrix — and the stored vocabulary (`OPEN`/`IN_PROGRESS`/`COMPLETED`/`DELAYED`/`BLOCKED`) overlaps the derived one (`WAITING`/`READY`/`BLOCKED`/`DONE`/`CYCLIC`) without being identical: `BLOCKED` exists in both, from different sources (own status vs a predecessor's), and the UI shows both side by side; the mapping is documented in data-model.md §3 | An odd jump (e.g. `COMPLETED → OPEN`) can confuse the computed states | Only the vocabulary and the mapping are defined today; the legal transition matrix is a Part III PoC item, same as before |
 | R3 | Extraction quality of the LLM path is unmeasured | Blind adoption of a worse-or-equal extractor | The evaluation protocol (Part III) defines precision/recall, an error taxonomy, and a pre-fixed adoption rule; rules remain the default until then |
 | R4 | The chain lock is one-way | An approved chain can never be revised, even if the execution turns out misdirected | Deliberate: approval = selection, and a decision in execution must be stable. Reopening (with a recorded reason) is a candidate Part III feature |
 | R5 | The supervisor reads everything inline — long chains become long pages | Review fatigue for very active groups | Fine at course scale; collapsing of closed points is a cheap later improvement |
@@ -23,6 +23,7 @@ Part II design document — DecisionTrace
 |---|---|---|
 | O1 | The repositioning replaced a large, working feature set (deliberation layer, snapshots, impact analysis, health metrics, pre-check gate, reversal trace — full inventory in C26) | The pre-repositioning tag on `main` preserves it; the replacement was reviewed view-by-view with the user before the sweep |
 | O2 | Docs drift from code | This pass: docs rewritten to match the implementation; the API spec documents removed endpoints explicitly |
+| O3 | Scope drift: the AI produced five good ideas for one problem | The team said "no" to most of them; one feature wave at a time, each reviewed view-by-view before the next |
 
 ## 3. Issue Log
 

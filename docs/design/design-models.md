@@ -58,12 +58,14 @@ classDiagram
         +int decision_id
         +str author
         +str text
+        +datetime created_at
     }
     class ChainAnnotation {
         +int id
         +int chain_id
         +int decision_id
         +str text
+        +datetime created_at
     }
     class Commitment {
         +int id
@@ -87,12 +89,18 @@ classDiagram
         +str old_status
         +str new_status
         +str reason
+        +datetime changed_at
     }
     class DecisionHistory {
         +int decision_id
         +str old_title
         +str new_title
+        +str old_rationale
+        +str new_rationale
+        +str old_status
+        +str new_status
         +str reason
+        +datetime changed_at
     }
 
     Project "1" --> "*" Discussion : has
@@ -134,7 +142,7 @@ sequenceDiagram
     API-->>UI: latest verdict-less node → PENDING
     T->>UI: awaiting view shows the whole chain inline
     T->>UI: annotate a node / approve node X
-    API-->>API: other pending/held/approved nodes → REJECTED
+    API-->>API: other pending/held nodes → REJECTED
     API-->>UI: node X APPROVED, chain locked
     S->>UI: execution: add tasks to node X
     API-->>UI: tasks, topological order, AI checks
@@ -153,7 +161,7 @@ sequenceDiagram
     S->>API: PATCH /commitments/{id}/status (OPEN → IN_PROGRESS)
     API-->>S: history appended
     API-->>S: GET /chains/{id}/execution?decision_id=
-    Note over API: computes states on read:<br/>WAITING / READY / BLOCKED / DONE
+    Note over API: computes states on read:<br/>WAITING / READY / BLOCKED / DONE / CYCLIC
     API-->>S: checks: cycle? blocked chain? out-of-order start?
 ```
 
