@@ -2,27 +2,21 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Draft for team review (2026-11-04; updated 2026-11-09 after the
-Week 9 presentation feedback; updated 2026-11-12 after the instructor's
-follow-up critique that the product form was "lower-level than the idea"
-and less usable than plain meeting minutes)
-**Milestone:** M2 (~2026-11-15)
+**Status:** Current (2026-11-19) — rewritten after the repositioning.
 
 ## 1. System Overview
 
-DecisionTrace is a single-page web application backed by a REST API and a
-local SQLite database. The architecture deliberately stays three flat
-layers: the product's depth is in the relationships between records, not
-in a deep service hierarchy. The relationships come in two layers: the
-**execution layer** — dependencies between commitments (what is blocked,
-what would be impacted) — and, new in this revision, the
-**deliberation layer** — arguments for and against decisions (what is
-contested, and why).
+DecisionTrace is a two-sided system: **one supervisor, many student
+groups**. Student groups paste their meeting discussions, review what
+the AI extracts, and grow decisions into discussion chains; the
+supervisor reads submitted chains, annotates and decides per decision
+point; approved points enter the execution phase, where the group
+assigns tasks and the system keeps the order and the checks honest.
 
 ```mermaid
 graph LR
     subgraph Browser
-        REACT["React SPA<br/>(Vite, hash routing)"]
+        REACT["React SPA (Vite, hash routing)<br/>student side + supervisor side"]
     end
     subgraph Server
         FAST["FastAPI<br/>routes (thin) / services (pure) / schemas"]
@@ -31,412 +25,135 @@ graph LR
     subgraph Storage
         DB[("SQLite<br/>decisiontrace.db")]
     end
-    LLM["DeepSeek API<br/>(optional: extraction;<br/>Q&A phrasing in Part III)"]
+    LLM["DeepSeek API<br/>(optional: extraction only)"]
 
     REACT -- "HTTP JSON (CORS)" --> FAST
     FAST -- "queries" --> ORM --> DB
-    FAST -- "extraction prompt<br/>DEEPSEEK_API_KEY set" --> LLM
+    FAST -- "extraction prompt (only when DEEPSEEK_API_KEY set)" --> LLM
 ```
 
-## 2. Stakeholders and Decision Goals
+## 2. Stakeholders — Why This Shape
 
-A decision is not a row in a table; it is a process with participants —
-someone proposes, someone commits, someone depends on it, someone revises
-it later. The presentation feedback asked who the decision makers are and
-what each role wants to see; the instructor's follow-up critique made the
-point sharper: decision-making is a high-level activity, so the design
-must serve the *process*, not just store its conclusion. The table derives
-the design from what each participant does at each moment of a decision's
-life.
+The instructor's review found the earlier product "too local": it did
+not say clearly who it served, what it connected to, or which decisions
+were worth extracting. The repositioning answers those questions with
+the stakeholder table first, and the design follows from it.
 
-| Role | Their part in a decision | What they need at that moment | Design answer |
+| Role | Their part | What they need | Design answer |
 |---|---|---|---|
-| Decision maker (project lead) | Proposes, approves, revisits | Which decisions are at risk? Where is the bottleneck? Who is overloaded? | Overview "needs attention" list, conflict detection, snapshot comparison, what-if preview |
-| Commitment owner | Promises work under a decision | "What blocks me? If I slip, who do I hurt?" | Topological order, impact closure, overdue highlighting, due dates in the plan view |
-| Dependent member | Waits on upstream work | "When will upstream finish? Did a decision change?" | Audit trail (old/new/reason per change), impact recomputed on read, snapshot diff |
-| Dissenter / skeptic | Voices objections during deliberation | "My objection must not be silently dropped" | Arguments are first-class records; a decision with an open objection renders as contested everywhere |
-| Discussion participant / note taker | Feeds the meeting into the system | "I should not have to re-type what we just discussed" | Intake accepts the raw discussion (paste/upload); extraction proposes records with source spans; review is confirm/edit/reject |
-| Absent member / new joiner | Catches up after the fact | "What was decided and why?" without reading every transcript | Search over discussions, decisions and histories together; snapshots with diff; planned ask view with citations (Part III) |
+| Student group member | Feeds meetings in, discusses, revises | No re-typing; the discussion must be cheaper than minutes | Intake accepts raw text (paste/import); extraction proposes decision candidates with source sentences; per-maker colors + "review mine" |
+| Student group (as a team) | Evolves one topic's decision over time | Revisions must not erase history; discussion must live under the decision it concerns | The decision chain: nodes = decision versions, each node carries its own thread; appending a node keeps every earlier node |
+| Supervisor | Supervises many groups, must judge what was decided and why | See the whole submitted chain, not a title card; act on any point, not just the last | Awaiting view renders chains inline (nodes + threads + annotations); annotate/approve/hold/reject per node |
+| Supervisor (the chooser) | Selects which decision point the group executes | The choice must be explicit and final | Approval is a selection: at most one approved point per chain; choosing one overrules the others; the chain locks |
+| Executing member | Turns the approved decision into tasks | Only approved work exists; order and problems must be visible | Execution phase per approved decision: tasks, topological order, AI checks (cycle / blocked / out-of-order) |
+| Absent member / new joiner | Catches up | What was decided, why, and what the supervisor said | Chain history with per-node threads, verdict chips, supervisor annotations |
 
-**Decision goals are first-class data, not prose.** Every `Decision` row
-stores its rationale and, when it came from a meeting, a pointer back to
-the source discussion. That pair *is* the recorded decision goal: why we
-decided, and where we said so. The impact closure over `BLOCKS` edges then
-shows which downstream work the goal puts at risk, and the what-if preview
-shows what a status change would do to it.
+**Which decisions are worth extracting?** Named-person decision
+sentences (EN + ZH patterns) and explicit collective decisions ("we
+decided…" / "我们决定…"). The gate is human: candidates carry the exact
+source sentence, and nothing becomes a record without confirmation.
 
-**A goal is a trajectory, not a value.** Decisions get proposed, argued
-over, made, and later revised; the design treats that evolution as the
-primary object. Revising a decision preserves how the goal evolved (old
-and new rationale, with a reason). Snapshots capture the whole graph at
-the end of a meeting, and snapshot comparison shows what changed since —
-so "how did our goals move this week?" is a derived view, not a report
-someone writes. This is the property plain meeting minutes cannot offer:
-minutes record the words, the trace records the process.
-
-**Consequences for the design** (why the features look the way they do):
-
-- Rationale is displayed wherever a decision appears, and revising a
-  decision writes the old and the new rationale to history, so the
-  goal's evolution is never silently dropped. Manually created
-  decisions require the rationale (API and form); extracted candidates
-  are exempt because their goal context is the source discussion they
-  point back to. See the requirements change log.
-- The source link is first-class: search covers discussions, decisions and
-  histories together, so "why did we decide this?" is one query.
-- The impact panel and the what-if preview exist because owners and leads
-  ask "what if?" questions — the graph views are answers to stakeholder
-  questions, not features for their own sake.
-- The intake path exists because the note taker is a stakeholder:
-  feeding a meeting into the system must be cheaper than writing minutes
-  by hand, or the tool loses to the minutes it replaces. §10 measures
-  exactly that.
-
-**The deliberation layer.** Arguments — the pros, cons and objections
-behind each decision — are first-class records with their own computed
-state (contested). The layer is specified in §6.
+**What connects to what?** A decision point belongs to a chain; a chain
+belongs to a project (group); a thread and an annotation belong to a
+decision point; a task belongs to an approved decision point. The
+supervisor's dashboard groups by project — the one-to-many relation is
+the backbone of every view.
 
 ## 3. Layer Responsibilities
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Views | `frontend/src/` | One React app, eight views. Components in `components/`, view registry in `views.js`. |
-| Routes | `backend/app/routes/` | One router per entity + `search.py`. HTTP concerns only: validation, 404s, response models. |
-| Services | `backend/app/services/` | Pure functions: extraction, graph analysis (topological sort, cycles, transitive impact), consistency checks, deliberation (contested computation), pagination helpers, search scoring. No HTTP objects. |
-| Schemas | `backend/app/schemas/` | Pydantic request/response models; the pagination envelope `Page[T]` is shared by every list endpoint. |
-| Models | `backend/app/models/` | SQLAlchemy tables. Imported by `main.py` so `create_all` registers every table. |
-| Data | `backend/decisiontrace.db` | SQLite. One file, gitignored; the committed demo state matches the README scenario. |
+| Views | `frontend/src/` | One React app, nine views in three nav groups (SUPERVISOR / DECIDE / EXECUTE). Components in `components/`, the view registry in `views.js`, project-scoped numbering in `decisionNumbers.js`. |
+| Routes | `backend/app/routes/` | One router per entity: projects, discussions, candidates, decisions, chains, commitments. HTTP concerns only. |
+| Services | `backend/app/services/` | Pure functions: extraction, graph analysis (topological sort, cycles, node states, checks), importing, pagination. No HTTP objects. |
+| Schemas | `backend/app/schemas/` | Pydantic request/response models; the shared `Page[T]` envelope. |
+| Models | `backend/app/models/` | SQLAlchemy tables, imported by `main.py` for `create_all`. |
+| Data | `backend/decisiontrace.db` | SQLite; `seed_demo.py` rebuilds the demo state and refreshes `decisiontrace.pristine.db`. |
 
 ## 4. Key Architectural Decisions
 
 | # | Decision | Rationale |
 |---|---|---|
-| A1 | SQLite instead of a server database | Zero setup for demo and teammates; the schema is plain SQLAlchemy so a later migration to PostgreSQL changes only the connection string. |
-| A2 | AI output is always a *candidate* | Extraction can never create authoritative records; a human confirms, edits, or rejects. Trust boundary is explicit in the data model (`candidates.status`). |
-| A3 | Rule-based extraction by default, DeepSeek LLM when `DEEPSEEK_API_KEY` is set, falling back to rules on any failure | The demo always works offline; the LLM path is an upgrade, not a dependency. |
-| A4 | Offset pagination with a shared envelope (`items/total/limit/offset/has_more`) | One client contract (`usePagedList`) for every list; keeps lists small and the UI's page count truthful. Cursor paging adds complexity with no benefit at this scale. |
-| A5 | Records are immutable; changes are appended to history tables | `decision_history`/`commitment_history` store old→new pairs with a reason. Delete endpoints cascade the dependent rows; nothing silently overwrites the trace. |
-| A6 | Hash-based view routing (`#decisions`, `#audit`, …) | The sidebar, URL, and back button stay in agreement; cross-section links (conflict chip → audit) are plain anchors. |
-| A7 | Single frontend, project context in state + `localStorage` | Multi-project support exists at the API level; the UI remembers the last active project and swaps the whole dashboard on switch. |
-| A8 | Consistency and graph questions computed on read, not stored | Cycle detection, topological order, and impact (transitive closure over `BLOCKS` edges) derive from the current graph; no denormalized caches to drift out of sync. |
-| A9 | Automation-first intake; manual entry is a fallback | Uploading a discussion triggers extraction automatically and the review view is built for batch confirmation. The manual create forms cover missed extractions and decisions that never appear in a meeting — they are not the primary path. (Presentation feedback point 1.) |
-| A10 | The discussion text is the system of record; the trace is a derived view | Every node and edge links back to the source sentence that produced it. Editing happens by confirming or correcting extraction — never by maintaining the graph by hand (A9). This is what keeps the tool no harder to use than the minutes it replaces. |
-| A11 | Natural-language questions are answered from the derived graph, with citations (planned, Part III) | The ask view composes answers from authoritative records and shows the source spans behind each claim; the LLM, if used, only phrases answers — it never invents facts the trace does not contain. |
-| A12 | Arguments are first-class; a decision carries its deliberation | Extracted pros, cons and objections become `Argument` records through the same candidate gate (A2), each pointing back to its source sentence. Recording the conclusion alone throws away the reasoning — the part that makes decision-making a high-level activity. |
-| A13 | "Contested" is computed, never a manual status | A decision with ≥ 1 open `AGAINST` argument renders contested everywhere (badge, overview). Computed on read like cycles and impact (A8), so the state cannot drift from the arguments that justify it. |
-| A14 | Decision pre-check drafts challenges before a decision lands | Before a decision candidate is confirmed, the system drafts counter-considerations from real sources only: pending objections targeting it, concern sentences the extractor missed, an overturned precedent with a similar title, a missing rationale. Each must be resolved with a reason; the resolutions are recorded as resolved `AGAINST` arguments on the new decision. Drafts are computed on read and recomputed at confirm time, so a challenge that appeared after the UI fetched the list fails the confirm instead of slipping through. |
-| A15 | Reversal is a first-class relationship, and it leaves a trace | `SUPERSEDED` may name the successor (`superseded_by_decision_id`); the reversal trace endpoint assembles the narrative — the flip row, the successor, the objections that accumulated, the slipped commitments — each signal citing the row it came from, so the narrative can never invent a fact the trace does not contain (same rule as A11). |
-| A16 | Cascade severity is computed, and completed work isolates | Effective severity (BLOCKED > DELAYED > none) propagates along `BLOCKS` edges in topological order — a node's severity is the worst of its own status and its predecessors'. A COMPLETED commitment is severity 0 and passes nothing through: finished work shields its downstream. The what-if response carries per-item baseline and simulated severity, blocked/delayed tier counts over the affected set, and the escalated ids — computed on read like cycles and contested (A8), never stored. |
-| A17 | Extraction sharpening: confidence is computed, context links, and due phrases are never dropped | Each candidate carries an evidence-based confidence score (rationale, dates, authors, targets) computed on read from the payload — backend-independent, deterministic; the review UI pre-selects high-confidence candidates for batch review but **never auto-confirms** (A2). A commitment sentence following a decision sentence links to that decision by proximity (human can still change it). Natural-language due phrases ("by Friday") resolve to concrete dates against today, and the original phrase is kept on the candidate even when unresolvable — the reviewer sees "due as said", nothing is silently dropped. |
-| A18 | Decision-makers and decision-to-decision edges are first-class | Decisions record `decided_by` (a named person, or null for a collective "we decided" — the extractor never invents a maker); named-person decision sentences are extracted in EN and ZH. Decisions can depend on decisions (`DecisionDependency`, "we chose Redis after we had decided to move to the cloud") through the same candidate gate, with duplicate and cycle rejection on the decision graph. The reversal trace names the decisions resting on an overturned one, and the stakeholder endpoint answers the decision-maker's questions — do my decisions still stand, what does my work rest on, who waits on me — all computed on read. |
+| A1 | SQLite instead of a server database | Zero setup for demo and teammates; plain SQLAlchemy means a later PostgreSQL migration changes only the connection string. |
+| A2 | AI output is always a *candidate* | Extraction can never create authoritative records; a human confirms, edits, or rejects. The trust boundary is explicit (`candidates.status`). |
+| A3 | Rule-based extraction by default; DeepSeek LLM only when `DEEPSEEK_API_KEY` is set, falling back to rules on failure | The demo always works offline; the LLM is an upgrade, not a dependency. |
+| A4 | Offset pagination with a shared envelope | One client contract (`usePagedList`) for every list. |
+| A5 | Records are immutable; changes append history rows | `decision_history` / `commitment_history` store old→new pairs with a reason; delete endpoints cascade dependents. |
+| A6 | Hash-based view routing | The sidebar, URL and back button stay in agreement. |
+| A7 | Projects are first-class; every view is project-scoped | The one-to-many supervisor/group relation is the backbone; the supervisor's dashboard groups by project. |
+| A8 | Derived values are computed on read, never stored | Chain status, node states, topological order, cycles and checks all derive from the current records — no caches to drift. |
+| A9 | Automation-first intake; manual forms are the fallback | Pasting a meeting is cheaper than minutes; the review queue is built for batch confirmation. |
+| A10 | The discussion text is the system of record | Every decision links to its source discussion; the trace is a derived view over the text. |
+| A11 | **The decision chain replaces the single record** | One topic = one chain; revisions are new nodes, history is preserved; per-node threads keep the reasoning under the decision it reasons about. This is the structural answer to "recording conclusions throws away the reasoning". |
+| A12 | **Approval is a selection, per decision point** | The supervisor may approve any point, not necessarily the newest; choosing one overrules the chain's other points (they become `REJECTED`), and an approved chain locks against further revisions. One chain has at most one executing decision — conflicting points can never both run. |
+| A13 | **Execution follows approval, never precedes it** | Tasks bind to an approved decision point; the backend refuses tasks elsewhere. The supervisor watches the same boards read-only. |
+| A14 | **The supervisor acts inline, not through a form** | The awaiting view renders the whole chain — nodes, threads, annotations — and the verdict/annotation bar sits under each node, so annotating "this decision" is one click, not a navigation. |
+| A15 | **Display numbering is project-scoped** | Chains are `#1..#N`, nodes render `#chain-node`, free decisions `#1..#M`; global database ids never surface. Numbers restart per project so the second group reads `#1`, not `#7`. |
+| A16 | Bilingual UI (中文/EN) with persisted preference | Team and course audience are Chinese-speaking; demo readability. |
+| A17 | The seed script is a full scenario, not fixtures | Two groups, three weeks, every state (approved+executing with a revision awaiting choice, held, submitted, drafts EN+ZH, two pending candidates from two makers) — one command rebuilds the demo and its pristine backup. |
+| A18 | Post-repositioning sweep: dead features are deleted, not kept around | The argument/deliberation layer, snapshots, impact/what-if previews, decision health and the old plan page were replaced by the supervisor/chain/execution model; their models, routes, services and i18n keys were removed so the code and the docs describe the same system. |
 
 ## 5. Automation: Reducing Manual Effort
 
-The instructor's follow-up critique: the idea is high-level, but the form
-is the old one — manual entry — so the tool ends up less usable than the
-meeting minutes it is meant to replace. That sets the bar for this whole
-section: using DecisionTrace must cost no more effort than writing
-minutes, while adding what minutes cannot do (queryable structure). Three
-design rules follow, then what implements them.
+The human's job is verifying, not transcribing. Extraction proposes
+decision candidates with the exact source sentence; the review queue
+shows them per maker with color coding and a "review only mine" filter,
+so each member verifies their own statements. The supervisor side is
+automated differently: nothing is extracted for them — they read
+submitted chains, and every insight they need (status, discussions,
+annotations) is laid out inline.
 
-**Rule 1 — The input is the discussion itself.** Minutes are not a
-by-product the tool produces; they are the input. Pasting or uploading
-the discussion is the entire data-entry step — there is no transcription
-step on top of it.
+## 6. The Chain Layer (replaces the former deliberation layer)
 
-**Rule 2 — The graph is derived, never hand-maintained.** Like an IDE's
-symbol table is computed from the source code, the trace is computed from
-the discussion text (A10). The source text stays the system of record:
-every decision, commitment and dependency links back to the sentence it
-came from. Derived views — topological order, impact, overdue, what-if,
-snapshot diff — recompute themselves.
-
-**Rule 3 — The human's only job is verifying.** Confirm / edit / reject,
-plus fallback forms for what extraction misses. Everything below is one
-of: making intake cheaper (Rule 1), making the system compute more
-(Rule 2), or shrinking the review step (Rule 3).
-
-**Implemented**
-
-- Drag & drop / paste upload of discussions (`.txt/.md/.docx/.pdf`, UTF-8
-  with GBK fallback) — Rule 1.
-- Automatic extraction (rules, or DeepSeek when configured) producing
-  candidates with the exact source text highlighted — Rule 2.
-- Automatic **argument extraction** — pros, cons and objections become
-  `ARGUMENT` candidates (stance + claim + author + target), with the
-  same source-span highlighting; rule patterns cover English and Chinese
-  cue phrases ("disagree" / "不同意" / "担心" / "风险") — Rule 2, the
-  deliberation layer (§2).
-- Paginated batch review: confirm / edit / reject per candidate without
-  leaving the list — Rule 3.
-- **Batch confirm** — select all on a page and confirm every candidate in
-  one request (partial failures reported item by item).
-- **Duplicate detection** — a pending candidate that repeats an existing
-  decision, commitment or dependency carries a `duplicate_of` badge
-  ("Decision #3") and is skipped by batch confirm by default; single
-  confirm remains available for deliberate re-statements. Title matching
-  tolerates the extractor's cleaning ("Use Redis" ≡ "Redis").
-- **Rule-based meeting summary** — every discussion shows a summary
-  preview (decisions / commitments / dependencies with names), computed
-  offline from the rule engine, never via the LLM, so listing discussions
-  cannot trigger API calls. One click saves the current graph as the
-  meeting snapshot.
-- Derived views recompute themselves: overdue highlighting, topological
-  order, impact, what-if previews, **decision health metrics** (overturn
-  rate, average lifespan of overturned decisions, revision rate,
-  contested rate, objection resolution rate — the "reflect" step of the
-  agent loop) — nobody updates these by hand.
-- Meeting summary = graph snapshot: saving one captures the whole state.
-- **Decision pre-check gate** — confirming a decision candidate drafts
-  challenges first (pending objections, uncaptured concern sentences,
-  overturned precedents, missing rationale); each needs a resolution
-  reason, recorded as resolved arguments on the decision (A14).
-- **Reversal trace** — `SUPERSEDED` decisions can name their successor;
-  the decision card narrates why the decision did not hold from the
-  flip, the successor, the objections and the slips (A15).
-- **Severity-weighted what-if** — the impact preview no longer reports a
-  flat "affected" list: BLOCKED outranks DELAYED, severity propagates
-  along `BLOCKS` edges, completed work isolates its downstream, and the
-  panel ranks the cascade by severity then depth with Now-vs-If tier
-  counts and escalation (A16).
-- **Extraction sharpening (A17)** — every candidate carries an
-  evidence-based confidence score with a badge in the queue; the batch
-  bar pre-selects high-confidence candidates (never auto-confirms).
-  Commitments link to their context decision by proximity. Due phrases
-  resolve to dates ("by Friday") and are never silently dropped — the
-  original wording stays on the card.
-- **Decision layer (A18)** — decisions carry their maker
-  (`decided_by`, extracted in EN/ZH; collective verbs stay team
-  decisions); decisions can depend on decisions through the candidate
-  gate with cycle rejection; the reversal trace names the decisions
-  resting on an overturned one; the overview's stakeholder view
-  answers the responsible person's questions on read.
-
-**Planned (Part III PoC items, in priority order)**
-
-1. **LLM summary upgrade** — when `DEEPSEEK_API_KEY` is set, a
-   prose summary alongside the rule-based preview (same A3 fallback:
-   rules when the LLM fails).
-2. **Confidence-threshold batch confirm** — auto-select candidates above
-   a confidence score instead of selecting by hand.
-3. **Owner suggestion** — reuse the owner of past similar commitments to
-   prefill the review form.
-4. **Ask view (natural-language questions)** — "What is blocking the
-   migration?" answered from the trace, with every claim linked to the
-   source spans that support it (A11). Rules answer first; the LLM may
-   phrase, never invent.
-5. **Proactive alerts** — the overview tells the team what changed since
-   the last visit without being asked: new conflicts, commitments that
-   became overdue, decisions whose dependencies slipped. The system
-   speaks first instead of waiting to be queried.
-6. **Corrections as training signal** — confirmations, edits and rejects
-   accumulate per discussion type and feed the rule engine, duplicate
-   detection and owner suggestions, so the pipeline gets less wrong with
-   use (the "learn" step of the agent loop).
-7. **Argument map view** — a per-decision deliberation panel showing
-   supporting and opposing arguments with their source spans, so a
-   decision reads as a resolved debate instead of a verdict.
-8. **Critical path & bottleneck analysis** — earliest/latest scheduling
-   over the dependency graph with due dates, so the commitments actually
-   on the critical path surface instead of every overdue one shouting at
-   once.
-
-The end-to-end bar is explicit and measured: turning a raw discussion
-into the weekly graph snapshot must take less time than writing minutes
-by hand — see the evaluation plan, §10.
-
-## 6. The Deliberation Layer
-
-The instructor's follow-up critique exposed what plain records throw
-away: a decision is a *resolution of a deliberation* — alternatives,
-pros, cons, objections — and recording only the conclusion records the
-cheapest part. This revision adds the fifth concept, **Argument**, and
-makes the deliberation a first-class layer of the product, evaluated
-like every other part of the pipeline.
-
-**What an argument is.** `FOR`/`AGAINST` stance, a claim, its author,
-the decision it targets (nullable — a free-standing concern), and the
-source sentence it came from. Arguments enter the trace through the same
-candidate gate as every other record (A2): extraction proposes, a human
-confirms, edits or rejects. Confirming an argument against a target that
-does not exist fails with a fixable error, exactly like confirming a
-dependency before its commitments.
-
-**The graph becomes two layers.**
-
-- *execution layer* — dependency edges between commitments: what is
-  blocked, what would be impacted (topological order, cycles, impact);
-- *reasoning layer* — argument edges onto decisions: what is supported,
-  what is contested, and why.
-
-**Contested is computed, never a manual status (A13).** A decision with
-at least one open `AGAINST` argument renders as contested — badge on the
-decision card, a marker in the decision selector, an attention entry in
-the overview. Nobody sets it by hand, so it cannot drift from the
-arguments that justify it (the same principle as A8).
-
-**An objection is never silently dropped.** Arguments stay attached to
-their decision until a human resolves them — and resolving requires a
-reason, recorded on the argument. Free-standing arguments (no decision
-yet) stay visible in the deliberation view instead of vanishing after
-confirmation.
-
-**The analyst speaks first (A14).** Confirming a decision candidate runs
-the decision pre-check gate first: drafted challenges — pending objections
-targeting the decision, concern sentences the extractor missed, an
-overturned precedent with a similar title, a missing rationale — each
-must be resolved with a reason before the decision lands. The
-resolutions become resolved `AGAINST` arguments on the new decision, so
-the audit trail keeps what was challenged and why it was overruled.
-Batch confirmation stays the mechanical path; single confirm is the
-deliberate one.
-
-**Reversals leave a trace (A15).** `SUPERSEDED` can name the decision
-that replaced it. The decision card then shows the reversal trace: the
-flip (when, why), the successor, the objections that accumulated, and
-the linked commitments that slipped — assembled from rows the trace
-already contains, never guessed.
-
-**Lifecycle.** discussion text → extraction proposes `ARGUMENT`
-candidates (rules EN+ZH; DeepSeek when configured, same A3 fallback) →
-human confirms → argument is `OPEN` → its decision shows contested while
-any `AGAINST` is open → resolve (with reason) or delete.
-
-**Where the layer is visible.**
-
-| Surface | What it shows |
-|---|---|
-| Intake queue | `ARGUMENT` candidates with stance badge and source excerpt |
-| Decision card | Deliberation panel: the decision's arguments, contested badge, resolve inline |
-| Deliberation view | Every argument in the project, including free-standing ones; filters (all / open objections / resolved); resolve |
-| Overview | "Needs attention" entry while any decision is contested |
-| Search | Arguments are searchable like any other record (claim, author, stance, resolution reason) |
-
-**Part III PoCs on this layer.** the argument-map view (a per-decision
-deliberation panel), argument extraction quality targets (§10),
-contested-state evaluation against a gold annotation, append-only
-argument history, and corrections feeding back into the extractor (§5).
+The pre-repositioning system recorded arguments (FOR/AGAINST) as
+first-class records and computed "contested" states. The repositioning
+found a better carrier for the same insight: the discussion lives in
+the chain, under the decision point it reasons about, in chat form —
+the debate is readable where it happened, not in a parallel ledger.
+The supervisor's annotations and per-point verdicts are the resolution
+mechanism: a held point asks for more discussion, a rejected point is
+the record of a dissent that won (or lost, when overruled by another
+point's approval).
 
 ## 7. Deployment (development)
 
-```mermaid
-graph LR
-    subgraph Dev machine
-        VITE["Vite dev server<br/>:5173"] -- "/api proxied via<br/>hardcoded API_URL" --> UV["Uvicorn<br/>:8000"]
-        UV --> DB[("decisiontrace.db")]
-    end
-```
-
-- Frontend: `cd frontend && npm run dev` (Vite, port 5173). Production build: `npm run build` → `frontend/dist/` (gitignored).
-- Backend: `cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 8000`.
-- The frontend calls the backend at a hardcoded `http://127.0.0.1:8000`; CORS is open for local development. A reverse proxy in front of both would remove the hardcode if the app is ever hosted.
+Local only: FastAPI on `127.0.0.1:8000`, the SPA on `localhost:5173`,
+CORS for that origin. The demo database is curated; verification and
+testing run against a temp copy so the demo state survives.
 
 ## 8. Security & Integrity Notes
 
-- No authentication or roles: the MVP is a single shared workspace per project (the idea submission explicitly keeps depth in relationships, not user roles).
-- SQLite file is local-only; deployment to a shared host would need auth plus a server database.
-- Search snippets are server-escaped before a single `<mark>` is injected (see `services/search.py`), so query terms cannot inject markup.
+- No authentication in this milestone (course scope); the two-sided
+  split is a UX/role split, not an authorization boundary yet.
+- Cycle-refusing dependency storage; append-only histories; derived
+  states (A8) keep the trace self-consistent.
+- The optional LLM path sends only the discussion text and never runs
+  without the key; rules are the fallback (A3).
 
 ## 9. Quality Attributes
 
-From the SRS supplementary specification (§7); the architecture answers
-each one.
+- **Usability first**: review-mine filter, inline chain review,
+  per-node actions, per-group dashboards.
+- **Consistency by construction**: one approved point per chain,
+  locked chains, task refusal outside approved points — enforced by
+  the backend, not the UI.
+- **Explainability**: every record carries its source sentence; every
+  check names the tasks and edges it cites.
+- **Honesty in demo**: the seed data shows realistic states including
+  a held-and-revised chain and an out-of-order task.
 
-| Attribute | Target | How the architecture meets it |
-|---|---|---|
-| Usability — learn | New member traces one decision to source and downstream in ≤ 10 min, untrained | One sidebar route per question (search, audit, impact); every record links to its source |
-| Usability — trace | Any "why" answered in ≤ 2 min, ≤ 3 interactions | Search across records + histories; impact card one click from plan; hash links from every hit |
-| Usability — review | Reviewing 10 candidates faster than typing them (≥ 50% saved, measured in the pilot) | Batch review UI; measured by the evaluation plan in §10 |
-| Performance | Dashboard < 2 s at 500 records | Graph algorithms linear in edges; computed on read at MVP scale |
-| Reliability | Status update + audit entry commit together or not at all; cycles never stored | Single transaction per update; cycle detection before edge creation |
-| AI autonomy | AI proposes; only humans confirm/assign/rewrite | Candidate table as the only route from text to authoritative records (A2) |
-| AI privacy | Sending a discussion to the LLM is opt-in per discussion | Manual entry path always available; minimized payload |
+## 10. Evaluation Plan
 
-## 10. Evaluation Plan: Summarisation, Extraction, Verification
-
-Meeting summarisation, key-information extraction and the human
-verification step are the core of the system, so the technical approach
-gets an explicit, measurable evaluation plan (presentation feedback point
-2, sharpened by the instructor's follow-up critique that the evaluation
-was not visible). The pipeline is evaluated in three parts — one protocol
-each — plus one end-to-end experiment that tests the whole premise
-against the "meeting minutes" baseline. All of it runs in Part III.
-
-**Dataset.** 20 discussions from the team's own meetings, annotated at
-field level (entity type, owner, date, dependency, source span) by two
-team members independently; disagreements resolved by discussion.
-Inter-annotator agreement is reported (simple agreement per field, and
-Cohen's kappa on entity spans) so the gold set itself is trustworthy. The
-set is frozen and reused for every iteration and every pipeline, so
-results stay comparable.
-
-**1. Summarisation quality** (rule-based vs. LLM summary). Measured
-against the gold set: coverage (every gold decision, commitment and
-dependency appears in the summary), faithfulness (nothing in the summary
-lacks support in the discussion text), and snapshot correctness (saving
-the summary as a graph snapshot yields the same nodes and edges a human
-draws from the same discussion). Targets: 100% coverage of confirmed
-entities, 0 invented entities, snapshot node/edge agreement ≥ 80%.
-
-**2. Extraction quality.** Precision and recall per entity type
-(decision / commitment / dependency), computed per field against the gold
-set — accuracy alone would reward the extractor that stays silent, and a
-missed decision is the worst failure because no human ever sees it.
-Targets: precision ≥ 80% and recall ≥ 80% per type (the SRS §7.6
-accuracy target, split honestly). Every failure is logged to an error
-taxonomy — missed entity, wrong type, wrong field, wrong span,
-hallucinated, wrong link — so each fix (prompt change, new rule,
-stronger review step) is targeted at the dominant category.
-
-**3. Verification cost.** A timed experiment: review 10 candidates versus
-entering the same 10 records by hand. Target: ≥ 50% time saved (SRS
-usability goal U3). Three more metrics characterise the gate itself:
-confirmation rate (candidates confirmed unchanged), edit rate and reject
-rate. They feed the confidence threshold for auto-confirm (Part III item
-2) and show where review friction sits.
-
-**4. Argument extraction and contested state.** Stance accuracy
-(`FOR` vs `AGAINST`, target ≥ 80%), target-linking accuracy (argument
-attached to the right decision, ≥ 80%), and contested-state precision
-and recall against the gold annotation (a decision is annotated
-contested iff the gold set contains an unresolved objection). Contested
-precision matters most: a false contested badge erodes trust in the only
-state the system computes by itself.
-
-**End-to-end experiment: the minutes baseline.** The instructor's
-critique is turned into a protocol: given the same raw 10-minute
-discussion, one group writes minutes by hand and builds the week's graph
-manually, the other uses DecisionTrace. Measured: total time, and graph
-completeness (nodes/edges vs. the gold set). The tool wins only if it is
-no slower than minutes-only while producing a full graph — this is the
-pass condition for the product premise, not just for the extractor.
-
-**Blind rules-vs-LLM comparison.** Both pipelines run on the same frozen
-gold set; the person scoring does not know which pipeline produced each
-output. Per-field counts are reported per pipeline, and the adoption rule
-is fixed in advance (A3): the LLM path is kept only if it beats the rule
-engine on at least one metric, loses on none of the targets, and stays
-inside a per-discussion cost cap; otherwise we stay on rules.
-
-**Errors in confirmed records.** Audit-trail spot checks on the pilot
-project; the target is ≈ 0 errors in *confirmed* records, because those
-are the ones with real consequences.
-
-**Iteration loop and reporting.** Each iteration: run the protocols,
-attribute failures via the taxonomy, apply one fix, re-run the same gold
-set. Results are reported in Part III as one table per metric — pipeline ×
-iteration — so the choice of technical approach is made by measurement,
-not preference.
+The evaluation protocol document
+(`docs/design/evaluation-protocol.md`) defines Part III's measurement
+of the extraction pipeline: precision/recall per entity, an error
+taxonomy, a blind rules-vs-LLM comparison with a pre-fixed adoption
+rule, and an end-to-end comparison against hand-written minutes. The
+rest of the system is deterministic (rules + computed-on-read views),
+so the pipeline is the only part that still needs proving.
 
 ## 11. Open Issues & Risks (to test in Part III)
 
-| # | Issue / risk | Part III validation |
-|---|---|---|
-| R1 | Status-transition matrix: only the vocabulary is enforced today; which jumps are legal (e.g. `DELAYED → COMPLETED`) has no formal rule | PoC an explicit transition rule set and measure how many real updates it blocks vs saves |
-| R2 | Scale ceiling: SQLite single-machine + no authentication fits a team MVP only | Multi-tenant hosting would need auth, roles and a server database (A1 covers the migration path) |
-| R3 | AI trust: field accuracy ≥ 80% is a target, not a measurement yet; whether review actually saves time vs manual entry is unmeasured | The evaluation plan in §10 is the protocol; results reported in Part III |
-| R4 | Concurrent updates: append-only history prevents overwriting the trace, but two members updating the same commitment still race (last write wins) | Confirm mechanism or a version check on update |
-| R5 | Dependency editing: edges can be created and removed but not edited (change type/endpoints) | Add PATCH for edges with the same cycle/duplicate checks |
-| R6 | Argument history: resolving an argument updates the row in place (status + reason); there is no append-only `argument_history` yet, so A5 does not cover arguments | Part III: history table + resolution semantics; then resolutions join the audit trail |
-| R7 | Deliberation state in snapshots: a graph snapshot captures commitments and dependencies, not the arguments of that meeting | Part III: include argument state in snapshots, or document explicitly why the execution layer alone is the snapshot unit |
-| R8 | Argument-layer extraction quality: stance and target linking are rule heuristics today and unmeasured | A false contested badge erodes trust in the only state the system computes by itself | §10 protocol 4: stance accuracy ≥ 80%, target-linking accuracy ≥ 80%, contested precision/recall against the gold annotation |
+See `docs/design/open-issues.md`. Headlines: no authentication yet; the
+transition vocabulary for tasks has no formal matrix; the extraction
+quality of the LLM path is unmeasured until the Part III protocol runs.

@@ -1,335 +1,75 @@
 # DecisionTrace
 
-DecisionTrace is an AI-assisted decision traceability system for team projects.
+An AI decision analyst for course projects: **one supervisor, many
+student groups**. Students paste their meeting discussions, the system
+extracts decisions for human review, discussions grow into decision
+chains, the supervisor approves a decision point per chain, and only
+then does execution start — tasks, topological order, and AI checks.
 
-It helps teams preserve not only **what was decided**, but also **why it was decided, who committed to what, how work items depend on each other, and what may be affected when something changes**.
-
-## Problem
-
-Traditional project management tools are good at tracking tasks, but important project context is often scattered across meetings, messages, and discussions.
-
-For example:
-
-> The team decides to use PostgreSQL because payment transactions require transaction support.  
-> Carol commits to completing the database schema by Friday.  
-> Bob's backend API depends on Carol's schema.
-
-A normal task tracker may record Carol's and Bob's tasks, but it may lose the reasoning and dependency behind them.
-
-If Carol's work is delayed or the team later proposes switching databases, it becomes difficult to answer:
-
-- Why was PostgreSQL originally selected?
-- Who made commitments based on that decision?
-- Which tasks depend on those commitments?
-- Who may be affected by the change?
-- How has the decision or commitment changed over time?
-
-DecisionTrace is designed to preserve this chain.
-
-## Core Traceability Model
+## The Model
 
 ```text
-Discussion
-    ↓
-Decision
-    ↓
-Rationale
-    ↓
-Commitment
-    ↓
-Dependency
-    ↓
-Execution
-    ↓
-Change
-    ↓
-Impact & Traceability
+Student group                          Supervisor
+─────────────────────                  ─────────────────────
+Meeting text (paste/import)
+      ↓ extract → candidates → review
+Decisions ──→ Decision chains ──submit──→ Awaiting decision
+   (per-node discussion,     (full chain inline; annotate /
+    revisions as new nodes)   approve / hold / reject ANY point)
+                                        Approved point
+                                              ↓
+Execution (tasks, topological order, AI checks)
+        ←──── supervisor watches read-only, per group ────
 ```
 
-The goal is to make project decisions explainable and traceable throughout the project lifecycle.
+Key rules:
 
-## Key Features
+- **Approval is a selection.** The supervisor picks the decision point
+  they judge best — not necessarily the newest. Choosing one overrules
+  the chain's other points (they become *Rejected*), and the chain
+  locks: no further revisions while it executes.
+- **The AI proposes, humans confirm.** Extraction (rule engine first,
+  optional LLM path) yields candidates with the exact source sentence;
+  nothing is written without the human gate.
+- **Everything derived is computed, never stored** — chain status,
+  node states (waiting/ready/blocked), topological order, checks.
+- **Numbers are project-scoped.** Chains are `#1..#N`, chain points
+  read `#chain-node` (`#1-2`), free decisions `#1..#M`.
 
-### Decision & Rationale Tracking
-
-Records project decisions together with their rationale and source discussion.
-
-### Commitment Tracking
-
-Connects decisions to concrete commitments, including:
-
-- owner
-- description
-- due date
-- current status
-
-Supported statuses currently include:
-
-- `OPEN`
-- `IN_PROGRESS`
-- `DELAYED`
-- `BLOCKED`
-- `COMPLETED`
-
-### Dependency Tracking
-
-Represents relationships between commitments.
-
-For example:
+## Layout
 
 ```text
-Carol: Complete database schema
-              │
-            BLOCKS
-              ↓
-Bob: Implement backend API
+SUPERVISOR   Awaiting decision · In progress
+DECIDE       Decisions · Decision chains · Intake & review
+EXECUTE      Decision list · Tasks & commitments · Execution order · Problems
 ```
 
-### Impact Detection
+## Stack & Run
 
-When an upstream commitment becomes `DELAYED` or `BLOCKED`, DecisionTrace can identify every downstream commitment that may be affected, transitively along the dependency chain.
-
-### Graph Analysis
-
-Commitments and dependencies form a directed graph. DecisionTrace analyzes it to answer:
-
-- What is the topological execution order (what can start now, what is still waiting)?
-- Which commitments are blocked, and by whom?
-- Are there circular dependencies?
-
-
-### Audit Trail
-
-Status changes are recorded so that the system preserves a history of how commitments evolve over time.
-
-### AI-Assisted Extraction
-
-DecisionTrace supports AI-assisted extraction from team discussions.
-
-Extraction runs on rule-based patterns by default. When the
-`DEEPSEEK_API_KEY` environment variable is set, a DeepSeek LLM backend
-is used instead, falling back to rules on any failure.
-
-The intended workflow is:
-
-```text
-Team Discussion
-      ↓
-AI extracts candidate information
-      ↓
-Decision / Commitment / Dependency Candidates
-      ↓
-Human Review
-   ┌────┼────┐
-Confirm Edit Reject
-      ↓
-Confirmed project records
-```
-
-AI-generated information is treated as a **candidate**, not an authoritative project record.
-
-A human user must review the result before it becomes part of the official project trace.
-
-### Discussion Import
-
-Meeting notes can be pasted directly or uploaded as `.txt` / `.md` files
-(UTF-8 and GBK encodings are both handled). A discussion is the source
-context every extracted record points back to.
-
-### Project Management
-
-The top-bar project switcher creates, switches, and deletes projects.
-The active project is remembered between visits, and every view reloads
-against the selected project. Deleting a project removes all of its
-records; discussions and commitments can also be deleted individually
-(audit rows and dependency edges are cleaned up with them).
-
-### Full-Text Search
-
-Search runs across discussions, decisions, commitments, and both change
-histories — including the reasoning and status-change reasons behind
-records. Multi-word queries require every term to match one record;
-results are ranked by how many fields they hit and link back to the view
-where each record lives.
-
-## Current Demo Scenario
-
-The current prototype demonstrates the following scenario:
-
-1. The team chooses **PostgreSQL**.
-2. The rationale is that payment transactions require transaction support.
-3. **Carol** commits to completing the PostgreSQL database schema.
-4. **Bob** commits to implementing the backend API.
-5. Bob's work depends on Carol's schema.
-6. Carol's commitment becomes delayed.
-7. DecisionTrace detects Bob's commitment as potentially affected.
-8. The status change is preserved in the audit trail.
-
-## Design Documentation
-
-- [Architecture](docs/design/architecture.md) — layers, architectural decisions
-- [Data model](docs/design/data-model.md) — ER diagram and table notes
-- [API specification](docs/design/api-spec.md) — endpoint catalog and conventions
-- [UI design](docs/design/ui-design.md) — views, navigation, interaction conventions
-
-## Tech Stack
-
-### Frontend
-
-- React
-- Vite
-- JavaScript
-- CSS
-
-### Backend
-
-- Python
-- FastAPI
-- SQLAlchemy
-
-### Database
-
-- SQLite
-
-SQLite is currently used for development and prototyping. The architecture can later be migrated to another relational database if needed.
-
-## Project Structure
-
-```text
-DecisionTrace/
-│
-├── backend/
-│   ├── app/
-│   │   ├── models/
-│   │   ├── routes/
-│   │   ├── schemas/
-│   │   ├── database.py
-│   │   └── main.py
-│   │
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── src/
-│   ├── package.json
-│   └── vite.config.js
-│
-├── .gitignore
-└── README.md
-```
-
-## Getting Started
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/wyz-water/DecisionTrace.git
-cd DecisionTrace
-```
-
-### 2. Start the backend
-
-Create a Python virtual environment:
+Backend: FastAPI + SQLAlchemy + SQLite. Frontend: React (Vite).
 
 ```bash
 cd backend
-python -m venv .venv
-```
+python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+.venv/Scripts/python -m uvicorn app.main:app --port 8000
 
-Activate it in Git Bash on Windows:
-
-```bash
-source .venv/Scripts/activate
-```
-
-Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start FastAPI:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The backend will run at:
-
-```text
-http://127.0.0.1:8000
-```
-
-FastAPI documentation is available at:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-### 3. Start the frontend
-
-Open another terminal:
-
-```bash
-cd frontend
+cd ../frontend
 npm install
-npm run dev
+npm run dev            # http://localhost:5173
 ```
 
-The frontend will normally run at:
+Demo data (two groups, three weeks of activity, every state covered):
 
-```text
-http://localhost:5173
+```bash
+cd backend && .venv/Scripts/python seed_demo.py
+# reset anytime: cp decisiontrace.pristine.db decisiontrace.db
 ```
 
-## Development Workflow
+Tests: `cd backend && .venv/Scripts/python -m unittest discover -s tests`
 
-To maintain code quality and collaboration consistency, the project follows a pull-request-based workflow.
+## Documentation
 
-Workflow:
-
-1. Each team member creates a feature branch.
-2. Changes are committed and pushed to the feature branch.
-3. A Pull Request is created for review.
-4. Changes require approval before merging into the main branch.
-5. Approved changes are merged using squash merge.
-
-Direct pushes to the main branch are restricted.
-
-## Development Status
-
-DecisionTrace is currently under active development.
-
-Implemented:
-
-- Decision tracking
-- Decision rationale
-- Commitment tracking
-- Commitment status updates
-- Dependency relationships
-- Multi-hop downstream impact detection (transitive closure along dependency edges)
-- Dependency graph analysis (topological order, cycle detection)
-- Interactive dependency graph view
-- Discussion management UI
-- AI-assisted candidate extraction (rule-based, optional DeepSeek LLM backend)
-- Human Confirm / Edit / Reject review workflow
-- Decision change tracking (edit decisions, change history, impact on linked commitments)
-- Conflict detection (circular dependencies, order violations, due-date inversions, duplicates, stale decision links)
-- Commitment change history / audit trail
-- React dashboard
-- FastAPI REST API
-
-Planned:
-
-- Additional testing and validation
-
-## Design Principle
-
-DecisionTrace follows a human-in-the-loop approach:
-
-> **AI assists with identifying project information. Humans remain responsible for confirming project decisions and commitments.**
-
-The system should preserve traceability between the original discussion, the reasoning behind a decision, resulting commitments, dependencies, later changes, and their downstream impact.
-
-## Team
-
-Developed as a group project for **System Analysis and Design**.
+- Assignment 2 design artifacts: `docs/design/` (architecture,
+  API spec, data model, UI design, models, requirements changelog, …)
+- SRS (Part I): `docs/SRS/`
+- Instructor demo script: `docs/demo-script.md`

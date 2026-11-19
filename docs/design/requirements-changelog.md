@@ -40,3 +40,5 @@ the authoritative record of how the design evolved.
 Unchanged from SRS: the four core concepts, the candidate gate (A2 /
 UC02–UC03), cycle refusal before storage, the append-only history tables,
 and the AI autonomy boundaries of §7.6.
+
+| C26 | **重新定位:导师—学员双侧系统** | 全部(此前为单项目、无导师角色、无链概念) | 决策链(节点=决策版本、逐节点讨论、提交导师)、导师端(内联整链审阅、逐节点批注/认可/待定/否定)、执行阶段仅属于被认可决策点(任务、拓扑序、AI 检查)、项目内编号、双组演示数据、死代码清扫。**认可即选择**:一链只认可一个点,认可一点否决其余,已认可链锁定。C6/C10/C17–C23(论点层、快照、what-if、决策健康、预检、逆转追踪)被本模型替代并删除 | 导师 2026-11-12 评审:系统要为谁服务、连接什么、哪些决策值得提取;产品陷在局部 | 分支 `feat/decision-chain`(PR #37 squash 合并) |

@@ -2,7 +2,9 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Draft for team review (2026-11-12)
+**Status:** Current (2026-11-19) — annotations unchanged; the repositioning
+replaced the deliberation-layer citations' implementation, the referenced
+ideas (dialogue mapping, decision records) still apply to the chain model.
 
 Each reference is annotated with what it says, why we cite it, and how
 it actually shaped DecisionTrace — including where we deliberately

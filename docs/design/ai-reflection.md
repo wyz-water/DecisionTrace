@@ -9,7 +9,7 @@ their own usage notes where marked.
 
 | Tool | What we used it for | Cost |
 |---|---|---|
-| Claude Code | Drafting all SRS sections; drafting and revising this design document; implementing features (graph analysis, candidates, snapshots, search, the deliberation layer, decision health); writing backend tests; driving Playwright verification | ChatGPT/Claude subscription, $20/mo (from SRS §11) |
+| Claude Code | Drafting all SRS sections; drafting and revising these design documents; implementing every feature wave (graph core, candidate pipeline, deliberation layer, and — after the instructor's repositioning feedback — the two-sided supervisor/group system with decision chains, per-node verdicts, the execution phase and the final dead-code sweep); writing backend tests; driving Playwright verification | ChatGPT/Claude subscription, $20/mo (from SRS §11) |
 | DeepSeek API (`deepseek-chat`) | Optional LLM path for candidate extraction; falls back to the rule engine on any failure or when no key is set | ≈ ¥30–45 for the ~12M tokens used so far (SRS §11 estimate) |
 | Rule engine (own regex patterns, EN + ZH) | The default, offline extraction baseline — decisions, commitments, dependencies, arguments | Free, deterministic |
 | Mermaid + python-docx | Diagrams and the Word conversion of the SRS | Free |
@@ -90,3 +90,29 @@ review pass of every document.
 *[Team: add per-member usage notes here — what each of you used, and
 whether you verified AI output yourself or relied on a teammate's
 review.]*
+
+
+## 3. The Repositioning, in Retrospect
+
+The instructor's critique (2026-11-12) — the product was "too local",
+missing the who/what-connects/what-to-extract questions — triggered the
+largest AI-assisted change of the project. The workflow that worked:
+
+1. **Discuss first, code later.** The repositioning was designed as a
+   draft (`repositioning-draft.md`), argued back and forth with the
+   user over several rounds, and only then implemented.
+2. **Review every view.** After each implementation step the user
+   reviewed the live UI and gave concrete corrections (per-node
+   verdicts, project-scoped numbering, approval-as-selection) — the AI
+   implemented each as a small, verifiable change.
+3. **Verify, don't assume.** Every change was checked end-to-end with
+   Playwright against a temp database; the seed script rebuilt the demo
+   state after destructive demos.
+4. **Delete what was replaced.** The old deliberation layer, snapshots
+   and impact previews were removed — models, routes, services, i18n —
+   so the code and the docs describe one system.
+
+The lesson for Part III: the AI is strong at executing a
+well-negotiated design and at sweeping cleanup; the design decisions
+themselves (approval = selection, execution only after approval) came
+from the human reviewer and the instructor.

@@ -2,7 +2,8 @@
 
 Part II design document — DecisionTrace
 
-**Status:** PROPOSED ALLOCATION — the team must confirm. Work areas and
+**Status:** PROPOSED ALLOCATION — updated 2026-11-19 with the
+repositioning work; the team must still confirm the percentages. Work areas and
 percentages below come from the git history and the PR record; the
 mapping of GitHub handles to student names follows the role table in
 the SRS. Adjust the mapping and percentages to match what each member
@@ -24,7 +25,9 @@ Team (from the SRS): 王耀增 2451393, 农国达 2453193, 李灏文 2453192,
 | Meeting snapshots | Graph snapshots, snapshot diff, i18n (EN/ZH) | PRs #21, #22 |
 | Presentation-feedback round | Decision goals (rationale required), batch confirm, duplicate detection, summaries, consistency sweep | PRs #26, #27 |
 | Deliberation layer | Argument entity, EN+ZH argument extraction, contested state, deliberation view, search coverage, cascade rules, decision health metrics | PRs #28, #29 |
-| Analyst layer | Decision pre-check gate before confirmation, reversal trace for overturned decisions, severity-weighted impact cascade | PRs #30, #31 |
+| Analyst layer (superseded) | Decision pre-check gate, reversal trace, severity-weighted impact cascade — replaced by the repositioning (see below) and removed in the cleanup | PRs #30, #31 |
+| Deliberation layer (superseded) | Argument entity, contested state, deliberation view, decision health — replaced by per-node chain discussion and supervisor verdicts; removed in the cleanup | PRs #28, #29 |
+| **Repositioning (the current system)** | Two-sided supervisor/group model: decision chains with per-node discussion, inline supervisor review with per-node annotate/approve/hold/reject, approval-as-selection with chain locking, execution phase per approved decision (tasks, topological order, AI checks), project-scoped numbering, two-group seed scenario, dead-code sweep | branch `feat/decision-chain`, PR #37 (squashed) |
 | Design documents (Part II) | Architecture, data model, UI design, API spec, change log, summary, models, issues, references — AI-drafted, team-reviewed | `docs/design/` |
 | Presentation | Week 9 deck + script | `Desktop/DecisionTrace_设计展示.pptx` |
 
