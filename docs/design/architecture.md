@@ -103,6 +103,32 @@ automated differently: nothing is extracted for them — they read
 submitted chains, and every insight they need (status, discussions,
 annotations) is laid out inline.
 
+### Is the system agentic?
+
+Partially, and the boundary is deliberate. DecisionTrace is
+AI-assisted, not agentic: the AI component is the extraction pipeline
+(rules first, optional LLM) plus the computed checks — it proposes
+and it observes, but it never acts on records. The agent-specific
+concerns the assignment names map onto this smaller surface:
+
+- **Agent roles** — one role only: a *candidate proposer* for
+  decision extraction, with a separate *checker* role computed on
+  read (cycles, blockers, ordering).
+- **Tool interfaces** — none: the pipeline has no external tools to
+  call; its only output is candidates.
+- **Memory and state** — no learned state: every run reads the
+  current records and the source text; nothing is cached that could
+  drift (A8).
+- **Orchestration** — none needed: one request, one pass.
+- **Guardrails** — the central one: **the human gate (A2)**. AI
+  output is always a candidate with the source sentence; a human
+  confirms, edits or rejects. The LLM path additionally falls back to
+  rules on any failure (A3), so the guardrail cannot be bypassed by
+  an outage.
+
+Part III keeps the same boundary while prototyping: the adoption rule
+in the evaluation protocol admits the LLM only on measured evidence.
+
 ## 6. The Chain Layer (replaces the former deliberation layer)
 
 The pre-repositioning system recorded arguments (FOR/AGAINST) as
