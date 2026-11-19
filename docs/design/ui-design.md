@@ -2,129 +2,83 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Draft for team review (2026-11-04)
+**Status:** Current (2026-11-19) — matches the repositioned system.
 
 ## 1. Information Architecture
 
-Eight views, grouped in the sidebar in the order the product actually
-works: what we decided → what we are doing → how we check it.
+One React app, two sides, three nav groups, nine views. The topbar
+carries the project switcher (student side: pick your group; supervisor
+side: the switcher is not needed — the dashboard shows every group) and
+the 中文/EN toggle.
 
-```mermaid
-graph TD
-    ROOT["Dashboard"]
-    ROOT --> O["Overview<br/>WORKSPACE"]
-    ROOT --> D["Decisions<br/>DECIDE"]
-    ROOT --> DL["Deliberation<br/>DECIDE"]
-    ROOT --> I["Intake &amp; review<br/>DECIDE"]
-    ROOT --> P["Plan &amp; commitments<br/>EXECUTE"]
-    ROOT --> G["Dependencies<br/>EXECUTE"]
-    ROOT --> S["Search<br/>TRACE"]
-    ROOT --> C["Consistency<br/>TRACE"]
-    ROOT --> A["Audit trail<br/>TRACE"]
-    ROOT --> ASK["Ask (planned)<br/>TRACE"]
+```text
+SUPERVISOR   Awaiting decision     待确认的决策
+             In progress           进行中的决策
+
+DECIDE       Decisions             决策
+             Decision chains       决策链
+             Intake & review       收集与审核
+
+EXECUTE      Decision list         决策列表
+             Tasks & commitments   划分任务承诺
+             Execution order       拓扑排序图
+             Problems              问题
 ```
 
-| View | Job (one job per view) | Backs use case |
-|---|---|---|
-| Overview | Dashboard: KPIs, graph preview, "needs attention" list, retrospective card (computed decision health) | — |
-| Decisions | Create/revise decisions; see rationale, history, impact, and the deliberation (arguments, contested badge) | UC04, UC07 |
-| Deliberation | Every argument in the project — targeted and free-standing; filters (all / open objections / resolved); resolve with reason | Part III PoC, backs §6 |
-| Intake & review | Paste/upload discussions → automatic extraction → batch review of AI candidates (confirm/edit/reject) | UC01–UC03 |
-| Plan & commitments | Assign and track commitments; update status with a reason | UC05 |
-| Dependencies | The graph: topological layout, blocked-by, cycles, add/remove edges | UC06, UC07 |
-| Search | Keyword search across records and history; hit links to its home view | UC08 |
-| Consistency | Conflicts the trace cannot reconcile (order violations, duplicates) | UC07 |
-| Audit trail | Status-change history per commitment, newest first | change tracking |
-| Ask (planned) | Ask the trace a question in plain language ("What is blocking the migration?"); every answer cites its source spans | Part III PoC |
+The view registry lives in `frontend/src/views.js`; the sidebar renders
+it with badges (e.g. the intake badge shows the pending-candidate
+count).
 
 ## 2. Shared Elements
 
-- **Top bar** — brand, conflict chip, and the **project switcher**
-  (searchable dropdown with inline create and delete-with-confirmation;
-  the active project is remembered in `localStorage`).
-- **Sidebar** — the view registry (`views.js`) is the single source of
-  truth; a view exists in the sidebar iff it exists in the router.
-- **View header** — eyebrow + title + one sentence explaining the view.
-- **Pagination** — one shared component and one envelope contract
-  (`usePagedList`); tertiary styling so it never competes with a
-  section's primary action.
-- **Status badges** — shared `StatusBadge` component; statuses render
-  with the same colors everywhere (plan, graph, cycle dialog, search).
+- **Person colors** (`personColors.js`) — every maker name renders with
+  a deterministic color derived from the name, so "who said this" is
+  readable at a glance across views (candidate cards, chain nodes,
+  decision rows).
+- **Project-scoped numbering** (`decisionNumbers.js`) — chains `#1..#N`,
+  chain points `#chain-node` (`#1-2`), free decisions `#1..#M`. Global
+  ids never appear.
+- **Supervisor status chips** — each decision point carries its verdict
+  (待确认 / 已认可 / 待定 / 已否决 / 讨论中 / 未建链); the chip is the
+  only place verdicts are shown.
+- **Mermaid-free diagrams** — the execution graph is a hand-laid SVG
+  layered by topological depth; tasks without a topological position
+  (on a cycle) carry a CYCLIC state in the plan list and the Problems
+  section names the CYCLE check, so a loop is never drawn as a broken
+  picture.
 
 ## 3. Interaction Conventions
 
-1. **One primary action per section.** "Save discussion", "Confirm",
-   "Update status". Pagination, filters, and view links stay tertiary.
-2. **Navigation through the hash.** Sidebar clicks, conflict chips, and
-   search hits all change `location.hash`; the sidebar state, the URL
-   and the back button can never disagree.
-3. **Errors say what to do next.** A dependency confirmation that fails
-   because its commitments do not exist yet opens the prerequisite panel
-   inline instead of leaving a bare error (CandidatesPanel).
-4. **Destructive actions ask twice.** Deleting a project renders an
-   inline "Delete X?" confirmation inside the switcher, never a bare ✕.
-5. **AI output is visually provisional.** Candidates render in the intake
-   view with type badges and a pending list; only confirmation moves a
-   record into the authoritative views.
-6. **Empty states are routes, not walls.** A fresh database shows the
-   dashboard with a banner and a working project switcher, so the first
-   project can always be created from the UI.
-7. **The discussion is the input; the graph is derived.** Dropping a
-   discussion into the intake view triggers extraction automatically; the
-   review list is built for batch confirmation (paged, one click per
-   candidate, source text always visible). The human's job is
-   *verifying*, never *transcribing*, and the graph is never maintained
-   by hand — every node and edge links back to the sentence it came
-   from. Part III upgrades: one-click batch confirm above a confidence
-   threshold, an auto-generated meeting summary with a suggested graph
-   snapshot, duplicate detection, owner suggestions, an ask view that
-   answers questions with citations, proactive alerts on the overview,
-   and corrections feeding back into the extractor (see the architecture
-   document, §5).
-8. **Deliberation is visible next to the verdict.** Decisions with an
-   open objection render a contested badge (and a marker in the decision
-   selector); the decision card shows its arguments (stance, author,
-   claim, source span) in a deliberation panel with inline resolve. The
-   deliberation view lists every argument in the project — free-standing
-   concerns stay visible instead of vanishing after confirmation — with
-   filters and resolve-with-reason. `ARGUMENT` candidates appear in the
-   intake queue with a stance badge and are confirmed like every other
-   record. The overview raises a needs-attention entry while any
-   decision is contested, and search covers claims, authors and stances.
-   Part III: a dedicated argument-map view.
-9. **Manual entry is the fallback.** Decisions and Plan & commitments each
-   offer an expandable creation form for missed extractions and decisions
-   that never appear in a meeting — not as the primary path. A decision
-   requires a title and a rationale (the decision goal — the API enforces
-   the same rule) and can include a source discussion number; revision
-   may change the rationale but never erase it. A commitment requires an
-   owner and description and can include a due date and linked decision.
-   Successful creation clears the form and selects the new record after
-   refreshing project data. Failed submissions retain the draft. Switching
-   projects resets the form and prevents late creation responses from
-   changing the selection in another project.
+- Hash routing: the sidebar, URL and back button agree; entering a view
+  scrolls to the top and refreshes the decisions list (verdicts given
+  on the supervisor side show up immediately).
+- Extraction → review: nothing is written without the human gate; the
+  candidate card anchors on the exact source sentence.
+- The supervisor never navigates to act: the awaiting view renders each
+  submitted chain inline, and every decision point carries its own
+  action bar (只批注 / 认可 / 待定 / 否定) plus its annotation input.
+- Read-only where it must be: the supervisor's in-progress boards and
+  the execution graph on the student side share one component with a
+  `readOnly` flag.
 
 ## 4. Component Inventory
 
 | Component | Purpose |
 |---|---|
-| `Sidebar` | View registry rendered as grouped navigation |
-| `ProjectSwitcher` | Create/switch/delete projects, top bar |
-| `DecisionCreateForm` | Manual decision creation with rationale and optional source discussion |
-| `CommitmentCreateForm` | Manual commitment creation with optional due date and linked decision |
-| `DiscussionsPanel` | Paste or upload discussion, trigger extraction |
-| `CandidatesPanel` | Pending/reviewed candidate lists; confirm/edit/reject; prerequisite panel; argument candidates with stance badge |
-| `DeliberationPanel` | Project-wide deliberation view: all arguments with filters; free-standing concerns stay visible |
-| `ArgumentRow` | One argument (stance, claim, author, source span, resolve-with-reason); shared by the decision card and the deliberation view so the flow cannot drift |
-| `SearchPanel` | UC08 search form, ranked results, cross-view navigation |
-| `CycleDialog` | Renders a rejected cycle (hops, removals) when adding an edge |
-| `StatusBadge` | Shared status pill |
-| `Pagination` | Shared pager |
-| `usePagedList` | Hook: one contract for every paginated endpoint |
+| `App.jsx` | Shell, project context, decisions state, hash routing, view dispatch |
+| `Sidebar.jsx` / `views.js` | Nav groups and badges |
+| `ProjectSwitcher.jsx` | Group creation/switching/deletion |
+| `DiscussionsPanel.jsx` | Paste/import meeting texts, extraction trigger |
+| `CandidatesPanel.jsx` | Pending/reviewed queues, per-maker filter, confirm/edit/reject |
+| `ChainPanel.jsx` | Chain list + detail: nodes with per-node threads, append revision, submit; execution board when approved |
+| `TeacherDashboard.jsx` | Awaiting (inline chains, per-node verdicts/annotations) and In-progress (per-group selectors, read-only boards) |
+| `ExecuteDecisions.jsx` | The approved decisions list |
+| `ExecutePanel.jsx` / `ExecutionBoard.jsx` | Tasks, topological graph, AI checks — one board component, student-editable or supervisor-read-only |
+| `DecisionCreateForm.jsx` | Manual decision creation (fallback path) |
+| `LanguageToggle.jsx`, `Pagination.jsx` | Cross-cutting |
 
 ## 5. Mockups
 
-See `docs/SRS/mockups/` for the SRS mockups (overview, intake,
-dependencies, audit). The implemented UI matches these structurally;
-screenshots of the live app can be captured with the Playwright driver
-scripts used during verification.
+The live system is the mockup — every view is implemented. The
+instructor demo script (`docs/demo-script.md`) walks all nine views in
+the intended presentation order.

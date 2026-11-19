@@ -2,227 +2,124 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Draft for team review (2026-11-04)
-
-The core idea is four concepts — **Decision, Commitment, Dependency,
-Change** — plus the intake pipeline around them (Discussion → Candidate).
-This revision adds a fifth concept, **Argument**: the pros and cons
-behind each decision, so a decision keeps the deliberation that produced
-it, not just its conclusion. History tables make change a first-class
-citizen: nothing is edited in place, every modification appends a row.
+**Status:** Current (matches the implementation, 2026-11-19)
 
 ## 1. Entity-Relationship Diagram
 
 ```mermaid
 erDiagram
-    Project ||--o{ Discussion : has
-    Project ||--o{ Decision : has
-    Project ||--o{ Commitment : has
-    Project ||--o{ Dependency : has
-    Project ||--o{ Candidate : has
-    Project ||--o{ Argument : has
+    PROJECT ||--o{ DISCUSSION : has
+    PROJECT ||--o{ DECISION : has
+    PROJECT ||--o{ CHAIN : has
 
-    Discussion ||--o{ Decision : "source of"
-    Discussion ||--o{ Candidate : "extracted from"
-    Discussion ||--o{ Argument : "source of"
+    DISCUSSION ||--o{ CANDIDATE : extracted-from
+    CANDIDATE ||--o| DECISION : confirmed-to
 
-    Decision ||--o{ Commitment : "drives"
-    Decision ||--o{ DecisionHistory : "change log"
-    Decision ||--o{ Argument : "deliberated by"
+    DECISION }o--|| CHAIN : node-of
+    DECISION ||--o{ CHAIN_COMMENT : discussed-under
+    DECISION ||--o{ CHAIN_ANNOTATION : annotated
 
-    Commitment ||--o{ CommitmentHistory : "change log"
-    Commitment ||--o{ Dependency : "predecessor of"
-    Commitment ||--o{ Dependency : "successor of"
+    CHAIN ||--o{ CHAIN_COMMENT : has
+    CHAIN ||--o{ CHAIN_ANNOTATION : has
+    CHAIN ||--o{ COMMITMENT : executes-via
 
-    PROJECT {
-        int id PK
-        string name
-        string description
-    }
-    DISCUSSION {
-        int id PK
-        int project_id FK
-        string title
-        text content
-    }
-    DECISION {
-        int id PK
-        int project_id FK
-        int source_discussion_id FK
-        string title
-        text rationale
-        string decided_by
-        string status
-        int superseded_by_decision_id FK
-        datetime created_at
-    }
-    DECISION_DEPENDENCY {
-        int id PK
-        int project_id FK
-        int predecessor_decision_id FK
-        int successor_decision_id FK
-        string dependency_type
-    }
-    COMMITMENT {
-        int id PK
-        int project_id FK
-        int decision_id FK
-        string owner
-        text description
-        date due_date
-        string status
-    }
-    DEPENDENCY {
-        int id PK
-        int project_id FK
-        int predecessor_commitment_id FK
-        int successor_commitment_id FK
-        string dependency_type
-    }
-    CANDIDATE {
-        int id PK
-        int project_id FK
-        int discussion_id FK
-        string candidate_type
-        json payload
-        text source_text
-        string status
-        string review_comment
-        datetime created_at
-    }
-    ARGUMENT {
-        int id PK
-        int project_id FK
-        int discussion_id FK
-        int decision_id FK
-        string stance
-        text claim
-        string author
-        text source_text
-        string status
-        text resolved_reason
-        datetime created_at
-    }
-    DECISION_HISTORY {
-        int id PK
-        int decision_id FK
-        string old_title
-        string new_title
-        text old_rationale
-        text new_rationale
-        string old_status
-        string new_status
-        text reason
-        datetime changed_at
-    }
-    COMMITMENT_HISTORY {
-        int id PK
-        int commitment_id FK
-        string old_status
-        string new_status
-        text reason
-        datetime changed_at
-    }
+    COMMITMENT ||--o{ DEPENDENCY : blocks
+    DEPENDENCY }o--|| COMMITMENT : successor
+    COMMITMENT ||--o{ COMMITMENT_HISTORY : logs
+    DECISION ||--o{ DECISION_HISTORY : logs
 ```
 
-## 2. Table Notes
+## 2. Core Entities
 
-### Project
-The workspace. The frontend keeps the active project in `localStorage`
-(`decisiontrace.activeProjectId`) and reloads the dashboard on switch.
-Deleting a project cascades through every child table (children first:
-histories, edges, then records).
+### Project (the student group)
 
-### Discussion
-Raw meeting notes or chat transcripts (UC01), entered by paste or
-`.txt`/`.md` upload (decoded UTF-8 first, GBK fallback — the team's
-notes are mixed). Discussions are the *source context* every authoritative
-record points back to.
+`id, name, description` — the supervisor supervises many projects; every
+view on the supervisor side groups by project.
 
-### Decision
-A decision with its rationale — the recorded *decision goal* (UC04).
-`source_discussion_id` is nullable: a decision can be created directly,
-not only extracted. If its source discussion is deleted, the pointer is
-cleared and the decision stays. The rationale is required for manually
-created decisions (API and form) and may be changed but never erased by
-revision; decisions confirmed from a candidate may lack one, because
-their goal context is the source discussion they point back to. Every
-revision writes the old and the new rationale to `decision_history`, so
-the goal's evolution is preserved.
+### Discussion (the source text)
 
-**Status:** `CONFIRMED` | `SUPERSEDED` | `REVOKED`
+`id, project_id, title, content, created_at` — pasted or imported meeting
+text. The system of record: every decision links back to its source
+discussion.
 
-`decided_by` is who made the decision (A18) — distinct from
-`commitment.owner`, who does the work. Null means a team decision
-("we decided"); the extractor never invents a single maker for a
-collective verb. Settable and clearable via PATCH.
+### Candidate (the AI's proposal, before the human gate)
 
-`superseded_by_decision_id` names the decision that replaced this one
-(A15). Meaningful only when the status is `SUPERSEDED`; any other status
-forces it to `None`, so a resurrected decision cannot keep pointing at a
-successor it no longer has. The link feeds the reversal trace: the flip
-row in `decision_history`, the successor, the objections and the slipped
-commitments are assembled into the "why did this decision not hold"
-narrative.
+`id, project_id, discussion_id, candidate_type, payload (JSON), source_text, status (PENDING/CONFIRMED/REJECTED), review_comment, created_at`
 
-### DecisionDependency
-A decision-level edge: the successor decision rests on the predecessor
-("we chose Redis after we had decided to move to the cloud"). Enters
-through the candidate gate (A2); confirm validates both titles, rejects
-self-dependencies, duplicates and cycles on the decision graph. Feeds
-the decision graph panel, the reversal trace's "resting decisions"
-signal, and the stakeholder view.
+`candidate_type` is `DECISION` only: the repositioned system extracts
+decisions; tasks come from the chain discussion, not extraction.
 
-### Argument
-A point made during the deliberation of a decision (the *deliberation
-layer*): `stance` is `FOR` or `AGAINST`, `claim` is what was said,
-`author` who said it, and `decision_id` which decision it targets (null
-when the extraction could not link it — a free-standing concern).
-`source_text` keeps the original sentence, so every argument can be
-traced back to the discussion it came from. Arguments pass through the
-same candidate gate as every other record (A2).
+### Decision (one decision point)
 
-**Status:** `OPEN` | `RESOLVED` — resolving requires a reason, stored in
-`resolved_reason`; append-only argument history is a Part III item.
+`id, project_id, source_discussion_id, title, rationale, decided_by, status (CONFIRMED/SUPERSEDED/REVOKED), superseded_by_decision_id, chain_id, created_at`
 
-A decision with at least one `OPEN` `AGAINST` argument is **contested** —
-computed on read, never a manual status (A13).
+- `decided_by` — named-person patterns (EN + ZH); team decisions stay
+  null. Per-maker color coding and the "review only mine" filter hang on
+  this field.
+- `chain_id` — a decision either stands alone or is a node of one chain.
+- **`teacher_status`** — the supervisor's verdict on this point:
+  `null` (no verdict), `PENDING` (submitted, awaiting), `APPROVED`
+  (the selected point — it enters execution), `HELD`, `REJECTED`
+  (overruled by the approval of another point). Students never write it.
+- `superseded_by_decision_id` — kept for history but unused by the chain
+  model (the chain itself is the revision relationship).
 
-### Commitment
-Who promised what, by when (UC05). `due_date` feeds overdue highlighting
-in the overview and plan views.
+### Chain (one topic's decision history)
 
-**Status:** `OPEN` | `IN_PROGRESS` | `COMPLETED` | `DELAYED` | `BLOCKED`
+`id, project_id, title, submitted_at, created_at`
+
+`teacher_status` is **derived on read, never stored**:
+- `APPROVED` — some node is approved (the supervisor chose it);
+- `PENDING` — submitted but no approval yet;
+- `null` — a draft in discussion.
+
+Invariants:
+1. A chain has at most one approved node. Approving a node sets the
+   chain's other `PENDING`/`HELD`/`APPROVED` nodes to `REJECTED`.
+2. An approved chain is locked: no further nodes can be appended.
+
+### ChainComment (the discussion under one node)
+
+`id, chain_id, decision_id, author, text, created_at` — chat-style. Each
+node carries its own thread (`decision_id` is the anchor).
+
+### ChainAnnotation (the supervisor's notes)
+
+`id, chain_id, decision_id (nullable), text, created_at` — annotations
+may target any decision point of the chain (`decision_id`) or the chain
+as a whole (null).
+
+### Commitment (a task from the execution phase)
+
+`id, project_id, chain_id, decision_id, owner, description, due_date, status (OPEN/IN_PROGRESS/COMPLETED/DELAYED/BLOCKED)`
+
+Tasks exist only for an **approved** decision; `decision_id` is the
+anchor, `chain_id` keeps the provenance.
 
 ### Dependency
-A directed edge between two commitments (UC06). `dependency_type` is
-`BLOCKS` today (the only semantics the graph algorithms need); the
-column leaves room for other relations.
 
-### Candidate
-The AI intake pipeline (UC02/UC03). `payload` is JSON holding the
-extraction result (decision fields, commitment fields, the two
-commitment owners of a dependency candidate, or an argument's
-stance/claim/author/target). A candidate is the only route to an
-authoritative record from text.
+`id, project_id, predecessor_commitment_id, successor_commitment_id, dependency_type (BLOCKS)` — read-only in the current milestone: edges come from the demo data, and the execution checks (cycle / blocked / out-of-order) run against them on every read. Create/remove endpoints were removed in the repositioning cleanup (open issue).
 
-**Status:** `PENDING` | `CONFIRMED` | `REJECTED`
+### History tables (append-only)
 
-### DecisionHistory / CommitmentHistory
-Append-only change logs. Every `PATCH` writes one row: old value, new
-value, and a human `reason`. Audit-trail views read these newest-first.
+- `CommitmentHistory` — status changes with reason and timestamp.
+- `DecisionHistory` — title/status/rationale changes with reason.
 
-## 3. Derived Structures (computed, never stored)
+## 3. Derived, Never Stored
 
-| Structure | Definition | Where computed |
-|---|---|---|
-| Graph | nodes = commitments, edges = dependencies | `services/graph.py` |
-| Topological order | Kahn's algorithm over the graph | `services/graph.py` |
-| Cycles | nodes that cannot be ordered | `services/graph.py` |
-| Impact set | transitive closure over `BLOCKS` edges starting at a commitment/decision | `services/graph.py` |
-| Consistency conflicts | order violations (e.g. completed before its predecessor) and duplicates | `services/consistency.py` |
-| Contested set | decisions with ≥ 1 `OPEN` `AGAINST` argument | `services/deliberation.py` |
-| Decision health | overturn rate, avg lifespan of overturned decisions, revision rate, contested rate, objection resolution rate — from history + arguments, never stored | `services/retrospective.py` |
+- **Node state** (`WAITING` / `READY` / `BLOCKED` / `DONE`) — computed
+  from the dependency edges and statuses.
+- **Topological order, cycles** — computed from the edges.
+- **AI checks** — cycle / blocked-chain / out-of-order, computed on
+  read.
+- **Chain status** — derived from the nodes' verdicts (see above).
+- **Display numbering** — project-scoped: chains are `#1..#N` by their
+  first decision's time, nodes render `#chain-node` (`#1-2`), free
+  decisions `#1..#M`. Global database ids never appear in the UI.
 
-They are computed on read (decision A8) so there is no cache to
-invalidate when a dependency changes.
+## 4. What Was Removed
+
+The repositioning deleted the `Argument`, `Snapshot` and `Impact`
+concepts (and their tables): the supervisor/chain/execution model
+replaced the deliberation layer, and the chain itself is the meeting
+artifact — no graph snapshots.
