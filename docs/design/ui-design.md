@@ -42,7 +42,9 @@ count).
 - **Supervisor status chips** — each decision point carries its verdict
   (待确认 / 已认可 / 待定 / 已否决 / 讨论中 / 未建链); the chip is the
   only place a point's verdict is *shown as a status* — the per-node
-  action bar (A14) is where the supervisor sets it.
+  action bar (A14) is where the supervisor sets it. Mapping to the
+  stored value: 待确认 = `PENDING`, 已认可 = `APPROVED`, 待定 = `HELD`,
+  已否决 = `REJECTED`, 讨论中 / 未建链 = `null`.
 - **Mermaid-free diagrams** — the execution graph is a hand-laid SVG
   layered by topological depth; tasks without a topological position
   (on a cycle) carry a CYCLIC state on the execution-order board and

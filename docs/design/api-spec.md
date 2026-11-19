@@ -100,7 +100,7 @@ node.
 | `GET` | `/chains/{id}` | Detail: nodes (with `teacher_status`), comments, annotations. |
 | `POST` | `/chains/{id}/nodes` | Append a revision decision. Refused 400 once the chain has an approved node (it is in execution and locked). |
 | `POST` | `/chains/{id}/comments` | Add a discussion message under a node (`decision_id` optional). |
-| `POST` | `/chains/{id}/submit` | Submit to the supervisor: the latest verdict-less node becomes `PENDING`. Re-submission is allowed (the chain is never frozen) and updates the timestamp; when every node already carries a verdict, nothing becomes `PENDING` and the chain stays `PENDING` until a revision is appended and submitted. |
+| `POST` | `/chains/{id}/submit` | Submit to the supervisor: the latest verdict-less node becomes `PENDING`. Re-submission is allowed (the chain is never frozen before approval) and updates the timestamp; when every node already carries a verdict, nothing becomes `PENDING` and the chain stays `PENDING` until a revision is appended and submitted. An approved chain returns 400 (locked, no re-submission). |
 
 ### `POST /chains/{id}/teacher-action` — the supervisor's verdict
 

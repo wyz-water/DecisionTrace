@@ -254,6 +254,15 @@ class ChainTests(unittest.TestCase):
         self.assertEqual(first.teacher_status, "APPROVED")
         self.assertEqual(second.teacher_status, "REJECTED")
 
+    def test_approved_chain_refuses_resubmission(self):
+        chain = self._approved_chain()
+
+        with self.assertRaises(HTTPException) as raised:
+            submit_chain(chain.id, db=self.db)
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn("approved and locked", str(raised.exception.detail))
+
     def test_approved_chain_refuses_further_verdicts(self):
         chain = self._approved_chain()
 

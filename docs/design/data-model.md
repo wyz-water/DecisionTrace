@@ -77,7 +77,7 @@ decisions; tasks come from the chain discussion, not extraction.
 - `PENDING` — submitted but no approval yet. This includes chains whose
   nodes all carry `HELD`/`REJECTED` verdicts: they stay in the awaiting
   queue until the group appends a revision and re-submits
-  (re-submission is allowed — the chain is never frozen);
+  (re-submission is allowed — the chain is never frozen before approval);
 - `null` — a draft in discussion.
 
 Invariants:
@@ -134,7 +134,8 @@ anchor, `chain_id` keeps the provenance.
   task is done even when a delayed predecessor exists). A task marked
   `BLOCKED` by its owner blocks its successors, not itself — its own
   stored status is displayed next to the derived state, never replaced
-  by it.
+  by it: the execution board renders both values side by side, so an
+  owner's `BLOCKED` marking is never hidden.
 - **Topological order, cycles** — computed from the edges.
 - **AI checks** — cycle / blocked-chain / out-of-order, computed on
   read.
