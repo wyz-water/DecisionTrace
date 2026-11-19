@@ -82,7 +82,7 @@ export default function ExecutePanel({ projectId, section = null }) {
             >
               {decisionOptions.map((option) => (
                 <option key={option.decisionId} value={option.decisionId}>
-                  #{option.decisionId} {option.title}
+                  {option.title}
                 </option>
               ))}
             </select>

@@ -20,8 +20,7 @@ export default function ChainPanel({ projectId, decisions }) {
   const [busy, setBusy] = useState(false);
 
   const [newChainDecision, setNewChainDecision] = useState("");
-  const [commentText, setCommentText] = useState("");
-  const [commentAuthor, setCommentAuthor] = useState("");
+  const [nodeCommentDrafts, setNodeCommentDrafts] = useState({});
   const [nodeTitle, setNodeTitle] = useState("");
   const [nodeRationale, setNodeRationale] = useState("");
   const [nodeMaker, setNodeMaker] = useState("");
@@ -126,8 +125,10 @@ export default function ChainPanel({ projectId, decisions }) {
     }
   }
 
-  function addComment() {
-    if (!detail || !commentText.trim()) {
+  function addNodeComment(nodeId) {
+    const draft = nodeCommentDrafts[nodeId] ?? {};
+
+    if (!detail || !(draft.text ?? "").trim()) {
       return;
     }
 
@@ -135,13 +136,27 @@ export default function ChainPanel({ projectId, decisions }) {
       detail.id,
       "comments",
       {
-        author: commentAuthor.trim() || null,
-        text: commentText.trim(),
+        author: (draft.author ?? "").trim() || null,
+        text: draft.text.trim(),
+        decision_id: nodeId,
       },
       () => {
-        setCommentText("");
+        setNodeCommentDrafts((current) => ({
+          ...current,
+          [nodeId]: { author: "", text: "" },
+        }));
       }
     );
+  }
+
+  function setNodeDraft(nodeId, field, value) {
+    setNodeCommentDrafts((current) => ({
+      ...current,
+      [nodeId]: {
+        ...(current[nodeId] ?? { author: "", text: "" }),
+        [field]: value,
+      },
+    }));
   }
 
   function appendNode() {
@@ -224,9 +239,7 @@ export default function ChainPanel({ projectId, decisions }) {
           )}
         </div>
 
-        <p className="chain-node-title">
-          #{node.id} {node.title}
-        </p>
+        <p className="chain-node-title">{node.title}</p>
 
         {node.rationale && (
           <p className="chain-node-rationale">{node.rationale}</p>
@@ -255,6 +268,39 @@ export default function ChainPanel({ projectId, decisions }) {
               <p>{annotation.text}</p>
             </div>
           ))}
+
+        <div className="chain-comment-form">
+          <input
+            type="text"
+            className="chain-author-input"
+            placeholder={t("chains.commentAuthor")}
+            value={nodeCommentDrafts[node.id]?.author ?? ""}
+            onChange={(event) =>
+              setNodeDraft(node.id, "author", event.target.value)
+            }
+          />
+
+          <input
+            type="text"
+            className="chain-comment-input"
+            placeholder={t("chains.commentPlaceholder")}
+            value={nodeCommentDrafts[node.id]?.text ?? ""}
+            onChange={(event) =>
+              setNodeDraft(node.id, "text", event.target.value)
+            }
+          />
+
+          <button
+            type="button"
+            className="primary-button"
+            disabled={
+              busy || !(nodeCommentDrafts[node.id]?.text ?? "").trim()
+            }
+            onClick={() => addNodeComment(node.id)}
+          >
+            {t("chains.send")}
+          </button>
+        </div>
       </div>
     );
   }
@@ -335,32 +381,7 @@ export default function ChainPanel({ projectId, decisions }) {
           </div>
         )}
 
-        <div className="chain-comment-form">
-          <input
-            type="text"
-            className="chain-author-input"
-            placeholder={t("chains.commentAuthor")}
-            value={commentAuthor}
-            onChange={(event) => setCommentAuthor(event.target.value)}
-          />
 
-          <input
-            type="text"
-            className="chain-comment-input"
-            placeholder={t("chains.commentPlaceholder")}
-            value={commentText}
-            onChange={(event) => setCommentText(event.target.value)}
-          />
-
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy || !commentText.trim()}
-            onClick={addComment}
-          >
-            {t("chains.send")}
-          </button>
-        </div>
 
         {detail.teacher_status === "APPROVED" && (
           <div className="decision-subsection">

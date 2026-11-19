@@ -40,10 +40,22 @@ router = APIRouter(
 )
 
 
+def _latest_node(db, chain):
+    """The chain's live decision: its newest node. Earlier nodes are
+    the chain's history — readable, but not approvable or executable."""
+    return (
+        db.query(Decision)
+        .filter(Decision.chain_id == chain.id)
+        .order_by(Decision.created_at.desc(), Decision.id.desc())
+        .first()
+    )
+
+
 def _derived_chain_status(db, chain):
-    """A chain is APPROVED when any of its nodes is approved (the
-    chain entered execution), PENDING when submitted with no approval
-    yet, None while it is still a draft."""
+    """A chain is APPROVED when the supervisor has chosen one of its
+    nodes (approval is a selection — the supervisor may pick any
+    decision point, not necessarily the latest), PENDING when
+    submitted with no choice yet, None while it is still a draft."""
     nodes = db.query(Decision).filter(Decision.chain_id == chain.id).all()
 
     if any(node.teacher_status == "APPROVED" for node in nodes):
@@ -290,11 +302,10 @@ def submit_chain(
 
     chain.submitted_at = datetime.now(timezone.utc)
 
-    nodes = db.query(Decision).filter(Decision.chain_id == chain.id).all()
+    latest = _latest_node(db, chain)
 
-    for node in nodes:
-        if node.teacher_status is None:
-            node.teacher_status = "PENDING"
+    if latest is not None and latest.teacher_status is None:
+        latest.teacher_status = "PENDING"
 
     db.commit()
     db.refresh(chain)
@@ -338,12 +349,7 @@ def teacher_action(
         target_id = request.decision_id
 
         if target_id is None:
-            latest = (
-                db.query(Decision)
-                .filter(Decision.chain_id == chain.id)
-                .order_by(Decision.created_at.desc(), Decision.id.desc())
-                .first()
-            )
+            latest = _latest_node(db, chain)
             target_id = latest.id if latest else None
 
         target = db.query(Decision).filter(
@@ -358,6 +364,17 @@ def teacher_action(
             )
 
         target.teacher_status = status
+
+        # Approval is a selection: at most one node of a chain is the
+        # approved one. Choosing another node demotes the previous
+        # choice back to an undecided point.
+        if status == "APPROVED":
+            for node in db.query(Decision).filter(
+                Decision.chain_id == chain.id,
+                Decision.id != target.id,
+                Decision.teacher_status == "APPROVED",
+            ).all():
+                node.teacher_status = None
 
     if note is not None:
         annotation_decision_id = None

@@ -37,6 +37,7 @@ class DecisionResponse(BaseModel):
     teacher_status: str | None = None
     superseded_by_decision_id: int | None = None
     chain_id: int | None = None
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -29,9 +29,7 @@ export default function ExecuteDecisions({ decisions }) {
                 {t("chains.status.APPROVED")}
               </span>
 
-              <span>
-                #{decision.id} {decision.title}
-              </span>
+              <span>{decision.title}</span>
 
               {decision.decided_by && (
                 <span className="chain-node-maker">

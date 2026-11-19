@@ -222,9 +222,7 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                 </button>
               </div>
 
-              <p className="chain-node-title">
-                #{node.id} {node.title}
-              </p>
+              <p className="chain-node-title">{node.title}</p>
 
               {node.rationale && (
                 <p className="chain-node-rationale">{node.rationale}</p>
@@ -392,7 +390,7 @@ export default function TeacherDashboard({ section = "awaiting" }) {
                               key={option.decisionId}
                               value={option.decisionId}
                             >
-                              #{option.decisionId} {option.title}
+                              {option.title}
                             </option>
                           ))}
                         </select>

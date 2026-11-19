@@ -139,7 +139,7 @@ def build():
         title="Use SQLite for the demo",
         rationale="the demo must run offline on teammates machines",
         decided_by="Alice", status="CONFIRMED",
-        teacher_status="APPROVED",
+        teacher_status="PENDING",
         created_at=T("2026-11-14T16:00:00+08:00"),
         chain_id=1, superseded_by_decision_id=None,
     )

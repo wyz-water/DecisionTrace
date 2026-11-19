@@ -398,7 +398,7 @@ function App() {
   const projectId = project?.id ?? null;
 
   // Unapproved decision points stay in the Decisions view; approved
-  // ones move to the execution group's decision list.
+  // ones (the supervisor's choice) move to the execution group.
   const visibleDecisions = decisions.filter(
     (decision) => decision.teacher_status !== "APPROVED"
   );
@@ -2016,7 +2016,8 @@ function App() {
                     </span>
 
                     <span>
-                      #{item.id} {item.title}
+                      {item.chain_id == null ? "#" + item.id + " " : ""}
+                      {item.title}
                     </span>
 
                     {item.decided_by && (
