@@ -28,7 +28,6 @@ The frontend consumes this through one hook (`usePagedList`).
 
 - `404` — `{"detail": "<Entity> not found"}`
 - `400` — a business-rule refusal (see the verdict and chain rules below)
-- `409` — consistency refusal (cycle rejection carries the loop)
 - `422` — request shape
 
 ### Mutations
@@ -65,7 +64,7 @@ edits or rejects.
 | `POST` | `/candidates/extract/{discussion_id}` | Run extraction on one discussion. Returns DECISION candidates with source sentences. |
 | `GET` | `/candidates?project_id=&status=` | Paged; `status=PENDING` or `CONFIRMED,REJECTED`. |
 | `PATCH` | `/candidates/{id}` | Edit a candidate before confirming. |
-| `POST` | `/candidates/{id}/confirm` | Create the real decision (or attach to a chain — see chains). |
+| `POST` | `/candidates/{id}/confirm` | Create the real decision. (Chains are started from existing decisions, see `/chains`.) |
 | `POST` | `/candidates/{id}/reject` | |
 
 ## 5. Decisions

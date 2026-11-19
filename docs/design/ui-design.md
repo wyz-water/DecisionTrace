@@ -21,7 +21,7 @@ DECIDE       Decisions             决策
 
 EXECUTE      Decision list         决策列表
              Tasks & commitments   划分任务承诺
-             Execution order       拓扑排序
+             Execution order       拓扑排序图
              Problems              问题
 ```
 
@@ -42,8 +42,10 @@ count).
   (待确认 / 已认可 / 待定 / 已否决 / 讨论中 / 未建链); the chip is the
   only place verdicts are shown.
 - **Mermaid-free diagrams** — the execution graph is a hand-laid SVG
-  (layered by topological depth); a cycle renders as an explicit
-  "cannot be ordered" notice instead of a broken picture.
+  layered by topological depth; tasks without a topological position
+  (on a cycle) carry a CYCLIC state in the plan list and the Problems
+  section names the CYCLE check, so a loop is never drawn as a broken
+  picture.
 
 ## 3. Interaction Conventions
 

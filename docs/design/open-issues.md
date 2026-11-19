@@ -13,6 +13,7 @@ Part II design document — DecisionTrace
 | R3 | Extraction quality of the LLM path is unmeasured | Blind adoption of a worse-or-equal extractor | The evaluation protocol (Part III) defines precision/recall, an error taxonomy, and a pre-fixed adoption rule; rules remain the default until then |
 | R4 | The chain lock is one-way | An approved chain can never be revised, even if the execution turns out misdirected | Deliberate: approval = selection, and a decision in execution must be stable. Reopening (with a recorded reason) is a candidate Part III feature |
 | R5 | The supervisor reads everything inline — long chains become long pages | Review fatigue for very active groups | Fine at course scale; collapsing of closed points is a cheap later improvement |
+| R5.5 | Task dependencies cannot be created or removed from the UI anymore (the endpoints were dropped in the cleanup; edges ship with the demo data) | Execution ordering is frozen after seeding — new chains' tasks form no edges | Part III item: restore edge creation on the execution board, with cycle refusal before storage |
 | R6 | Per-node verdicts have no verdict timestamp | The "when did the supervisor choose X" question is answered by annotations only | Annotations carry timestamps; a verdict timestamp column is trivial if needed |
 
 ## 2. Organizational Risks

@@ -2,9 +2,11 @@
 
 Part II design document — DecisionTrace
 
-**Status:** Current (2026-11-19) — annotations unchanged; the repositioning
-replaced the deliberation-layer citations' implementation, the referenced
-ideas (dialogue mapping, decision records) still apply to the chain model.
+**Status:** Current (2026-11-19) — the annotations below still describe
+what each reference says and why we cite it; where an annotation says the
+idea "shaped the deliberation layer", that layer was since replaced by the
+chain model (per-node discussion + supervisor verdicts), which carries the
+same idea — the reasoning must live next to the decision it reasons about.
 
 Each reference is annotated with what it says, why we cite it, and how
 it actually shaped DecisionTrace — including where we deliberately
@@ -61,10 +63,11 @@ edges, which extraction from meeting text cannot supply reliably), and
 we say so in the design rather than pretending otherwise. What we took
 is the principle: disagreement is a graph property, computed on read
 from the arguments, never a status a human marks by hand. The paper
-also grounds our contested-state evaluation (§10, protocol 4): because
-the state is derived, it can be measured precisely — the gold
-annotation decides whether a decision "is" contested, and we count how
-often the derivation agrees.
+also grounded our contested-state evaluation in the pre-repositioning
+protocol. The argument entity was since replaced by the chain model
+(per-node discussion + supervisor verdicts), which keeps the same
+principle: disagreement is visible where it happened, never a status a
+human marks by hand.
 
 ---
 

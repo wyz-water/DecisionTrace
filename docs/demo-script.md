@@ -39,14 +39,16 @@ Alice decided to use Vue for the dashboard because the team already knows it. Bo
 
 → 「保存讨论」 → 「抽取候选」。
 
-**预期:** 两条候选:一条**决策**(带决策人 Alice + 来源句高亮),一条
-带截止日期的任务句候选被跳过(现在的模型只抽决策)。
+**预期:** 一条候选:带决策人 Alice 的**决策** + 来源句高亮。Bob 的
+任务句**不产生候选** —— 任务不是从文本抽的,它们来自被认可决策链的
+执行阶段。
 
 **操作:** 指给老师看「只看我的」筛选和每个人名的**颜色**。
 
-**要说:** 「没有表单要填 —— 讨论文本就是输入。抽取只提**候选**,带
-原文句子,人确认才落地。每个决策人都有一贯的颜色,'只看我的'就是
-**谁说谁审**。」
+**要说:** 「没有表单要填 —— 讨论文本就是输入。抽取只产**决策候选**,
+带原文句子,人确认才落地。每个决策人都有一贯的颜色,'只看我的'就是
+**谁说谁审**。任务不靠猜 —— 导师认可决策之后,任务在链上讨论里自然
+产生,再挂到被认可的点上。」
 
 ## 场景 2 · 决策链:讨论、修订与提交(120 秒)
 
@@ -69,7 +71,7 @@ Alice decided to use Vue for the dashboard because the team already knows it. Bo
 ## 场景 3 · 导师:整链审阅 + 逐点裁决(150 秒,核心)
 
 **操作:** 侧边栏 → 「待确认的决策」。指给老师看:两个小组分组展示,
-组名加粗。点开 `#2 Build a web app` —— **整条链内联展开**:
+组名加粗。`#2 Build a web app` **整条链已内联展开**:
 
 - 决策点 1 `Build a web app`(挂起)+ 导师批注「下次组会带小程序对比」
 - 决策点 2 `Build a WeChat mini program first`(待确认)+ Carol 的对比结论
@@ -94,7 +96,7 @@ Alice decided to use Vue for the dashboard because the team already knows it. Bo
 **操作:** 侧边栏 → 「划分任务承诺」 → 选择器里是**已认可的决策点**
 (`Use PostgreSQL`)→ 指给老师看 5 个任务;演示「添加任务」。
 
-**操作:** 切到「拓扑排序」 —— 分层 SVG 图:Carol(已完成)→ Bob
+**操作:** 切到「拓扑排序图」 —— 分层 SVG 图:Carol(已完成)→ Bob
 (进行中)→ Eve / Dora / Frank。
 
 **操作:** 切到「问题」 —— AI 检查报告:**乱序**「Build the login page

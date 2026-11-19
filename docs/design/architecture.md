@@ -82,7 +82,7 @@ the backbone of every view.
 | A6 | Hash-based view routing | The sidebar, URL and back button stay in agreement. |
 | A7 | Projects are first-class; every view is project-scoped | The one-to-many supervisor/group relation is the backbone; the supervisor's dashboard groups by project. |
 | A8 | Derived values are computed on read, never stored | Chain status, node states, topological order, cycles and checks all derive from the current records — no caches to drift. |
-| A9 | Automation-first intake; manual forms are the fallback | Pasting a meeting is cheaper than minutes; the review queue is built for batch confirmation. |
+| A9 | Automation-first intake; manual forms are the fallback | Pasting a meeting is cheaper than minutes; the review queue shows every candidate with its source sentence, per-maker colors and a "review only mine" filter, so each member verifies their own statements. |
 | A10 | The discussion text is the system of record | Every decision links to its source discussion; the trace is a derived view over the text. |
 | A11 | **The decision chain replaces the single record** | One topic = one chain; revisions are new nodes, history is preserved; per-node threads keep the reasoning under the decision it reasons about. This is the structural answer to "recording conclusions throws away the reasoning". |
 | A12 | **Approval is a selection, per decision point** | The supervisor may approve any point, not necessarily the newest; choosing one overrules the chain's other points (they become `REJECTED`), and an approved chain locks against further revisions. One chain has at most one executing decision — conflicting points can never both run. |
@@ -125,8 +125,12 @@ testing run against a temp copy so the demo state survives.
 
 - No authentication in this milestone (course scope); the two-sided
   split is a UX/role split, not an authorization boundary yet.
-- Cycle-refusing dependency storage; append-only histories; derived
-  states (A8) keep the trace self-consistent.
+- Append-only histories and derived states (A8) keep the trace
+  self-consistent; the execution checks (cycle / blocked /
+  out-of-order) run on every read against the current edges. Task
+  edges ship with the demo data — dependency creation/removal
+  endpoints were dropped in the repositioning cleanup and are a
+  Part III item (see open issues).
 - The optional LLM path sends only the discussion text and never runs
   without the key; rules are the fallback (A3).
 

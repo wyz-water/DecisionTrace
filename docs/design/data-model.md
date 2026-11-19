@@ -98,7 +98,7 @@ anchor, `chain_id` keeps the provenance.
 
 ### Dependency
 
-`id, project_id, predecessor_commitment_id, successor_commitment_id, dependency_type (BLOCKS)` — a cycle is refused before storage.
+`id, project_id, predecessor_commitment_id, successor_commitment_id, dependency_type (BLOCKS)` — read-only in the current milestone: edges come from the demo data, and the execution checks (cycle / blocked / out-of-order) run against them on every read. Create/remove endpoints were removed in the repositioning cleanup (open issue).
 
 ### History tables (append-only)
 

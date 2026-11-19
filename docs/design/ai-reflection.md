@@ -62,7 +62,7 @@ boundary in the product feel natural rather than invented.
 
 ## 5. Verification We Actually Performed
 
-54 backend tests (20 written for the deliberation layer alone); frontend
+43 backend tests; frontend
 production builds; Playwright end-to-end runs against a temp backend
 copy with a fresh database, including the empty-DB state; the curated
 demo database restored after every verification session. For the AI

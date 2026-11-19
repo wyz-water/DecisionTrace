@@ -58,7 +58,8 @@ npm install
 npm run dev            # http://localhost:5173
 ```
 
-Demo data (two groups, three weeks of activity, every state covered):
+Demo data (two groups, three weeks of activity — approved and
+executing, held-and-revised, submitted, drafts in EN and ZH):
 
 ```bash
 cd backend && .venv/Scripts/python seed_demo.py
