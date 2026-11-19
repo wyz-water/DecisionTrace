@@ -28,10 +28,11 @@ conclusions and drop the reasoning, so later readers cannot tell which
 objection was considered and why it lost — is, almost word for word,
 the critique our instructor made of the first version of DecisionTrace.
 
-The book shaped the deliberation layer directly. Our fifth concept,
-`Argument` with `FOR`/`AGAINST` stances attached to a decision and
-anchored to the source sentence, is IBIS reduced to what a meeting
-transcript can support. We also took Conklin's caution seriously in one
+The book shaped the pre-repositioning deliberation layer directly:
+the fifth concept, `Argument` with `FOR`/`AGAINST` stances attached to
+a decision and anchored to the source sentence, was IBIS reduced to
+what a meeting transcript can support — since replaced by the chain
+model (per-node discussion + supervisor verdicts). We also took Conklin's caution seriously in one
 respect he would recognize: he warns that structured capture fails when
 it adds friction, because participants stop feeding the map. Our answer
 is that the map is extracted from the discussion text and humans only

@@ -153,3 +153,30 @@ already synced in round 3 (slide 15 says 37).
 
 Rebuilt after round 4: PDF (34 pages, 0 blank/sparse pages, 0 mermaid
 errors), docx, submission folder + zip.
+
+---
+
+# Round 5 (2026-11-19 night, third teammate audit of PDF+DOCX+PPTX)
+
+Verdict from the audit: no structural "same fact, two opposite claims"
+contradictions remain across the three files. The remaining items were
+boundary wordings and PPT-doc alignment; all fixed:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | "the chain is never frozen" (api-spec submit, data-model PENDING) vs "an approved chain locks" | Qualified everywhere: "never frozen **before approval**" |
+| 2 | A5 "the audit trail is never rewritten" vs DELETE /projects cascade-deletes history | A5: the only path that removes history is deleting the whole project (cascade — deliberate destruction, not a rewrite) |
+| 3 | The submit fallback ("every node has a verdict") didn't exclude approved chains | New code guard: submit on an approved chain → 400 ("approved and locked: no re-submission"); api-spec documents it; 40 tests pass |
+| 4 | PPT p8 implied all points become PENDING on submit / all others rejected | "最新未裁决点 → PENDING"; "其余待确认/待定点 → 已否决" |
+| 5 | PPT p11 listed 待定 as a chain state (it's a node verdict) | "含待定点的链" |
+| 6 | PPT p16's open-issue list missed R7 | R7 added to the slide title enumeration |
+| 7 | Audit thought api-spec §6 lacked the 400 — it already had "Approval is final" (api-spec.md:120); no change |
+| 8 | references §1 (Conklin) still present-tense about the deleted Argument concept | Past tense + "since replaced by the chain model" |
+| 9 | Two different "nine documents" enumerations (§7.3 = 9 artifacts + 2 appendices; §7.7/§9.1 enumerated 9 items including appendices but missing the reflection/contributions) | Both now enumerate the full 11 (nine artifacts + two appendices) |
+| 10 | contributions: "Percentages filled and sum to 100%" unchecked while the table still needs re-balancing | Checklist item reworded: "re-balanced around the repositioning and sum to 100%" |
+| 11 | PPT p14 "证据 PR" — some entries cite documents/plan notes, not PR numbers | "证据:PR 或文档引用" |
+| 12 | Six chips vs five teacher_status values, mapping unwritten | ui-design §2: explicit chip-to-value mapping (待确认=PENDING … 未建链=null) |
+| 13 | own-BLOCKED task shows READY on the board | data-model note: the execution board renders both values side by side, so the owner's BLOCKED marking is never hidden |
+
+Rebuilt after round 5: PDF (35 pp, 0 mermaid errors), docx, pptx (4
+slides edited in place), submission folder + zip.

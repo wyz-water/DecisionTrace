@@ -81,8 +81,10 @@ spend the AI budget on reviewing more, drafting less.
 ## 7. Artifacts Produced With AI Assistance
 
 SRS (all sections, revised per feedback); this design document set
-(architecture, data model, UI design, API spec, change log, summary,
-models, issues, references — except team-written parts marked below);
+(all nine artifacts and the two appendices: architecture, data model,
+UI design, API spec, change log, summary, models, issues, references,
+this reflection, contributions — except team-written parts marked
+below);
 most of the backend and frontend code; the test suites; the verification
 scripts. **Team-written:** the instructor-feedback analyses and the
 design decisions themselves; the contribution split below; the final

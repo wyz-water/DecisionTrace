@@ -302,12 +302,19 @@ def submit_chain(
     db: Session = Depends(get_db)
 ):
     """Members submit the chain to the supervisor: the only gate on
-    the student side. Re-submission is allowed and updates the
-    timestamp (the chain is never frozen)."""
+    the student side. Re-submission is allowed before approval and
+    updates the timestamp (the chain is never frozen before
+    approval)."""
     chain = db.query(Chain).filter(Chain.id == chain_id).first()
 
     if not chain:
         raise HTTPException(status_code=404, detail="Chain not found")
+
+    if _derived_chain_status(db, chain) == "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail="The chain is approved and locked: no re-submission",
+        )
 
     chain.submitted_at = datetime.now(timezone.utc)
 

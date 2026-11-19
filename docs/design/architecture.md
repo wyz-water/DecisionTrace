@@ -80,7 +80,7 @@ the backbone of every view.
 | A2 | AI output is always a *candidate* | Extraction can never create authoritative records; a human confirms, edits, or rejects. The trust boundary is explicit (`candidates.status`). |
 | A3 | Rule-based extraction by default; DeepSeek LLM only when `DEEPSEEK_API_KEY` is set, falling back to rules on failure | The demo always works offline; the LLM is an upgrade, not a dependency. |
 | A4 | Offset pagination with a shared envelope | One client contract (`usePagedList`) for every list. |
-| A5 | Every edit is audited; the history is append-only | `PATCH` updates the current record in place and appends an old→new pair to `decision_history` / `commitment_history` with a reason; the audit trail is never rewritten; delete endpoints cascade dependents. |
+| A5 | Every edit is audited; the history is append-only | `PATCH` updates the current record in place and appends an old→new pair to `decision_history` / `commitment_history` with a reason; the audit trail is never rewritten by an edit — the only path that removes it is deleting the whole project (cascade, deliberate destruction rather than a rewrite); delete endpoints cascade dependents. |
 | A6 | Hash-based view routing | The sidebar, URL and back button stay in agreement. |
 | A7 | Projects are first-class; every view is project-scoped | The one-to-many supervisor/group relation is the backbone; the supervisor's dashboard groups by project. |
 | A8 | Derived values are computed on read, never stored | Chain status, node states, topological order, cycles and checks all derive from the current records — no caches to drift. |
