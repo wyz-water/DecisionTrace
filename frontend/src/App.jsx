@@ -352,7 +352,6 @@ function App() {
   const [decisionDraft, setDecisionDraft] = useState({});
   const [updatingDecision, setUpdatingDecision] = useState(false);
   const [decisionError, setDecisionError] = useState("");
-  const [decisionTraceError, setDecisionTraceError] = useState("");
   const [editorError, setEditorError] = useState("");
 
   // New-dependency form. The server refuses an edge that would close a
@@ -1310,41 +1309,6 @@ function App() {
   }, [whatIfOpen, selectedId, whatIfStatus, refreshTick, te, t]);
 
   useEffect(() => {
-    if (decisionId == null) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadDecisionTrace() {
-      try {
-        const impactResponse = await fetch(
-          `${API_URL}/decisions/${decisionId}/impact`
-        );
-
-        if (!impactResponse.ok) {
-          throw new Error("Failed to load decision trace");
-        }
-
-        if (!cancelled) {
-          setDecisionImpact(await impactResponse.json());
-          setDecisionTraceError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDecisionTraceError(te(err.message));
-        }
-      }
-    }
-
-    loadDecisionTrace();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [decisionId, refreshTick, te]);
-
-  useEffect(() => {
     if (projectId == null) {
       return undefined;
     }
@@ -2280,12 +2244,6 @@ function App() {
                       : t("decisions.decidedByTeam")}
                   </div>
                 </>
-              )}
-
-              {decisionTraceError && (
-                <p className="pipeline-error">
-                  {t("decisions.traceError", { message: decisionTraceError })}
-                </p>
               )}
 
               {visibleDecision && (
