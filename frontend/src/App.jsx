@@ -402,6 +402,51 @@ function App() {
   const visibleDecisions = decisions.filter(
     (decision) => decision.teacher_status !== "APPROVED"
   );
+
+  // Every decision carries a number: standalone decisions keep the
+  // global id, chain nodes are numbered by their position inside the
+  // chain ("#chain-node"). The table groups rows by chain, so chains
+  // read as units instead of interleaving with free decisions.
+  function decisionNumber(item) {
+    if (item.chain_id == null) {
+      return "#" + item.id;
+    }
+
+    const siblings = decisions
+      .filter((entry) => entry.chain_id === item.chain_id)
+      .sort((first, second) =>
+        (first.created_at ?? "") > (second.created_at ?? "") ? 1 : -1
+      );
+
+    const index = siblings.findIndex(
+      (entry) => entry.id === item.id
+    );
+
+    return "#" + item.chain_id + "-" + (index + 1);
+  }
+
+  const sortedVisibleDecisions = [...visibleDecisions].sort(
+    (first, second) => {
+      const firstChained = first.chain_id != null;
+      const secondChained = second.chain_id != null;
+
+      if (firstChained !== secondChained) {
+        return firstChained ? -1 : 1;
+      }
+
+      if (firstChained) {
+        if (first.chain_id !== second.chain_id) {
+          return first.chain_id - second.chain_id;
+        }
+
+        return (first.created_at ?? "") > (second.created_at ?? "")
+          ? 1
+          : -1;
+      }
+
+      return first.id - second.id;
+    }
+  );
   const visibleDecision =
     visibleDecisions.find((item) => item.id === decisionId) ?? null;
 
@@ -1999,11 +2044,11 @@ function App() {
             <p className="eyebrow">{t("decisions.eyebrow")}</p>
             <h2>{t("decisions.unapprovedTable")}</h2>
 
-            {visibleDecisions.length === 0 ? (
+            {sortedVisibleDecisions.length === 0 ? (
               <p className="muted">{t("decisions.noUnapproved")}</p>
             ) : (
               <ul className="stakeholder-list">
-                {visibleDecisions.map((item) => (
+                {sortedVisibleDecisions.map((item) => (
                   <li
                     className={`stakeholder-row ${
                       item.id === visibleDecision?.id ? "is-selected" : ""
@@ -2016,8 +2061,7 @@ function App() {
                     </span>
 
                     <span>
-                      {item.chain_id == null ? "#" + item.id + " " : ""}
-                      {item.title}
+                      {decisionNumber(item)} {item.title}
                     </span>
 
                     {item.decided_by && (

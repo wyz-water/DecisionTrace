@@ -13,6 +13,22 @@ export default function ExecuteDecisions({ decisions }) {
     (decision) => decision.teacher_status === "APPROVED"
   );
 
+  function decisionNumber(item) {
+    if (item.chain_id == null) {
+      return "#" + item.id;
+    }
+
+    const siblings = decisions
+      .filter((entry) => entry.chain_id === item.chain_id)
+      .sort((first, second) =>
+        (first.created_at ?? "") > (second.created_at ?? "") ? 1 : -1
+      );
+
+    const index = siblings.findIndex((entry) => entry.id === item.id);
+
+    return "#" + item.chain_id + "-" + (index + 1);
+  }
+
   return (
     <section className="card chain-list-card">
       <p className="eyebrow">{t("execute.eyebrow")}</p>
@@ -29,7 +45,9 @@ export default function ExecuteDecisions({ decisions }) {
                 {t("chains.status.APPROVED")}
               </span>
 
-              <span>{decision.title}</span>
+              <span>
+                {decisionNumber(decision)} {decision.title}
+              </span>
 
               {decision.decided_by && (
                 <span className="chain-node-maker">
